@@ -1,0 +1,522 @@
+//InputImagesSection.swift
+import SwiftUI
+import ImageIO  // For PNG metadata extraction
+#if os(macOS)
+import AppKit
+#elseif os(iOS)
+import UIKit
+#endif
+
+struct InputImagesSection: View {
+    @Binding var imageSlots: [ImageSlot]
+    @Binding var errorMessage: String?
+    @Binding var showErrorAlert: Bool
+    let onAnnotate: (UUID) -> Void
+    @EnvironmentObject var appState: AppState
+    
+    private var backgroundColor: Color {
+        #if os(iOS)
+        Color(.systemGray5)
+        #else
+        Color.gray  // Fallback for macOS
+        #endif
+    }
+    private var systemBackgroundColor: Color {
+        #if os(iOS)
+        Color(.systemBackground)
+        #else
+        Color(NSColor.windowBackgroundColor)  // macOS equivalent
+        #endif
+    }
+    
+    var body: some View {
+        VStack(spacing: 20) {
+            HStack(spacing: 16) {
+                Button(action: addImageSlot) {
+                    Image(systemName: "plus.circle.fill")
+                        .font(.system(size: 24))  // Larger for touch
+                        .foregroundColor(.green)
+                }
+                .buttonStyle(.plain)  // Cleaner look
+                .shadow(radius: 2)
+
+                Button(action: clearImageSlots) {
+                    Image(systemName: "trash.circle.fill")
+                        .font(.system(size: 24))
+                        .foregroundColor(.red)
+                }
+                .buttonStyle(.plain)
+                .shadow(radius: 2)
+            }
+
+            ForEach($imageSlots) { $slot in
+                if #available(macOS 14.0, *) {
+                    HStack(spacing: 16) {
+                        if let img = slot.image {
+                            Image(platformImage: img)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 150, height: 150)  // Larger preview
+                                .cornerRadius(16)
+                                .shadow(radius: 4)
+                        } else {
+                            if #available(macOS 14.0, *) {
+                                Rectangle()
+                                    .fill(Color(backgroundColor))
+                                    .frame(width: 150, height: 150)
+                                    .cornerRadius(16)
+                                    .shadow(radius: 4)
+                            } else {
+                                // Fallback on earlier versions
+                            }
+                        }
+                        
+                        VStack(alignment: .leading, spacing: 12) {  // More spacing
+                            Text(slot.path.isEmpty ? "No image selected" : {
+#if os(iOS)
+                                return URL(fileURLWithPath: slot.path).lastPathComponent
+#else
+                                return slot.path
+#endif
+                            }())
+                            .font(.system(.body, weight: .medium))
+                            .foregroundColor(.primary)
+                            
+                            HStack(spacing: 8) {  // Group buttons horizontally for compactness
+                                Button("Browse") { showImageOpenPanel(for: $slot)}
+                                    .buttonStyle(.borderedProminent)
+                                    .tint(.blue)
+                                    .cornerRadius(10)
+                                    .shadow(radius: 2)
+                                
+                                Button("Paste") { pasteImage(for: $slot) }
+                                    .buttonStyle(.borderedProminent)
+                                    .tint(.green)
+                                    .cornerRadius(10)
+                                    .shadow(radius: 2)
+                                
+                                Button("Annotate") {
+                                    if slot.image != nil {
+                                        print("DEBUG: Annotate tapped for slot \(slot.id), image exists: true")
+                                        onAnnotate(slot.id)
+                                    } else {
+                                        print("DEBUG: Annotate tapped but no image in slot \(slot.id)")
+                                        errorMessage = "No image loaded to annotate."
+                                        showErrorAlert = true
+                                    }
+                                }
+                                .buttonStyle(.borderedProminent)
+                                .tint(.purple)
+                                .cornerRadius(10)
+                                .shadow(radius: 2)
+                            }
+                            
+                            if !slot.promptNodes.isEmpty {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text("Embedded Workflow Prompts")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                    
+                                    Picker("Select Prompt", selection: $slot.selectedPromptIndex) {
+                                        ForEach(0..<slot.promptNodes.count, id: \.self) { index in
+                                            Text(slot.promptNodes[index].label)
+                                                .tag(index)
+                                        }
+                                    }
+                                    .pickerStyle(.menu)  // Dropdown-style menu on both iOS and macOS
+                                    
+                                    Button("Copy Selected Prompt") {                                     
+                                        let selectedText = slot.promptNodes[slot.selectedPromptIndex].promptText ?? ""
+                                        copyToClipboard(selectedText)}
+                                        .buttonStyle(.bordered)
+                                        .tint(.green)
+                                        .cornerRadius(10)
+                                        .shadow(radius: 2)
+                                }
+                            }
+                        }
+                        
+                        Spacer()
+                        
+                        Button(action: { removeImageSlot(slot.id) }) {
+                            Image(systemName: "minus.circle.fill")
+                                .font(.system(size: 24))
+                                .foregroundColor(.red)
+                        }
+                        .buttonStyle(.plain)
+                        .shadow(radius: 2)
+                    }
+                    .padding(16)
+                    .background(Color(systemBackgroundColor).opacity(0.8))
+                    .cornerRadius(16)  // Card style for each slot
+                    .shadow(radius: 4)
+                } else {
+                    // Fallback on earlier versions
+                }
+            }
+        }
+    }
+
+    private func addImageSlot() {
+        imageSlots.append(ImageSlot())
+    }
+    
+    private func removeImageSlot(_ id: UUID) {
+        if let index = imageSlots.firstIndex(where: { $0.id == id }) {
+            imageSlots.remove(at: index)
+        }
+    }
+    
+    private func clearImageSlots() {
+        imageSlots.removeAll()
+    }
+    
+    // Updated: Takes Binding<ImageSlot> for the slot
+    // Updated showImageOpenPanel (fix closure: no param, use url directly inside)
+    private func showImageOpenPanel(for slotBinding: Binding<ImageSlot>) {
+        let slotId = slotBinding.wrappedValue.id
+        let index = imageSlots.firstIndex(where: { $0.id == slotId }) ?? -1
+        if index == -1 { return }
+        
+        PlatformFilePicker.presentOpenPanel(allowedTypes: [.image], allowsMultiple: false, canChooseDirectories: false) { result in
+            switch result {
+            case .success(let urls):
+                guard let url = urls.first else { return }
+                do {
+                    // Load image and extract prompts within secure access scope (use url directly in closure)
+                    let (image, promptNodes) = try withSecureAccess(to: url) {
+                        let img = PlatformImage(contentsOf: url)
+                        var nodes: [NodeInfo] = []
+                        if url.pathExtension.lowercased() == "png" {
+                            nodes = parsePromptNodes(from: url)
+                        }
+                        return (img, nodes)
+                    }
+                    
+                    if let img = image {
+                        imageSlots[index].image = img
+                        imageSlots[index].path = url.path
+                        
+                        if !promptNodes.isEmpty {
+                            imageSlots[index].promptNodes = promptNodes.sorted { $0.id < $1.id }
+                            imageSlots[index].selectedPromptIndex = 0
+                        }
+                    } else {
+                        errorMessage = "Failed to load image."
+                        showErrorAlert = true
+                    }
+                } catch {
+                    errorMessage = "Failed to access image: \(error.localizedDescription)"
+                    showErrorAlert = true
+                }
+            case .failure(let error):
+                errorMessage = "Failed to select image: \(error.localizedDescription)"
+                showErrorAlert = true
+            }
+        }
+    }
+    
+    // New: Cross-platform clipboard copy (moved earlier for clarity)
+    private func copyToClipboard(_ text: String) {
+#if os(iOS)
+        UIPasteboard.general.string = text
+#elseif os(macOS)
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(text, forType: .string)
+#endif
+    }
+    
+    // New: Paste from clipboard
+    private func pasteImage(for slotBinding: Binding<ImageSlot>) {
+        var pngData: Data? = nil
+        var image: PlatformImage? = nil
+        
+        #if os(macOS)
+        let pasteboard = NSPasteboard.general
+        if let data = pasteboard.data(forType: .png) {
+            pngData = data
+            image = PlatformImage(data: data)
+        } else if let data = pasteboard.data(forType: .tiff), let nsImg = NSImage(data: data) {
+            image = nsImg
+        } else if let nsImg = pasteboard.readObjects(forClasses: [NSImage.self])?.first as? NSImage {
+            image = nsImg
+            pngData = nsImg.tiffRepresentation  // Attempt to get PNG data if possible
+        }
+        #elseif os(iOS)
+        let pasteboard = UIPasteboard.general
+        if let uiImg = pasteboard.image {
+            image = uiImg
+            pngData = uiImg.pngData()
+        }
+        #endif
+        
+        guard let pastedImage = image else {
+            errorMessage = "No image data in clipboard"
+            showErrorAlert = true
+            return
+        }
+        
+        slotBinding.image.wrappedValue = pastedImage
+        slotBinding.path.wrappedValue = "Pasted from Clipboard"
+        
+        // Extract prompts if PNG data available
+        var promptNodes: [NodeInfo] = []
+        if let data = pngData {
+            promptNodes = parsePromptNodes(from: data)
+        }
+        
+        if !promptNodes.isEmpty {
+            slotBinding.promptNodes.wrappedValue = promptNodes.sorted { $0.id < $1.id }
+            slotBinding.selectedPromptIndex.wrappedValue = 0
+        }
+    }
+    
+    // New: Overload parsePromptNodes for Data
+    private func parsePromptNodes(from data: Data) -> [NodeInfo] {
+        print("DEBUG: Parsing prompts from pasted PNG data, size: \(data.count)")
+        
+        var offset: Int = 8  // Skip PNG signature
+        let totalLength = data.count
+        var workflowStr: String? = nil
+        
+        while offset + 11 < totalLength {
+            let lengthRange = offset..<(offset + 4)
+            let lengthData = data.subdata(in: lengthRange)
+            let lengthBytes = [UInt8](lengthData)
+            let length = (UInt32(lengthBytes[0]) << 24) | (UInt32(lengthBytes[1]) << 16) |
+                         (UInt32(lengthBytes[2]) << 8) | UInt32(lengthBytes[3])
+            
+            let fullChunkSize = 12 + Int(length)
+            let fullChunkEnd = offset + fullChunkSize
+            guard fullChunkEnd <= totalLength else { break }
+            
+            let typeStart = offset + 4
+            let typeRange = typeStart..<(typeStart + 4)
+            let typeData = data.subdata(in: typeRange)
+            let typeBytes = [UInt8](typeData)
+            let chunkType = String(bytes: typeBytes, encoding: .ascii) ?? ""
+            
+            if chunkType == "tEXt" {
+                let textStart = typeStart + 4
+                let textRange = textStart ..< (textStart + Int(length))
+                let textData = data.subdata(in: textRange)
+                if let textStr = String(data: textData, encoding: .utf8),
+                   let nullIndex = textStr.firstIndex(of: "\0") {
+                    let keyword = String(textStr[..<nullIndex]).trimmingCharacters(in: .whitespaces)
+                    if ["workflow", "prompt", "Workflow", "Prompt"].contains(keyword) {
+                        let valueStart = textStr.index(after: nullIndex)
+                        workflowStr = String(textStr[valueStart...]).trimmingCharacters(in: .whitespaces)
+                        break
+                    }
+                }
+            }
+            
+            offset = fullChunkEnd
+        }
+        
+        // Fallback to ImageIO (create temp URL for CGImageSource)
+        if workflowStr == nil {
+            let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".png")
+            do {
+                try data.write(to: tempURL)
+                defer { try? FileManager.default.removeItem(at: tempURL) }
+                return parsePromptNodes(from: tempURL)  // Reuse file version
+            } catch {
+                print("DEBUG: Temp file for ImageIO failed: \(error)")
+                return []
+            }
+        }
+        
+        guard let extractedWorkflowStr = workflowStr else { return [] }
+        
+        guard let jsonData = extractedWorkflowStr.data(using: .utf8),
+              let json = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any] else { return [] }
+        
+        var promptNodes: [NodeInfo] = []
+        
+        if let nodesArray = json["nodes"] as? [[String: Any]] {
+            for node in nodesArray {
+                guard let nodeID = node["id"] as? Int,
+                      let classType = node["type"] as? String else { continue }
+                let nodeIDStr = String(nodeID)
+                
+                if classType.contains("CLIPTextEncode") {
+                    let widgetsValues = node["widgets_values"] as? [Any] ?? []
+                    let text = widgetsValues.compactMap { $0 as? String }.first ?? ""
+                    let label = text.isEmpty ? "Node \(nodeIDStr)" : "Node \(nodeIDStr): \(text.prefix(50))\(text.count > 50 ? "..." : "")"
+                    promptNodes.append(NodeInfo(id: nodeIDStr, label: label, promptText: text))
+                }
+            }
+        } else {
+            for (nodeID, node) in json {
+                guard let nodeDict = node as? [String: Any],
+                      let classType = nodeDict["class_type"] as? String else { continue }
+                
+                if classType.contains("CLIPTextEncode") {
+                    let text = (nodeDict["inputs"] as? [String: Any])?["text"] as? String ?? ""
+                    let label = text.isEmpty ? "Node \(nodeID)" : "Node \(nodeID): \(text.prefix(50))\(text.count > 50 ? "..." : "")"
+                    promptNodes.append(NodeInfo(id: nodeID, label: label, promptText: text))
+                }
+            }
+        }
+        
+        return promptNodes.sorted { $0.id < $1.id }
+    }
+    
+    private func parsePromptNodes(from url: URL) -> [NodeInfo] {
+        print("DEBUG: Parsing prompts from PNG: \(url.path)")
+        
+        // Manual PNG chunk parsing to extract tEXt
+        guard let data = try? Data(contentsOf: url) else {
+            print("DEBUG: Failed to load PNG binary data")
+            return []
+        }
+        print("DEBUG: PNG binary loaded, size: \(data.count) bytes")
+        
+        var offset: Int = 8  // Skip PNG signature (first 8 bytes)
+        let totalLength = data.count
+        var workflowStr: String? = nil
+        
+        while offset + 11 < totalLength {  // Ensure room for min chunk (12 bytes) + safety
+            // Read chunk length (4 bytes, big-endian)
+            let lengthRange = offset..<(offset + 4)
+            guard lengthRange.upperBound <= totalLength else {
+                print("DEBUG: Length range exceeds file; breaking at offset \(offset)")
+                break
+            }
+            let lengthData = data.subdata(in: lengthRange)
+            
+            // Safer big-endian UInt32 read (manual shift for reliability)
+            let lengthBytes = [UInt8](lengthData)
+            let length = (UInt32(lengthBytes[0]) << 24) | (UInt32(lengthBytes[1]) << 16) |
+            (UInt32(lengthBytes[2]) << 8) | UInt32(lengthBytes[3])
+            
+            // DEBUG: Log length bytes (remove after fix)
+            print("DEBUG: Length bytes at offset \(offset): [\(lengthBytes.map { String(format: "%02x", $0) }.joined(separator: " "))], length: \(length)")
+            
+            let fullChunkSize = 12 + Int(length)  // 4 len + 4 type + len data + 4 CRC
+            let fullChunkEnd = offset + fullChunkSize
+            guard fullChunkEnd <= totalLength else {
+                print("DEBUG: Full chunk end \(fullChunkEnd) > total \(totalLength); skipping invalid chunk at offset \(offset)")
+                break
+            }
+            
+            let typeStart = offset + 4
+            let typeRange = typeStart..<(typeStart + 4)
+            guard typeRange.upperBound <= totalLength else {
+                print("DEBUG: Type range exceeds; breaking")
+                break
+            }
+            let typeData = data.subdata(in: typeRange)
+            let typeBytes = [UInt8](typeData)
+            let chunkType = String(bytes: typeBytes, encoding: .ascii) ?? ""
+            
+            // DEBUG: Log type bytes (remove after fix)
+            print("DEBUG: Type bytes: [\(typeBytes.map { String(format: "%02x", $0) }.joined(separator: " "))], chunk: \(chunkType) length: \(length)")
+            
+            // For tEXt chunk: keyword\0value
+            if chunkType == "tEXt" {
+                let textStart = typeStart + 4  // After type
+                let textRange = textStart ..< (textStart + Int(length))
+                guard textRange.lowerBound < textRange.upperBound else {
+                    offset = fullChunkEnd
+                    continue
+                }
+                let textData = data.subdata(in: textRange)
+                if let textStr = String(data: textData, encoding: .utf8),
+                   let nullIndex = textStr.firstIndex(of: "\0") {
+                    let keyword = String(textStr[..<nullIndex]).trimmingCharacters(in: .whitespaces)
+                    if ["workflow", "prompt", "Workflow", "Prompt"].contains(keyword) {
+                        let valueStart = textStr.index(after: nullIndex)
+                        workflowStr = String(textStr[valueStart...]).trimmingCharacters(in: .whitespaces)
+                        print("DEBUG: Found \(keyword) in tEXt chunk: \(workflowStr!.prefix(100))...")
+                        break  // Found it
+                    }
+                }
+            }
+            // For zTXt: Skip for now (ComfyUI uses tEXt; add decompression if logs show zTXt)
+            else if chunkType == "zTXt" {
+                print("DEBUG: zTXt chunk found at offset \(offset), length \(length); skipping (decompression needed?)")
+            }
+            
+            // Advance to next chunk
+            offset = fullChunkEnd
+            // DEBUG: (remove after fix)
+            print("DEBUG: Advanced to next offset: \(offset)")
+        }
+        
+        // Fallback to ImageIO if manual didn't find it
+        if workflowStr == nil {
+            print("DEBUG: No tEXt chunks found; falling back to ImageIO")
+            guard let src = CGImageSourceCreateWithURL(url as CFURL, nil),
+                  let props = CGImageSourceCopyPropertiesAtIndex(src, 0, nil) as? NSDictionary,
+                  let pngDict = props["{PNG}"] as? NSDictionary else {
+                print("DEBUG: ImageIO fallback failed - no {PNG} dict")
+                return []
+            }
+            print("DEBUG: ImageIO PNG dict keys: \(pngDict.allKeys)")
+            
+            let fallbackStr: String? = pngDict["workflow"] as? String ?? pngDict["prompt"] as? String ?? pngDict["Workflow"] as? String ?? pngDict["Prompt"] as? String ?? nil
+            workflowStr = fallbackStr
+            if let ws = workflowStr {
+                print("DEBUG: Found via ImageIO: \(ws.prefix(100))...")
+            } else {
+                print("DEBUG: No workflow/prompt keys in ImageIO. Available keys: \(pngDict.allKeys)")
+                return []
+            }
+        }
+        
+        guard let extractedWorkflowStr = workflowStr else {
+            print("DEBUG: No workflow string extracted after all methods")
+            return []
+        }
+        print("DEBUG: Workflow string length: \(extractedWorkflowStr.count)")
+        print("DEBUG: Using workflow str: \(extractedWorkflowStr.prefix(100))...")
+        
+        // Parse JSON
+        guard let jsonData = extractedWorkflowStr.data(using: .utf8),
+              let json = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any] else {
+            print("DEBUG: Failed to parse JSON. Raw preview: \(extractedWorkflowStr.prefix(200))")
+            return []
+        }
+        print("DEBUG: JSON parsed. Top-level keys: \(Array(json.keys).sorted())")
+        
+        var promptNodes: [NodeInfo] = []
+        
+        // Full workflow: "nodes" array
+        if let nodesArray = json["nodes"] as? [[String: Any]] {
+            print("DEBUG: Full workflow - \(nodesArray.count) nodes")
+            for node in nodesArray {
+                guard let nodeID = node["id"] as? Int,
+                      let classType = node["type"] as? String else { continue }
+                let nodeIDStr = String(nodeID)
+                
+                if classType.contains("CLIPTextEncode") {
+                    let widgetsValues = node["widgets_values"] as? [Any] ?? []
+                    let text = widgetsValues.compactMap { $0 as? String }.first ?? ""
+                    let label = text.isEmpty ? "Node \(nodeIDStr)" : "Node \(nodeIDStr): \(text.prefix(50))\(text.count > 50 ? "..." : "")"
+                    promptNodes.append(NodeInfo(id: nodeIDStr, label: label, promptText: text))
+                    print("DEBUG: Added node \(nodeIDStr): \(label)")
+                }
+            }
+        } else {
+            // Flat "prompt" dict (API format)
+            print("DEBUG: Flat prompt dict mode")
+            for (nodeID, node) in json {
+                guard let nodeDict = node as? [String: Any], let classType = nodeDict["class_type"] as? String else { continue }
+                
+                if classType.contains("CLIPTextEncode") {
+                    let text = (nodeDict["inputs"] as? [String: Any])?["text"] as? String ?? ""
+                    let label = text.isEmpty ? "Node \(nodeID)" : "Node \(nodeID): \(text.prefix(50))\(text.count > 50 ? "..." : "")"
+                    promptNodes.append(NodeInfo(id: nodeID, label: label, promptText: text))
+                }
+            }
+        }
+        
+        let result = promptNodes.sorted { $0.id < $1.id }
+        print("DEBUG: Total prompt nodes: \(result.count)")
+        return result
+    }
+}
+
