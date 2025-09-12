@@ -5,6 +5,8 @@ import AppKit
 import UIKit
 #endif
 
+
+
 struct MainFormView: View {
     @Binding var configExpanded: Bool
     @Binding var promptExpanded: Bool
@@ -31,6 +33,7 @@ struct MainFormView: View {
     let onComfyJSONSelected: (Result<[URL], Error>) -> Void
 
     @EnvironmentObject var appState: AppState
+    @Environment(\.undoManager) private var undoManager
     
     @State private var showCopiedMessage: Bool = false
 
@@ -92,11 +95,19 @@ struct MainFormView: View {
                         .buttonStyle(.borderless)
                         .help("Copy to clipboard")
                         
-                        Button(action: { prompt = "" }) {
+                        Button(action: {
+                            if !prompt.isEmpty {
+                                let oldPrompt = prompt
+                                prompt = ""
+                                undoManager?.registerUndo(withTarget: appState, selector: #selector(AppState.setPrompt(_:)), object: oldPrompt)
+                            }
+                        }) {
                             Image(systemName: "xmark.circle.fill")
                                 .font(.system(size: 16))
                                 .foregroundColor(.red)
                         }
+                        .buttonStyle(.borderless)
+                        .help("Clear prompt")
                         .buttonStyle(.borderless)
                         .help("Clear prompt")
                     }

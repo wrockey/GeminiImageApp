@@ -53,7 +53,7 @@ func markupSheet(appState: AppState, showMarkupSheet: Binding<Bool>, selectedSlo
 struct ContentView: View {
     @EnvironmentObject var appState: AppState
     @Environment(\.colorScheme) var colorScheme
-    @State private var prompt: String = ""
+    @Environment(\.undoManager) private var undoManager
     @State private var isLoading: Bool = false
     @State private var progress: Double = 0.0
     @State private var webSocketTask: URLSessionWebSocketTask? = nil
@@ -136,7 +136,7 @@ private var iOSLayout: some View {
                     promptExpanded: $promptExpanded,
                     inputImagesExpanded: $inputImagesExpanded,
                     responseExpanded: $responseExpanded,
-                    prompt: $prompt,
+                    prompt: $appState.prompt,
                     showApiKey: $showApiKey,
                     apiKeyPath: $apiKeyPath,
                     outputPath: $outputPath,
@@ -207,7 +207,7 @@ private var iOSLayout: some View {
                     promptExpanded: $promptExpanded,
                     inputImagesExpanded: $inputImagesExpanded,
                     responseExpanded: $responseExpanded,
-                    prompt: $prompt,
+                    prompt: $appState.prompt,
                     showApiKey: $showApiKey,
                     apiKeyPath: $apiKeyPath,
                     outputPath: $outputPath,
@@ -271,11 +271,11 @@ private var iOSLayout: some View {
             }
             .help("Select Output Folder")
 
-            Button(action: resetAppState) {
+            Button(action: { undoManager?.undo() }) {
                 Image(systemName: "arrow.counterclockwise")
                     .symbolRenderingMode(.hierarchical)
             }
-            .help("New Session")
+            .help("Undo")
 
             Button(action: {
 #if os(iOS)
@@ -922,7 +922,7 @@ private var iOSLayout: some View {
             
             switch appState.settings.mode {
             case .gemini:
-                var parts: [Part] = [Part(text: prompt, inlineData: nil)]
+                var parts: [Part] = [Part(text: appState.prompt, inlineData: nil)]
                 
                 for slot in appState.ui.imageSlots {
                     if let image = slot.image, let pngData = image.platformPngData() {
@@ -982,7 +982,7 @@ private var iOSLayout: some View {
                         appState.ui.responseText += "No image generated."
                     }
                     
-                    let newItem = HistoryItem(prompt: prompt, responseText: appState.ui.responseText, imagePath: savedPath, date: Date(), mode: appState.settings.mode, workflowName: nil)
+                    let newItem = HistoryItem(prompt: appState.prompt, responseText: appState.ui.responseText, imagePath: savedPath, date: Date(), mode: appState.settings.mode, workflowName: nil)
                     appState.historyState.history.append(newItem)
                     appState.historyState.saveHistory()
                 } catch {
@@ -1060,7 +1060,7 @@ private var iOSLayout: some View {
                 let promptNodeID = appState.generation.comfyPromptNodeID
                 if var node = mutableWorkflow[promptNodeID] as? [String: Any],
                    var inputs = node["inputs"] as? [String: Any] {
-                    inputs["text"] = prompt
+                    inputs["text"] = appState.prompt
                     node["inputs"] = inputs
                     mutableWorkflow[promptNodeID] = node
                 } else {
@@ -1200,7 +1200,7 @@ private var iOSLayout: some View {
                         appState.ui.responseText = "Image generated with ComfyUI. Saved to \(savedPath ?? "unknown")"
                         
                         let workflowName = URL(fileURLWithPath: appState.settings.comfyJSONPath).deletingPathExtension().lastPathComponent
-                        let newItem = HistoryItem(prompt: prompt, responseText: appState.ui.responseText, imagePath: savedPath, date: Date(), mode: appState.settings.mode, workflowName: workflowName)
+                        let newItem = HistoryItem(prompt: appState.prompt, responseText: appState.ui.responseText, imagePath: savedPath, date: Date(), mode: appState.settings.mode, workflowName: workflowName)
                         appState.historyState.history.append(newItem)
                         appState.historyState.saveHistory()
                     } else {
@@ -1222,7 +1222,7 @@ private var iOSLayout: some View {
     
     
     private func resetAppState() {
-        prompt = ""
+        appState.prompt = ""
         appState.ui.imageSlots = []
         appState.ui.responseText = ""
         appState.ui.outputImage = nil

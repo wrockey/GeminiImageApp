@@ -277,6 +277,7 @@ class AppState: ObservableObject {
     @Published var generation = GenerationState()
     @Published var historyState = HistoryState()
     @Published var ui = UIState()
+    @Published var prompt: String = ""
     
     #if os(iOS)
     @Published var showFullHistoryItem: UUID? = nil
@@ -286,6 +287,10 @@ class AppState: ObservableObject {
     #endif
     
     private var cancellables = Set<AnyCancellable>()
+    
+    @objc func setPrompt(_ newPrompt: String) {
+        self.prompt = newPrompt
+    }
     
     init() {
         settings.objectWillChange.sink { [weak self] _ in
