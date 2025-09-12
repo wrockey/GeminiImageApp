@@ -1,5 +1,10 @@
 // ConfigurationSection.swift
 import SwiftUI
+#if os(macOS)
+import AppKit
+#elseif os(iOS)
+import UIKit
+#endif
 
 struct ConfigurationSection: View {
     @Binding var showApiKey: Bool
@@ -16,6 +21,7 @@ struct ConfigurationSection: View {
     
     @State private var showSuccessAlert: Bool = false
     @State private var successMessage: String = ""
+    @State private var showCopiedMessage: Bool = false
     
     var body: some View {
         VStack(spacing: 16) {
@@ -53,7 +59,7 @@ struct ConfigurationSection: View {
                 .shadow(color: .black.opacity(0.1), radius: 1)
             }
             .padding(.top, 8)
-            .frame(maxWidth: .infinity, alignment: .leading)  // Left-justify output folder row
+            .frame(maxWidth: .infinity, alignment: .leading)  // Left-align output folder row
         }
         .alert("Success", isPresented: $showSuccessAlert) {
             Button("OK") {}
@@ -124,81 +130,112 @@ struct ConfigurationSection: View {
     
     @ViewBuilder
     private var comfyUIConfiguration: some View {
-        VStack(alignment: .leading, spacing: 16) {  // Align to left
-            HStack {
-                Text("Server URL:")
-                    .font(.system(.subheadline, design: .default, weight: .medium))
-                    .foregroundColor(.secondary)
-                TextField("http://localhost:8188", text: $appState.settings.comfyServerURL)
-                    .textFieldStyle(.roundedBorder)
-                    .font(.system(.body, design: .monospaced))
-                    .background(Color.black.opacity(0.1))
-                    .cornerRadius(8)
-                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.4), lineWidth: 1))
-                    .autocorrectionDisabled()
-            }
-            
-            HStack {
-                Text("Workflow JSON or PNG:")
-                    .font(.system(.subheadline, design: .default, weight: .medium))
-                    .foregroundColor(.secondary)
-                #if os(iOS)
-                Text(appState.settings.comfyJSONPath.isEmpty ? "No file selected" : URL(fileURLWithPath: appState.settings.comfyJSONPath).lastPathComponent)
-                #else
-                Text(appState.settings.comfyJSONPath.isEmpty ? "No file selected" : appState.settings.comfyJSONPath)
-                #endif
-                Button("Browse") {
-                    print("Showing json file picker")
-                    PlatformFilePicker.presentOpenPanel(allowedTypes: [.json, .png], allowsMultiple: false, canChooseDirectories: false) { result in
-                        onComfyJSONSelected(result)
-                    }
-                }
-                .buttonStyle(.bordered)
-                .tint(.blue.opacity(0.8))
-                .font(.system(.body, design: .rounded, weight: .medium))
-                .shadow(color: .black.opacity(0.1), radius: 1)
-            }
-            
-            if !appState.generation.promptNodes.isEmpty {
-                HStack(alignment: .center, spacing: 8) {  // HStack for label + picker side-by-side
-                    Text("Prompt Node:")
+        ZStack {
+            VStack(alignment: .leading, spacing: 16) {  // Align to left
+                HStack {
+                    Text("Server URL:")
                         .font(.system(.subheadline, design: .default, weight: .medium))
                         .foregroundColor(.secondary)
-                    Picker("", selection: $appState.generation.comfyPromptNodeID) {
-                        ForEach(appState.generation.promptNodes) { node in
-                            Text(node.label).tag(node.id)
+                    TextField("http://localhost:8188", text: $appState.settings.comfyServerURL)
+                        .textFieldStyle(.roundedBorder)
+                        .font(.system(.body, design: .monospaced))
+                        .background(Color.black.opacity(0.1))
+                        .cornerRadius(8)
+                        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.4), lineWidth: 1))
+                        .autocorrectionDisabled()
+                }
+                
+                HStack {
+                    Text("Workflow JSON or PNG:")
+                        .font(.system(.subheadline, design: .default, weight: .medium))
+                        .foregroundColor(.secondary)
+                    #if os(iOS)
+                    Text(appState.settings.comfyJSONPath.isEmpty ? "No file selected" : URL(fileURLWithPath: appState.settings.comfyJSONPath).lastPathComponent)
+                    #else
+                    Text(appState.settings.comfyJSONPath.isEmpty ? "No file selected" : appState.settings.comfyJSONPath)
+                    #endif
+                    Button("Browse") {
+                        print("Showing json file picker")
+                        PlatformFilePicker.presentOpenPanel(allowedTypes: [.json, .png], allowsMultiple: false, canChooseDirectories: false) { result in
+                            onComfyJSONSelected(result)
                         }
                     }
-                    .pickerStyle(.menu)
+                    .buttonStyle(.bordered)
+                    .tint(.blue.opacity(0.8))
+                    .font(.system(.body, design: .rounded, weight: .medium))
+                    .shadow(color: .black.opacity(0.1), radius: 1)
+                }
+                
+                if !appState.generation.promptNodes.isEmpty {
+                    HStack(alignment: .center, spacing: 8) {  // HStack for label + picker side-by-side
+                        Text("Prompt Node:")
+                            .font(.system(.subheadline, design: .default, weight: .medium))
+                            .foregroundColor(.secondary)
+                        Picker("", selection: $appState.generation.comfyPromptNodeID) {
+                            ForEach(appState.generation.promptNodes) { node in
+                                Text(node.label).tag(node.id)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        
+                        Button(action: {
+                            if let selectedNode = appState.generation.promptNodes.first(where: { $0.id == appState.generation.comfyPromptNodeID }) {
+                                copyToClipboard(selectedNode.promptText ?? "")
+                                withAnimation {
+                                    showCopiedMessage = true
+                                }
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                                    withAnimation {
+                                        showCopiedMessage = false
+                                    }
+                                }
+                            }
+                        }) {
+                            Image(systemName: "doc.on.doc")
+                                .symbolRenderingMode(.hierarchical)
+                        }
+                        .buttonStyle(.plain)
+                        .help("Copy prompt text to clipboard")
+                    }
+                }
+                
+                if !appState.generation.imageNodes.isEmpty {
+                    HStack(alignment: .center, spacing: 8) {  // HStack for label + picker side-by-side
+                        Text("Image Node:")
+                            .font(.system(.subheadline, design: .default, weight: .medium))
+                            .foregroundColor(.secondary)
+                        Picker("", selection: $appState.generation.comfyImageNodeID) {
+                            ForEach(appState.generation.imageNodes) { node in
+                                Text(node.label).tag(node.id)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                    }
+                }
+                
+                if !appState.generation.outputNodes.isEmpty {
+                    HStack(alignment: .center, spacing: 8) {  // HStack for label + picker side-by-side
+                        Text("Output Node:")
+                            .font(.system(.subheadline, design: .default, weight: .medium))
+                            .foregroundColor(.secondary)
+                        Picker("", selection: $appState.generation.comfyOutputNodeID) {
+                            ForEach(appState.generation.outputNodes) { node in
+                                Text(node.label).tag(node.id)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                    }
                 }
             }
             
-            if !appState.generation.imageNodes.isEmpty {
-                HStack(alignment: .center, spacing: 8) {  // HStack for label + picker side-by-side
-                    Text("Image Node:")
-                        .font(.system(.subheadline, design: .default, weight: .medium))
-                        .foregroundColor(.secondary)
-                    Picker("", selection: $appState.generation.comfyImageNodeID) {
-                        ForEach(appState.generation.imageNodes) { node in
-                            Text(node.label).tag(node.id)
-                        }
-                    }
-                    .pickerStyle(.menu)
-                }
-            }
-            
-            if !appState.generation.outputNodes.isEmpty {
-                HStack(alignment: .center, spacing: 8) {  // HStack for label + picker side-by-side
-                    Text("Output Node:")
-                        .font(.system(.subheadline, design: .default, weight: .medium))
-                        .foregroundColor(.secondary)
-                    Picker("", selection: $appState.generation.comfyOutputNodeID) {
-                        ForEach(appState.generation.outputNodes) { node in
-                            Text(node.label).tag(node.id)
-                        }
-                    }
-                    .pickerStyle(.menu)
-                }
+            if showCopiedMessage {
+                Text("Copied to Clipboard")
+                    .font(.headline)
+                    .padding()
+                    .background(Color.black.opacity(0.7))
+                    .foregroundColor(.white)
+                    .cornerRadius(10)
+                    .transition(.opacity)
             }
         }
     }
@@ -245,5 +282,15 @@ struct ConfigurationSection: View {
                 showErrorAlert = true
             }
         }
+    }
+    
+    private func copyToClipboard(_ text: String) {
+        #if os(iOS)
+        UIPasteboard.general.string = text
+        #elseif os(macOS)
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(text, forType: .string)
+        #endif
     }
 }
