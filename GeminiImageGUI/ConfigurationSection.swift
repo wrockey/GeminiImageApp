@@ -14,6 +14,9 @@ struct ConfigurationSection: View {
     
     @EnvironmentObject var appState: AppState
     
+    @State private var showSuccessAlert: Bool = false
+    @State private var successMessage: String = ""
+    
     var body: some View {
         VStack(spacing: 16) {
             Picker("Mode", selection: $appState.settings.mode) {
@@ -51,6 +54,11 @@ struct ConfigurationSection: View {
             }
             .padding(.top, 8)
             .frame(maxWidth: .infinity, alignment: .leading)  // Left-justify output folder row
+        }
+        .alert("Success", isPresented: $showSuccessAlert) {
+            Button("OK") {}
+        } message: {
+            Text(successMessage)
         }
     }
     
@@ -226,8 +234,8 @@ struct ConfigurationSection: View {
             do {
                 let (_, response) = try await URLSession.shared.data(for: request)
                 if let httpResponse = response as? HTTPURLResponse, (200...299).contains(httpResponse.statusCode) {
-                    errorMessage = "API test successful!"
-                    showErrorAlert = true
+                    successMessage = "API test successful!"
+                    showSuccessAlert = true
                 } else {
                     errorMessage = "API test failed. Check your key."
                     showErrorAlert = true
