@@ -1,4 +1,3 @@
-//  MainFormView.swift
 import SwiftUI
 #if os(macOS)
 import AppKit
@@ -63,12 +62,34 @@ struct MainFormView: View {
             Divider()
                 .foregroundStyle(.separator.opacity(0.5))
             
-            DisclosureGroup("Prompt", isExpanded: $promptExpanded) {
+            DisclosureGroup(isExpanded: $promptExpanded) {
                 PromptSection(prompt: $prompt)
+            } label: {
+                HStack {
+                    Text("Prompt")
+                        .font(.system(.headline, design: .default, weight: .semibold))
+                        .kerning(0.2)
+                        .foregroundColor(.primary)
+                    
+                    Spacer()
+                    
+                    Button(action: { pasteToPrompt() }) {
+                        Image(systemName: "doc.on.clipboard")
+                            .font(.system(size: 16))
+                            .foregroundColor(.blue)
+                    }
+                    .buttonStyle(.borderless)
+                    .help("Paste from clipboard")
+                    
+                    Button(action: { prompt = "" }) {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 16))
+                            .foregroundColor(.red)
+                    }
+                    .buttonStyle(.borderless)
+                    .help("Clear prompt")
+                }
             }
-            .font(.system(.headline, design: .default, weight: .semibold))
-            .kerning(0.2)
-            .foregroundColor(.primary)
             
             Divider()
                 .foregroundStyle(.separator.opacity(0.5))
@@ -130,5 +151,18 @@ struct MainFormView: View {
             .foregroundColor(.primary)
         }
         .padding()
+    }
+    
+    private func pasteToPrompt() {
+        #if os(macOS)
+        let pasteboard = NSPasteboard.general
+        if let text = pasteboard.string(forType: .string) {
+            prompt = text
+        }
+        #elseif os(iOS)
+        if let text = UIPasteboard.general.string {
+            prompt = text
+        }
+        #endif
     }
 }
