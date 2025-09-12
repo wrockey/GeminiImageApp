@@ -502,46 +502,111 @@ private var iOSLayout: some View {
                 showErrorAlert = true
                 return
             }
-            if json["nodes"] as? [[String: Any]] != nil {
-                errorMessage = "Unsupported workflow format. Please export from ComfyUI in API format (enable Dev mode in Settings and use 'Save (API format)' from the menu)."
-                showErrorAlert = true
-            } else {
-                appState.generation.comfyWorkflow = json
-                appState.settings.comfyJSONURL = url
-                appState.settings.comfyJSONPath = url.path
-                var nodeError: NSError?
-                var innerNodeError: Error?
-                NSFileCoordinator().coordinate(readingItemAt: url, options: [], error: &nodeError) { coordinatedURL in
-                    if coordinatedURL.startAccessingSecurityScopedResource() {
-                        defer { coordinatedURL.stopAccessingSecurityScopedResource() }
-                        
-                        appState.generation.loadWorkflowFromFile(comfyJSONURL: coordinatedURL)
-                    } else {
-                        innerNodeError = NSError(domain: "AccessError", code: 0, userInfo: [NSLocalizedDescriptionKey: "Failed to start accessing security-scoped resource."])
+            
+            var workflowToUse: [String: Any] = json
+
+            if let nodes = json["nodes"] as? [[String: Any]],
+               let linksRaw = json["links"] as? [[Any]] {
+                
+                // Convert links to map for quick lookup: linkID -> (fromID, fromSlot, toID, toSlot, type)
+                var linkMap: [Int: (Int, Int, Int, Int, String)] = [:]
+                for link in linksRaw {
+                    guard link.count == 6,
+                          let linkID = link[0] as? Int,
+                          let fromID = link[1] as? Int,
+                          let fromSlot = link[2] as? Int,
+                          let toID = link[3] as? Int,
+                          let toSlot = link[4] as? Int,
+                          let type = link[5] as? String else {
+                        continue
                     }
+                    linkMap[linkID] = (fromID, fromSlot, toID, toSlot, type)
                 }
-                if let nodeError = nodeError {
-                    errorMessage = "Failed to load workflow nodes: \(nodeError.localizedDescription)"
-                    showErrorAlert = true
-                    return
+                
+                // Build API workflow
+                var apiWorkflow: [String: [String: Any]] = [:]
+                for node in nodes {
+                    guard let id = node["id"] as? Int,
+                          let type = node["type"] as? String else {
+                        continue
+                    }
+                    let idStr = String(id)
+                    
+                    var inputs: [String: Any] = [:]
+                    let widgetsValues = node["widgets_values"] as? [Any] ?? []
+                    var widgetIdx = 0
+                    
+                    if let nodeInputs = node["inputs"] as? [[String: Any]] {
+                        for nodeInput in nodeInputs {
+                            guard let name = nodeInput["name"] as? String else { continue }
+                            
+                            if let linkID = nodeInput["link"] as? Int,
+                               let link = linkMap[linkID] {
+                                let fromIDStr = String(link.0)
+                                let fromSlot = link.1
+                                inputs[name] = [fromIDStr, fromSlot]
+                            } else if widgetIdx < widgetsValues.count {
+                                inputs[name] = widgetsValues[widgetIdx]
+                                widgetIdx += 1
+                            }
+                        }
+                    }
+                    
+                    // Add any remaining widgets_values if needed (e.g., for properties not in inputs)
+                    // But for standard ComfyUI nodes, the above should suffice
+                    
+                    apiWorkflow[idStr] = ["class_type": type, "inputs": inputs]
                 }
-                if let innerNodeError = innerNodeError {
-                    errorMessage = "Failed to load workflow nodes: \(innerNodeError.localizedDescription)"
-                    showErrorAlert = true
-                    return
-                }
-                if let error = appState.generation.workflowError {
-                    errorMessage = error
-                    showErrorAlert = true
+                
+                workflowToUse = apiWorkflow
+                
+                // Optional: Log for debugging
+                print("Converted full workflow to API format with \(apiWorkflow.count) nodes")
+            }
+
+            // Now use workflowToUse instead of json
+            if workflowToUse.isEmpty {
+                errorMessage = "Invalid or empty workflow after processing."
+                showErrorAlert = true
+                return
+            }
+
+            appState.generation.comfyWorkflow = workflowToUse  // <-- Fixed here
+            appState.settings.comfyJSONURL = url
+            appState.settings.comfyJSONPath = url.path
+            var nodeError: NSError?
+            var innerNodeError: Error?
+            NSFileCoordinator().coordinate(readingItemAt: url, options: [], error: &nodeError) { coordinatedURL in
+                if coordinatedURL.startAccessingSecurityScopedResource() {
+                    defer { coordinatedURL.stopAccessingSecurityScopedResource() }
+                    
+                    appState.generation.loadWorkflowFromFile(comfyJSONURL: coordinatedURL)
+                } else {
+                    innerNodeError = NSError(domain: "AccessError", code: 0, userInfo: [NSLocalizedDescriptionKey: "Failed to start accessing security-scoped resource."])
                 }
             }
+            if let nodeError = nodeError {
+                errorMessage = "Failed to load workflow nodes: \(nodeError.localizedDescription)"
+                showErrorAlert = true
+                return
+            }
+            if let innerNodeError = innerNodeError {
+                errorMessage = "Failed to load workflow nodes: \(innerNodeError.localizedDescription)"
+                showErrorAlert = true
+                return
+            }
+            if let error = appState.generation.workflowError {
+                errorMessage = error
+                showErrorAlert = true
+            }
+            
         case .failure(let error):
             print("Selection error: \(error)")
             errorMessage = "Failed to select workflow file: \(error.localizedDescription)"
             showErrorAlert = true
         }
     }
-    private func saveGeneratedImage(data: Data) -> String? {
+        private func saveGeneratedImage(data: Data) -> String? {
         let fileManager = FileManager.default
         var outputDir = appState.settings.outputDirectory
         var useFallback = false
