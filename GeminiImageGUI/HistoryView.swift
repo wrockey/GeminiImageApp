@@ -122,7 +122,7 @@ struct HistoryView: View {
     
     private func itemRow(for item: HistoryItem) -> some View {
         HStack(spacing: 12) {
-            LazyThumbnailView(item: item)
+            thumbnail(for: item)
             
             VStack(alignment: .leading, spacing: 4) {
                 Text(item.prompt.prefix(50) + (item.prompt.count > 50 ? "..." : ""))
@@ -194,55 +194,19 @@ struct HistoryView: View {
         .draggable(item.imagePath.map { URL(fileURLWithPath: $0) } ?? URL(string: "")!)
     }
     
-    // New custom view for lazy thumbnail loading
-    struct LazyThumbnailView: View {
-        let item: HistoryItem
-        @State private var thumbnail: PlatformImage? = nil
-        @EnvironmentObject var appState: AppState
-        
-        var body: some View {
-            Group {
-                if let img = thumbnail {
-                    Image(platformImage: img)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 50, height: 50)
-                        .cornerRadius(12)
-                        .shadow(color: .black.opacity(0.2), radius: 4, x: 0, y: 2)
-                } else {
-                    Image(systemName: "photo")
-                        .font(.system(size: 50))
-                        .foregroundColor(.secondary)
-                }
-            }
-            .onAppear {
-                if thumbnail == nil {
-                    loadThumbnail()
-                }
-            }
-        }
-        
-        private func loadThumbnail() {
-            DispatchQueue.global(qos: .background).async {
-                let loadedImage = loadImage(for: item)
-                DispatchQueue.main.async {
-                    thumbnail = loadedImage
-                }
-            }
-        }
-        
-        private func loadImage(for item: HistoryItem) -> PlatformImage? {
-            guard let path = item.imagePath else { return nil }
-            let fileURL = URL(fileURLWithPath: path)
-            if let dir = appState.settings.outputDirectory {
-                let didStart = dir.startAccessingSecurityScopedResource()
-                let image = PlatformImage(contentsOfFile: fileURL.path)
-                if didStart {
-                    dir.stopAccessingSecurityScopedResource()
-                }
-                return image
+    private func thumbnail(for item: HistoryItem) -> some View {
+        Group {
+            if let img = loadHistoryImage(for: item) {
+                Image(platformImage: img)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 50, height: 50)
+                    .cornerRadius(12)
+                    .shadow(color: .black.opacity(0.2), radius: 4, x: 0, y: 2)
             } else {
-                return PlatformImage(contentsOfFile: fileURL.path)
+                Image(systemName: "photo")
+                    .font(.system(size: 50))
+                    .foregroundColor(.secondary)
             }
         }
     }
@@ -335,9 +299,20 @@ struct FullHistoryItemView: View {
                             .foregroundColor(.secondary)
                     }
                     
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Prompt: \(item.prompt)")
-                            .font(.body)
+                    VStack(alignment: .center, spacing: 4) {
+                        HStack(alignment: .center) {
+                            Text("Prompt: \(item.prompt)")
+                                .font(.body)
+                            Button(action: {
+                                copyPromptToClipboard(item.prompt)
+                            }) {
+                                Image(systemName: "doc.on.doc")
+                                    .foregroundColor(.blue.opacity(0.8))
+                                    .symbolRenderingMode(.hierarchical)
+                            }
+                            .buttonStyle(.borderless)
+                            .help("Copy prompt to clipboard")
+                        }
                         Text("Date: \(dateFormatter.string(from: item.date))")
                             .font(.caption)
                             .foregroundColor(.secondary)
@@ -466,5 +441,10 @@ struct FullHistoryItemView: View {
         } else {
             return PlatformImage(contentsOfFile: fileURL.path)
         }
+    }
+
+    private func copyPromptToClipboard(_ prompt: String) {
+        PlatformPasteboard.clearContents()
+        PlatformPasteboard.writeString(prompt)
     }
 }
