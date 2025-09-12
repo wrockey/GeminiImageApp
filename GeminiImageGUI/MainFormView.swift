@@ -88,11 +88,21 @@ struct MainFormView: View {
             Divider()
                 .foregroundStyle(.separator.opacity(0.5))
             
-            if isLoading {
-                LoadingView(mode: appState.settings.mode, progress: progress, isCancelled: $isCancelled, onStop: onStop)
-            } else {
-                SubmitButtonView(isDisabled: isSubmitDisabled, onSubmit: onSubmit)
+            Group {
+                if isLoading {
+                    LoadingView(mode: appState.settings.mode, progress: progress, isCancelled: $isCancelled, onStop: onStop)
+                } else {
+                    SubmitButtonView(isDisabled: isSubmitDisabled, onSubmit: onSubmit)
+                        .controlSize(.large)
+                        .buttonStyle(.borderedProminent)
+                        .frame(minHeight: 50) // Or higher, e.g., 60, to make it taller/larger overall
+                        .padding(.vertical, 8) // Keeps the tightened space above/below
+                        .font(.system(size: 30, weight: .medium))
+                }
             }
+            .padding(.vertical, -12) // More negative padding to halve the empty space above/below (from ~32pt effective to ~16pt)
+            .offset(y: -5) // Moves the entire group (including the button) up by 5 points/pixels
+
             
             Divider()
                 .foregroundStyle(.separator.opacity(0.5))
@@ -122,7 +132,3 @@ struct MainFormView: View {
         .padding()
     }
 }
-
-
-
-

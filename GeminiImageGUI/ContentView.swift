@@ -6,6 +6,7 @@ import AppKit
 import UIKit
 #endif
 
+
 extension View {
     func workflowErrorAlert(appState: AppState) -> some View {
         alert("Workflow Error", isPresented: Binding<Bool>(
@@ -80,6 +81,14 @@ struct ContentView: View {
 #endif
     @State private var showAnnotationSheet: Bool = false
     @State private var selectedSlotId: UUID?
+    
+    private var topColor: Color {
+        colorScheme == .light ? Color(red: 242.0 / 255.0, green: 242.0 / 255.0, blue: 247.0 / 255.0) : Color(red: 28.0 / 255.0, green: 28.0 / 255.0, blue: 28.0 / 255.0)
+    }
+
+    private var bottomColor: Color {
+        colorScheme == .light ? Color(red: 229.0 / 255.0, green: 229.0 / 255.0, blue: 234.0 / 255.0) : Color(red: 44.0 / 255.0, green: 44.0 / 255.0, blue: 46.0 / 255.0)
+    }
 
     var body: some View {
         #if os(iOS)
@@ -112,8 +121,11 @@ struct ContentView: View {
 
 #if os(iOS)
 @ViewBuilder
+    
 private var iOSLayout: some View {
+
     NavigationStack {
+        
         ScrollView {
             VStack(spacing: 16) {  // Added VStack for better grouping and spacing
 //                Text("Main UI")
@@ -153,7 +165,7 @@ private var iOSLayout: some View {
                 .padding(.horizontal, 24)  // Increased horizontal padding for iPad comfort
             }
         }
-        .background(LinearGradient(gradient: Gradient(colors: [Color(.systemGray6), Color(.systemGray5)]), startPoint: .top, endPoint: .bottom))  // Lighter gradient for contrast
+        .background(LinearGradient(gradient: Gradient(colors: [topColor, bottomColor]), startPoint: .top, endPoint: .bottom))
         .navigationTitle("Gemini Image")
         .toolbar {
             ToolbarItemGroup(placement: .navigationBarTrailing) {
@@ -184,6 +196,7 @@ private var iOSLayout: some View {
 #else
     @ViewBuilder
     private var macOSLayout: some View {
+
         NavigationSplitView(columnVisibility: $columnVisibility) {
             HistoryView(imageSlots: $appState.ui.imageSlots, columnVisibility: $columnVisibility)
                 .environmentObject(appState)
@@ -219,10 +232,13 @@ private var iOSLayout: some View {
                     onComfyJSONSelected: handleComfyJSONSelection
                 )
                 .environmentObject(appState)
+                .padding(.horizontal, 24)  // Add padding for better readability and alignment with iOS
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .background(LinearGradient(gradient: Gradient(colors: [.black.opacity(0.9), .gray.opacity(0.6)]), startPoint: .top, endPoint: .bottom))
+
+        
+        .background(LinearGradient(gradient: Gradient(colors: [topColor, bottomColor]), startPoint: .top, endPoint: .bottom))
         .toolbar {
             ToolbarItemGroup(placement: .automatic) {
                 toolbarContent
@@ -1170,5 +1186,3 @@ private var iOSLayout: some View {
         }.resume()
     }
 }
-
-
