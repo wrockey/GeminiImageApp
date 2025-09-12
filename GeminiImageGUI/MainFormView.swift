@@ -5,8 +5,6 @@ import AppKit
 import UIKit
 #endif
 
-
-
 struct MainFormView: View {
     @Binding var configExpanded: Bool
     @Binding var promptExpanded: Bool
@@ -33,6 +31,7 @@ struct MainFormView: View {
     let onComfyJSONSelected: (Result<[URL], Error>) -> Void
 
     @EnvironmentObject var appState: AppState
+    
     @Environment(\.undoManager) private var undoManager
     
     @State private var showCopiedMessage: Bool = false
@@ -106,8 +105,6 @@ struct MainFormView: View {
                                 .font(.system(size: 16))
                                 .foregroundColor(.red)
                         }
-                        .buttonStyle(.borderless)
-                        .help("Clear prompt")
                         .buttonStyle(.borderless)
                         .help("Clear prompt")
                     }
@@ -187,16 +184,19 @@ struct MainFormView: View {
     }
     
     private func pasteToPrompt() {
+        var pastedText: String? = nil
         #if os(macOS)
         let pasteboard = NSPasteboard.general
-        if let text = pasteboard.string(forType: .string) {
-            prompt = text
-        }
+        pastedText = pasteboard.string(forType: .string)
         #elseif os(iOS)
-        if let text = UIPasteboard.general.string {
-            prompt = text
-        }
+        pastedText = UIPasteboard.general.string
         #endif
+        
+        if let text = pastedText {
+            let oldPrompt = prompt
+            prompt = text
+            undoManager?.registerUndo(withTarget: appState, selector: #selector(AppState.setPrompt(_:)), object: oldPrompt)
+        }
     }
     
     private func copyPromptToClipboard() {
