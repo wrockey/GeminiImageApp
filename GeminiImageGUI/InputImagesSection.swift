@@ -1,4 +1,3 @@
-//InputImagesSection.swift
 import SwiftUI
 import ImageIO  // For PNG metadata extraction
 #if os(macOS)
@@ -13,6 +12,8 @@ struct InputImagesSection: View {
     @Binding var showErrorAlert: Bool
     let onAnnotate: (UUID) -> Void
     @EnvironmentObject var appState: AppState
+    
+    @State private var showCopiedMessage: Bool = false
     
     private var backgroundColor: Color {
         #if os(iOS)
@@ -30,129 +31,150 @@ struct InputImagesSection: View {
     }
     
     var body: some View {
-        VStack(spacing: 20) {
-            HStack(spacing: 16) {
-                Button(action: addImageSlot) {
-                    Image(systemName: "plus.circle.fill")
-                        .font(.system(size: 24))  // Larger for touch
-                        .foregroundColor(.green)
-                }
-                .buttonStyle(.plain)  // Cleaner look
-                .shadow(radius: 2)
+        ZStack {
+            VStack(spacing: 20) {
+                HStack(spacing: 16) {
+                    Button(action: addImageSlot) {
+                        Image(systemName: "plus.circle.fill")
+                            .font(.system(size: 24))  // Larger for touch
+                            .foregroundColor(.green)
+                    }
+                    .buttonStyle(.plain)  // Cleaner look
+                    .shadow(radius: 2)
 
-                Button(action: clearImageSlots) {
-                    Image(systemName: "trash.circle.fill")
-                        .font(.system(size: 24))
-                        .foregroundColor(.red)
+                    Button(action: clearImageSlots) {
+                        Image(systemName: "trash.circle.fill")
+                            .font(.system(size: 24))
+                            .foregroundColor(.red)
+                    }
+                    .buttonStyle(.plain)
+                    .shadow(radius: 2)
                 }
-                .buttonStyle(.plain)
-                .shadow(radius: 2)
-            }
 
-            ForEach($imageSlots) { $slot in
-                if #available(macOS 14.0, *) {
-                    HStack(spacing: 16) {
-                        if let img = slot.image {
-                            Image(platformImage: img)
-                                .resizable()
-                                .scaledToFit()
-                                .frame(width: 150, height: 150)  // Larger preview
-                                .cornerRadius(16)
-                                .shadow(radius: 4)
-                        } else {
-                            if #available(macOS 14.0, *) {
-                                Rectangle()
-                                    .fill(Color(backgroundColor))
-                                    .frame(width: 150, height: 150)
+                ForEach($imageSlots) { $slot in
+                    if #available(macOS 14.0, *) {
+                        HStack(spacing: 16) {
+                            if let img = slot.image {
+                                Image(platformImage: img)
+                                    .resizable()
+                                    .scaledToFit()
+                                    .frame(width: 150, height: 150)  // Larger preview
                                     .cornerRadius(16)
                                     .shadow(radius: 4)
                             } else {
-                                // Fallback on earlier versions
-                            }
-                        }
-                        
-                        VStack(alignment: .leading, spacing: 12) {  // More spacing
-                            Text(slot.path.isEmpty ? "No image selected" : {
-#if os(iOS)
-                                return URL(fileURLWithPath: slot.path).lastPathComponent
-#else
-                                return slot.path
-#endif
-                            }())
-                            .font(.system(.body, weight: .medium))
-                            .foregroundColor(.primary)
-                            
-                            HStack(spacing: 8) {  // Group buttons horizontally for compactness
-                                Button("Browse") { showImageOpenPanel(for: $slot)}
-                                    .buttonStyle(.borderedProminent)
-                                    .tint(.blue)
-                                    .cornerRadius(10)
-                                    .shadow(radius: 2)
-                                
-                                Button("Paste") { pasteImage(for: $slot) }
-                                    .buttonStyle(.borderedProminent)
-                                    .tint(.green)
-                                    .cornerRadius(10)
-                                    .shadow(radius: 2)
-                                
-                                Button("Annotate") {
-                                    if slot.image != nil {
-                                        print("DEBUG: Annotate tapped for slot \(slot.id), image exists: true")
-                                        onAnnotate(slot.id)
-                                    } else {
-                                        print("DEBUG: Annotate tapped but no image in slot \(slot.id)")
-                                        errorMessage = "No image loaded to annotate."
-                                        showErrorAlert = true
-                                    }
+                                if #available(macOS 14.0, *) {
+                                    Rectangle()
+                                        .fill(Color(backgroundColor))
+                                        .frame(width: 150, height: 150)
+                                        .cornerRadius(16)
+                                        .shadow(radius: 4)
+                                } else {
+                                    // Fallback on earlier versions
                                 }
-                                .buttonStyle(.borderedProminent)
-                                .tint(.purple)
-                                .cornerRadius(10)
-                                .shadow(radius: 2)
                             }
                             
-                            if !slot.promptNodes.isEmpty {
-                                VStack(alignment: .leading, spacing: 8) {
-                                    Text("Embedded Workflow Prompts")
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
+                            VStack(alignment: .leading, spacing: 12) {  // More spacing
+                                Text(slot.path.isEmpty ? "No image selected" : {
+    #if os(iOS)
+                                    return URL(fileURLWithPath: slot.path).lastPathComponent
+    #else
+                                    return slot.path
+    #endif
+                                }())
+                                .font(.system(.body, weight: .medium))
+                                .foregroundColor(.primary)
+                                
+                                HStack(spacing: 8) {  // Group buttons horizontally for compactness
+                                    Button("Browse") { showImageOpenPanel(for: $slot)}
+                                        .buttonStyle(.borderedProminent)
+                                        .tint(.blue)
+                                        .cornerRadius(10)
+                                        .shadow(radius: 2)
                                     
-                                    Picker("Select Prompt", selection: $slot.selectedPromptIndex) {
-                                        ForEach(0..<slot.promptNodes.count, id: \.self) { index in
-                                            Text(slot.promptNodes[index].label)
-                                                .tag(index)
+                                    Button("Paste") { pasteImage(for: $slot) }
+                                        .buttonStyle(.borderedProminent)
+                                        .tint(.green)
+                                        .cornerRadius(10)
+                                        .shadow(radius: 2)
+                                    
+                                    Button("Annotate") {
+                                        if slot.image != nil {
+                                            print("DEBUG: Annotate tapped for slot \(slot.id), image exists: true")
+                                            onAnnotate(slot.id)
+                                        } else {
+                                            print("DEBUG: Annotate tapped but no image in slot \(slot.id)")
+                                            errorMessage = "No image loaded to annotate."
+                                            showErrorAlert = true
                                         }
                                     }
-                                    .pickerStyle(.menu)  // Dropdown-style menu on both iOS and macOS
-                                    
-                                    Button("Copy Selected Prompt") {                                     
-                                        let selectedText = slot.promptNodes[slot.selectedPromptIndex].promptText ?? ""
-                                        copyToClipboard(selectedText)}
+                                    .buttonStyle(.borderedProminent)
+                                    .tint(.purple)
+                                    .cornerRadius(10)
+                                    .shadow(radius: 2)
+                                }
+                                
+                                if !slot.promptNodes.isEmpty {
+                                    VStack(alignment: .leading, spacing: 8) {
+                                        Text("Embedded Workflow Prompts")
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                        
+                                        Picker("Select Prompt", selection: $slot.selectedPromptIndex) {
+                                            ForEach(0..<slot.promptNodes.count, id: \.self) { index in
+                                                Text(slot.promptNodes[index].label)
+                                                    .tag(index)
+                                            }
+                                        }
+                                        .pickerStyle(.menu)  // Dropdown-style menu on both iOS and macOS
+                                        
+                                        Button("Copy Prompt") {
+                                            let selectedText = slot.promptNodes[slot.selectedPromptIndex].promptText ?? ""
+                                            copyToClipboard(selectedText)
+                                            withAnimation {
+                                                showCopiedMessage = true
+                                            }
+                                            DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                                                withAnimation {
+                                                    showCopiedMessage = false
+                                                }
+                                            }
+                                        }
                                         .buttonStyle(.bordered)
                                         .tint(.green)
                                         .cornerRadius(10)
                                         .shadow(radius: 2)
+                                    }
                                 }
                             }
+                            
+                            Spacer()
+                            
+                            Button(action: { removeImageSlot(slot.id) }) {
+                                Image(systemName: "minus.circle.fill")
+                                    .font(.system(size: 24))
+                                    .foregroundColor(.red)
+                            }
+                            .buttonStyle(.plain)
+                            .shadow(radius: 2)
                         }
-                        
-                        Spacer()
-                        
-                        Button(action: { removeImageSlot(slot.id) }) {
-                            Image(systemName: "minus.circle.fill")
-                                .font(.system(size: 24))
-                                .foregroundColor(.red)
-                        }
-                        .buttonStyle(.plain)
-                        .shadow(radius: 2)
+                        .padding(16)
+                        .background(Color(systemBackgroundColor).opacity(0.8))
+                        .cornerRadius(16)  // Card style for each slot
+                        .shadow(radius: 4)
+                    } else {
+                        // Fallback on earlier versions
                     }
-                    .padding(16)
-                    .background(Color(systemBackgroundColor).opacity(0.8))
-                    .cornerRadius(16)  // Card style for each slot
-                    .shadow(radius: 4)
-                } else {
-                    // Fallback on earlier versions
                 }
+            }
+            
+            if showCopiedMessage {
+                Text("Copied to Clipboard")
+                    .font(.headline)
+                    .padding()
+                    .background(Color.black.opacity(0.7))
+                    .foregroundColor(.white)
+                    .cornerRadius(10)
+                    .transition(.opacity)
             }
         }
     }
@@ -519,4 +541,3 @@ struct InputImagesSection: View {
         return result
     }
 }
-
