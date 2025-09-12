@@ -286,6 +286,9 @@ class AppState: ObservableObject {
     @Published var showResponseSheet: Bool = false
     #endif
     
+    @Published var batchPrompts: [String] = []
+    @Published var batchFileURL: URL? = nil
+    
     private var cancellables = Set<AnyCancellable>()
     
     @objc func setPrompt(_ newPrompt: String) {

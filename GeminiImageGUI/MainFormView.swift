@@ -1,3 +1,4 @@
+//MainFormView.swift
 import SwiftUI
 #if os(macOS)
 import AppKit
@@ -29,17 +30,19 @@ struct MainFormView: View {
     let onApiKeySelected: (Result<[URL], Error>) -> Void
     let onOutputFolderSelected: (Result<[URL], Error>) -> Void
     let onComfyJSONSelected: (Result<[URL], Error>) -> Void
+    let onBatchFileSelected: (Result<[URL], Error>) -> Void  // New: Handler for batch file selection
+    let onBatchSubmit: () -> Void  // New: Handler for batch submission (implement in ContentView to loop over prompts)
 
     @EnvironmentObject var appState: AppState
     
     @Environment(\.undoManager) private var undoManager
     
     @State private var showCopiedMessage: Bool = false
+    @Binding var batchFilePath: String  // New: Path to selected batch file
+    @Binding var startPrompt: String  // Changed to @Binding
+    @Binding var endPrompt: String  // Changed to @Binding
+    @AppStorage("batchExpanded") private var batchExpanded: Bool = true  // New: Expansion state
 
-    private var selectedPromptText: String {
-        appState.generation.promptNodes.first(where: { $0.id == appState.generation.comfyPromptNodeID })?.promptText ?? ""
-    }
-    
     var isSubmitDisabled: Bool {
         if appState.settings.mode == .gemini {
             return appState.settings.apiKey.isEmpty || prompt.isEmpty
@@ -48,7 +51,18 @@ struct MainFormView: View {
             return appState.generation.comfyWorkflow == nil || appState.generation.comfyPromptNodeID.isEmpty || appState.generation.comfyOutputNodeID.isEmpty || appState.settings.comfyServerURL.isEmpty || effectivePromptEmpty
         }
     }
-
+    
+    private var selectedPromptText: String {
+        appState.generation.promptNodes.first(where: { $0.id == appState.generation.comfyPromptNodeID })?.promptText ?? ""
+    }
+    
+    private var isBatchSubmitDisabled: Bool {  // New: Disable if no prompts or invalid range
+        guard !appState.batchPrompts.isEmpty else { return true }
+        let start = Int(startPrompt) ?? 1
+        let end = Int(endPrompt) ?? appState.batchPrompts.count
+        return start < 1 || end > appState.batchPrompts.count || start > end
+    }
+    
     var body: some View {
         ZStack {
             VStack(spacing: 24) {
@@ -133,6 +147,55 @@ struct MainFormView: View {
                 Divider()
                     .foregroundStyle(.separator.opacity(0.5))
                 
+                // New: Batch Mode section
+                DisclosureGroup("Batch Mode", isExpanded: $batchExpanded) {
+                    VStack(alignment: .leading, spacing: 16) {
+                        HStack {
+                            Text("Batch File:")
+                                .font(.system(.subheadline, design: .default, weight: .medium))
+                                .foregroundColor(.secondary)
+                            #if os(iOS)
+                            Text(batchFilePath.isEmpty ? "No file selected" : URL(fileURLWithPath: batchFilePath).lastPathComponent)
+                            #else
+                            Text(batchFilePath.isEmpty ? "No file selected" : batchFilePath)
+                            #endif
+                            Button("Select File") {
+                                PlatformFilePicker.presentOpenPanel(allowedTypes: [.plainText], allowsMultiple: false, canChooseDirectories: false) { result in
+                                    onBatchFileSelected(result)
+                                }
+                            }
+                            .buttonStyle(.bordered)
+                            .tint(.blue.opacity(0.8))
+                            .font(.system(.body, design: .rounded, weight: .medium))
+                            .shadow(color: .black.opacity(0.1), radius: 1)
+                        }
+                        
+                        HStack {
+                            Text("Starting Prompt:")
+                                .font(.system(.subheadline, design: .default, weight: .medium))
+                                .foregroundColor(.secondary)
+                            TextField("1", text: $startPrompt)
+                                .textFieldStyle(.roundedBorder)
+                                .frame(maxWidth: 100)
+                        }
+                        
+                        HStack {
+                            Text("Ending Prompt:")
+                                .font(.system(.subheadline, design: .default, weight: .medium))
+                                .foregroundColor(.secondary)
+                            TextField("", text: $endPrompt)
+                                .textFieldStyle(.roundedBorder)
+                                .frame(maxWidth: 100)
+                        }
+                    }
+                }
+                .font(.system(.headline, design: .default, weight: .semibold))
+                .kerning(0.2)
+                .foregroundColor(.primary)
+                
+                Divider()
+                    .foregroundStyle(.separator.opacity(0.5))
+                
                 Group {
                     if isLoading {
                         LoadingView(mode: appState.settings.mode, progress: progress, isCancelled: $isCancelled, onStop: onStop)
@@ -140,14 +203,24 @@ struct MainFormView: View {
                         SubmitButtonView(isDisabled: isSubmitDisabled, onSubmit: onSubmit)
                             .controlSize(.large)
                             .buttonStyle(.borderedProminent)
-                            .frame(minHeight: 50) // Or higher, e.g., 60, to make it taller/larger overall
-                            .padding(.vertical, 8) // Keeps the tightened space above/below
+                            .frame(minHeight: 50)
+                            .padding(.vertical, 8)
                             .font(.system(size: 30, weight: .medium))
+                        
+                        // New: Batch Submit button
+                        Button("Submit Batch Job") {
+                            onBatchSubmit()
+                        }
+                        .controlSize(.large)
+                        .buttonStyle(.borderedProminent)
+                        .disabled(isBatchSubmitDisabled)
+                        .frame(minHeight: 50)
+                        .padding(.vertical, 8)
+                        .font(.system(size: 30, weight: .medium))
                     }
                 }
-                .padding(.vertical, -12) // More negative padding to halve the empty space above/below (from ~32pt effective to ~16pt)
-                .offset(y: -5) // Moves the entire group (including the button) up by 5 points/pixels
-                
+                .padding(.vertical, -12)
+                .offset(y: -5)
                 
                 Divider()
                     .foregroundStyle(.separator.opacity(0.5))
@@ -184,6 +257,15 @@ struct MainFormView: View {
                     .foregroundColor(.white)
                     .cornerRadius(10)
                     .transition(.opacity)
+            }
+        }
+        .onChange(of: appState.batchPrompts) { newPrompts in  // New: Update start/end on batch load
+            if !newPrompts.isEmpty {
+                startPrompt = "1"
+                endPrompt = "\(newPrompts.count)"
+            } else {
+                startPrompt = "1"
+                endPrompt = ""
             }
         }
     }
