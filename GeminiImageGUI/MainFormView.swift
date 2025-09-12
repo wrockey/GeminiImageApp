@@ -36,11 +36,16 @@ struct MainFormView: View {
     
     @State private var showCopiedMessage: Bool = false
 
+    private var selectedPromptText: String {
+        appState.generation.promptNodes.first(where: { $0.id == appState.generation.comfyPromptNodeID })?.promptText ?? ""
+    }
+    
     var isSubmitDisabled: Bool {
         if appState.settings.mode == .gemini {
             return appState.settings.apiKey.isEmpty || prompt.isEmpty
         } else {
-            return appState.generation.comfyWorkflow == nil || appState.generation.comfyPromptNodeID.isEmpty || appState.generation.comfyOutputNodeID.isEmpty || appState.settings.comfyServerURL.isEmpty || prompt.isEmpty
+            let effectivePromptEmpty = prompt.isEmpty && selectedPromptText.isEmpty
+            return appState.generation.comfyWorkflow == nil || appState.generation.comfyPromptNodeID.isEmpty || appState.generation.comfyOutputNodeID.isEmpty || appState.settings.comfyServerURL.isEmpty || effectivePromptEmpty
         }
     }
 

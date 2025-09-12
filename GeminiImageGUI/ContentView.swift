@@ -1154,9 +1154,12 @@ private var iOSLayout: some View {
                 }
                 
                 let promptNodeID = appState.generation.comfyPromptNodeID
+                let selectedPromptText = appState.generation.promptNodes.first(where: { $0.id == appState.generation.comfyPromptNodeID })?.promptText ?? ""
+                let effectivePrompt = appState.prompt.isEmpty ? selectedPromptText : appState.prompt
+                
                 if var node = mutableWorkflow[promptNodeID] as? [String: Any],
                    var inputs = node["inputs"] as? [String: Any] {
-                    inputs["text"] = appState.prompt
+                    inputs["text"] = effectivePrompt
                     node["inputs"] = inputs
                     mutableWorkflow[promptNodeID] = node
                 } else {
@@ -1164,6 +1167,7 @@ private var iOSLayout: some View {
                     showErrorAlert = true
                     return
                 }
+
                 
                 var uploadedFilename: String? = nil
                 if !appState.generation.comfyImageNodeID.isEmpty && !appState.ui.imageSlots.isEmpty,
