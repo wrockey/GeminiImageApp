@@ -1,4 +1,4 @@
-//HistoryView.swift
+// HistoryView.swift
 import SwiftUI
 #if os(macOS)
 import AppKit
@@ -122,7 +122,7 @@ struct HistoryView: View {
     
     private func itemRow(for item: HistoryItem) -> some View {
         HStack(spacing: 12) {
-            thumbnail(for: item)
+            LazyThumbnailView(item: item)
             
             VStack(alignment: .leading, spacing: 4) {
                 Text(item.prompt.prefix(50) + (item.prompt.count > 50 ? "..." : ""))
@@ -194,19 +194,55 @@ struct HistoryView: View {
         .draggable(item.imagePath.map { URL(fileURLWithPath: $0) } ?? URL(string: "")!)
     }
     
-    private func thumbnail(for item: HistoryItem) -> some View {
-        Group {
-            if let img = loadHistoryImage(for: item) {
-                Image(platformImage: img)
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 50, height: 50)
-                    .cornerRadius(12)
-                    .shadow(color: .black.opacity(0.2), radius: 4, x: 0, y: 2)
+    // New custom view for lazy thumbnail loading
+    struct LazyThumbnailView: View {
+        let item: HistoryItem
+        @State private var thumbnail: PlatformImage? = nil
+        @EnvironmentObject var appState: AppState
+        
+        var body: some View {
+            Group {
+                if let img = thumbnail {
+                    Image(platformImage: img)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 50, height: 50)
+                        .cornerRadius(12)
+                        .shadow(color: .black.opacity(0.2), radius: 4, x: 0, y: 2)
+                } else {
+                    Image(systemName: "photo")
+                        .font(.system(size: 50))
+                        .foregroundColor(.secondary)
+                }
+            }
+            .onAppear {
+                if thumbnail == nil {
+                    loadThumbnail()
+                }
+            }
+        }
+        
+        private func loadThumbnail() {
+            DispatchQueue.global(qos: .background).async {
+                let loadedImage = loadImage(for: item)
+                DispatchQueue.main.async {
+                    thumbnail = loadedImage
+                }
+            }
+        }
+        
+        private func loadImage(for item: HistoryItem) -> PlatformImage? {
+            guard let path = item.imagePath else { return nil }
+            let fileURL = URL(fileURLWithPath: path)
+            if let dir = appState.settings.outputDirectory {
+                let didStart = dir.startAccessingSecurityScopedResource()
+                let image = PlatformImage(contentsOfFile: fileURL.path)
+                if didStart {
+                    dir.stopAccessingSecurityScopedResource()
+                }
+                return image
             } else {
-                Image(systemName: "photo")
-                    .font(.system(size: 50))
-                    .foregroundColor(.secondary)
+                return PlatformImage(contentsOfFile: fileURL.path)
             }
         }
     }
