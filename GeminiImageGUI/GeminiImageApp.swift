@@ -452,7 +452,8 @@ struct GeminiImageApp: App {
         .defaultSize(width: 800, height: 600)
         #else
         WindowGroup {
-            ContentView()
+            SplashView()
+//            ContentView()
                 .environmentObject(appState)
             #if os(iOS)
             .sheet(isPresented: Binding(get: { appState.showMarkupSheet }, set: { appState.showMarkupSheet = $0 })) {
