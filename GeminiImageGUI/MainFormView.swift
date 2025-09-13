@@ -224,7 +224,7 @@ struct MainFormView: View {
                             }
                             .controlSize(.large)
                             .buttonStyle(.borderedProminent)
-                            .disabled(isBatchSubmitDisabled)
+                            .disabled(isBatchSubmitDisabled || isLoading)
                             .frame(maxWidth: .infinity, minHeight: 50)
                             .padding(.vertical, 8)
                             .font(.system(size: 24, weight: .medium))
