@@ -228,7 +228,7 @@ struct MainFormView: View {
                             .buttonStyle(.borderedProminent)
                             .disabled(isBatchSubmitDisabled || isLoading)
                             .frame(maxWidth: .infinity, minHeight: 50)
-                            .padding(.vertical, 8)
+                            .padding(.vertical, 12)
                             .font(.system(size: 24, weight: .medium))
                         }
                         .padding(.vertical, -12)
