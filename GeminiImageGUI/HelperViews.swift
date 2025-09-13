@@ -155,36 +155,33 @@ struct FullImageView: View {
 struct LoadingView: View {
     let mode: GenerationMode
     let progress: Double
-    @Binding var isCancelled: Bool
+    let isCancelled: Binding<Bool>
     let onStop: () -> Void
 
     var body: some View {
-        VStack {
-            if mode == .gemini {
-                ProgressView("Generating...")
-                    .progressViewStyle(.circular)
-                    .frame(maxWidth: .infinity)
-                    .padding()
-            } else {
-                ProgressView(value: progress, total: 1.0)
-                    .progressViewStyle(.linear)
-                    .frame(maxWidth: .infinity)
-                    .padding()
-            }
-            
+        VStack(spacing: 20) {
+            AbstractBloomExpansionLoading()
+                .frame(width: 200, height: 200) // Adjust size to fit your UI
+
             if mode == .comfyUI {
-                Button("Stop Generation") {
-                    onStop()
-                }
-                .buttonStyle(.bordered)
-                .tint(.red.opacity(0.8))
-                .disabled(isCancelled)
-                .font(.system(.body, design: .rounded, weight: .medium))
-                .shadow(color: .black.opacity(0.1), radius: 1)
+                ProgressView(value: progress)
+                    .progressViewStyle(LinearProgressViewStyle())
+                    .frame(maxWidth: .infinity)
+            } else {
+                ProgressView("Generating...")
+                    .progressViewStyle(CircularProgressViewStyle())
             }
+
+            Button("Stop") {
+                isCancelled.wrappedValue = true
+                onStop()
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(.red)
         }
-        .frame(maxWidth: .infinity)
         .padding()
+//        .background(Color.gray.opacity(0.2))
+//        .cornerRadius(12)
     }
 }
 
