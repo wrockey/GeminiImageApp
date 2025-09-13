@@ -160,12 +160,12 @@ struct MainFormView: View {
                         .buttonStyle(.borderedProminent)
                         .disabled(isSubmitDisabled)
                         .frame(maxWidth: .infinity, minHeight: 50)
-                        .padding(.vertical, 8)
+                        .padding(.vertical, 12)
                         .font(.system(size: 24, weight: .medium))
                     }
                 }
                 .padding(.vertical, -12)
-                .offset(y: 0)
+                .offset(y: -5)
                 
                 Divider()
                     .foregroundStyle(.separator.opacity(0.5))
@@ -182,7 +182,8 @@ struct MainFormView: View {
                             #else
                             Text(batchFilePath.isEmpty ? "No file selected" : batchFilePath)
                             #endif
-                            Spacer()
+                            Spacer().frame(width:30)
+                            
                             Button("Select File") {
                                 PlatformFilePicker.presentOpenPanel(allowedTypes: [.plainText], allowsMultiple: false, canChooseDirectories: false) { result in
                                     onBatchFileSelected(result)
@@ -199,19 +200,17 @@ struct MainFormView: View {
                             Text("Starting Prompt:")
                                 .font(.system(.subheadline, design: .default, weight: .medium))
                                 .foregroundColor(.secondary)
-                                .frame(width: 130, alignment: .leading) // Align labels
+                                .frame(width: 60, alignment: .leading) // Align labels
                             TextField("1", text: $startPrompt)
                                 .textFieldStyle(.roundedBorder)
                                 .frame(maxWidth: 100)
-                            Spacer()
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        
-                        HStack {
+                            
+                            Spacer().frame(width: 50)  // Add 50px space between boxes
+                            
                             Text("Ending Prompt:")
                                 .font(.system(.subheadline, design: .default, weight: .medium))
                                 .foregroundColor(.secondary)
-                                .frame(width: 130, alignment: .leading) // Align labels
+                                .frame(width: 60, alignment: .leading) // Align labels
                             TextField("", text: $endPrompt)
                                 .textFieldStyle(.roundedBorder)
                                 .frame(maxWidth: 100)
@@ -228,11 +227,11 @@ struct MainFormView: View {
                             .buttonStyle(.borderedProminent)
                             .disabled(isBatchSubmitDisabled || isLoading)
                             .frame(maxWidth: .infinity, minHeight: 50)
-                            .padding(.vertical, 12)
+                            .padding(.vertical, 18)
                             .font(.system(size: 24, weight: .medium))
                         }
                         .padding(.vertical, -12)
-                        .offset(y: 0)
+                        .offset(y: -5)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                 } label: {
