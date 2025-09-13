@@ -11,7 +11,6 @@ struct ResponseSection: View {
     
     @State private var finalScale: CGFloat = 1.0
     @State private var showCopiedOverlay: Bool = false
-    @State private var textHeight: CGFloat = 60  // Initial height for ~3 lines (adjust based on font)
     
     var body: some View {
         VStack(spacing: 16) {  // Changed to VStack for vertical layout
@@ -21,12 +20,6 @@ struct ResponseSection: View {
         .frame(minHeight: 250)  // Slightly taller min height for balance
         .padding(16)  // Outer padding for section spacing
         .cornerRadius(16)
-        .onChange(of: appState.ui.responseText) { newText in
-            // Dynamically adjust textHeight based on content (approximate)
-            let lineHeight: CGFloat = 20  // Approximate line height for .body font
-            let lineCount = newText.split(separator: "\n").count
-            textHeight = max(60, CGFloat(lineCount) * lineHeight + 20)  // +padding
-        }
         .onChange(of: appState.ui.outputImage) { _ in
             finalScale = 1.0
             imageScale = 1.0
@@ -148,16 +141,23 @@ struct ResponseSection: View {
     
     @ViewBuilder
     private var textContent: some View {
-        VStack(alignment: .leading) {
-            TextEditor(text: $appState.ui.responseText)
-                .font(.system(.body))  // Standard readable font
-                .foregroundColor(.primary)  // High contrast
-                .background(secondarySystemBackgroundColor)  // Softer background
+        if appState.ui.responseText.isEmpty {
+            Rectangle()
+                .fill(secondarySystemBackgroundColor)
+                .frame(maxWidth: .infinity, minHeight: 60, maxHeight: 60)  // Small initial height (decreased by ~75% from typical 60)
                 .cornerRadius(12)
-                .shadow(radius: 2)  // Subtle shadow for depth
-                .disabled(true)
+                .shadow(radius: 2)
+        } else {
+            Text(appState.ui.responseText)
+                .font(.system(.body))
+                .foregroundColor(.primary)
+                .multilineTextAlignment(.leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(8)
+                .background(secondarySystemBackgroundColor)
+                .cornerRadius(12)
+                .shadow(radius: 2)
         }
-        .frame(maxWidth: .infinity, idealHeight: textHeight, maxHeight: .infinity)  // Dynamic height starting small
     }
     
     private func saveImageAs(image: PlatformImage) {
