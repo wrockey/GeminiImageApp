@@ -6,6 +6,254 @@ import AppKit
 import UIKit
 #endif
 
+// Moved out: Overload parsePromptNodes for Data
+func parsePromptNodes(from data: Data) -> [NodeInfo] {
+    print("DEBUG: Parsing prompts from pasted PNG data, size: \(data.count)")
+    
+    var offset: Int = 8  // Skip PNG signature
+    let totalLength = data.count
+    var workflowStr: String? = nil
+    
+    while offset + 11 < totalLength {
+        let lengthRange = offset..<(offset + 4)
+        let lengthData = data.subdata(in: lengthRange)
+        let lengthBytes = [UInt8](lengthData)
+        let length = (UInt32(lengthBytes[0]) << 24) | (UInt32(lengthBytes[1]) << 16) |
+                     (UInt32(lengthBytes[2]) << 8) | UInt32(lengthBytes[3])
+        
+        let fullChunkSize = 12 + Int(length)
+        let fullChunkEnd = offset + fullChunkSize
+        guard fullChunkEnd <= totalLength else { break }
+        
+        let typeStart = offset + 4
+        let typeRange = typeStart..<(typeStart + 4)
+        let typeData = data.subdata(in: typeRange)
+        let typeBytes = [UInt8](typeData)
+        let chunkType = String(bytes: typeBytes, encoding: .ascii) ?? ""
+        
+        if chunkType == "tEXt" {
+            let textStart = typeStart + 4
+            let textRange = textStart ..< (textStart + Int(length))
+            let textData = data.subdata(in: textRange)
+            if let textStr = String(data: textData, encoding: .utf8),
+               let nullIndex = textStr.firstIndex(of: "\0") {
+                let keyword = String(textStr[..<nullIndex]).trimmingCharacters(in: .whitespaces)
+                if ["workflow", "prompt", "Workflow", "Prompt"].contains(keyword) {
+                    let valueStart = textStr.index(after: nullIndex)
+                    workflowStr = String(textStr[valueStart...]).trimmingCharacters(in: .whitespaces)
+                    break
+                }
+            }
+        }
+        
+        offset = fullChunkEnd
+    }
+    
+    // Fallback to ImageIO if manual didn't find it
+    if workflowStr == nil {
+        let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".png")
+        do {
+            try data.write(to: tempURL)
+            defer { try? FileManager.default.removeItem(at: tempURL) }
+            return parsePromptNodes(from: tempURL)  // Reuse file version
+        } catch {
+            print("DEBUG: Temp file for ImageIO failed: \(error)")
+            return []
+        }
+    }
+    
+    guard let extractedWorkflowStr = workflowStr else { return [] }
+    
+    guard let jsonData = extractedWorkflowStr.data(using: .utf8),
+          let json = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any] else { return [] }
+    
+    var promptNodes: [NodeInfo] = []
+    
+    if let nodesArray = json["nodes"] as? [[String: Any]] {
+        for node in nodesArray {
+            guard let nodeID = node["id"] as? Int,
+                  let classType = node["type"] as? String else { continue }
+            let nodeIDStr = String(nodeID)
+            
+            if classType.contains("CLIPTextEncode") {
+                let widgetsValues = node["widgets_values"] as? [Any] ?? []
+                let text = widgetsValues.compactMap { $0 as? String }.first ?? ""
+                let label = text.isEmpty ? "Node \(nodeIDStr)" : "Node \(nodeIDStr): \(text.prefix(50))\(text.count > 50 ? "..." : "")"
+                promptNodes.append(NodeInfo(id: nodeIDStr, label: label, promptText: text))
+            }
+        }
+    } else {
+        for (nodeID, node) in json {
+            guard let nodeDict = node as? [String: Any],
+                  let classType = nodeDict["class_type"] as? String else { continue }
+            
+            if classType.contains("CLIPTextEncode") {
+                let text = (nodeDict["inputs"] as? [String: Any])?["text"] as? String ?? ""
+                let label = text.isEmpty ? "Node \(nodeID)" : "Node \(nodeID): \(text.prefix(50))\(text.count > 50 ? "..." : "")"
+                promptNodes.append(NodeInfo(id: nodeID, label: label, promptText: text))
+            }
+        }
+    }
+    
+    return promptNodes.sorted { $0.id < $1.id }
+}
+
+// Moved out: Overload parsePromptNodes for URL
+func parsePromptNodes(from url: URL) -> [NodeInfo] {
+    print("DEBUG: Parsing prompts from PNG: \(url.path)")
+    
+    // Manual PNG chunk parsing to extract tEXt
+    guard let data = try? Data(contentsOf: url) else {
+        print("DEBUG: Failed to load PNG binary data")
+        return []
+    }
+    print("DEBUG: PNG binary loaded, size: \(data.count) bytes")
+    
+    var offset: Int = 8  // Skip PNG signature (first 8 bytes)
+    let totalLength = data.count
+    var workflowStr: String? = nil
+    
+    while offset + 11 < totalLength {  // Ensure room for min chunk (12 bytes) + safety
+        // Read chunk length (4 bytes, big-endian)
+        let lengthRange = offset..<(offset + 4)
+        guard lengthRange.upperBound <= totalLength else {
+            print("DEBUG: Length range exceeds file; breaking at offset \(offset)")
+            break
+        }
+        let lengthData = data.subdata(in: lengthRange)
+        
+        // Safer big-endian UInt32 read (manual shift for reliability)
+        let lengthBytes = [UInt8](lengthData)
+        let length = (UInt32(lengthBytes[0]) << 24) | (UInt32(lengthBytes[1]) << 16) |
+        (UInt32(lengthBytes[2]) << 8) | UInt32(lengthBytes[3])
+        
+        // DEBUG: Log length bytes (remove after fix)
+        print("DEBUG: Length bytes at offset \(offset): [\(lengthBytes.map { String(format: "%02x", $0) }.joined(separator: " "))], length: \(length)")
+        
+        let fullChunkSize = 12 + Int(length)  // 4 len + 4 type + len data + 4 CRC
+        let fullChunkEnd = offset + fullChunkSize
+        guard fullChunkEnd <= totalLength else {
+            print("DEBUG: Full chunk end \(fullChunkEnd) > total \(totalLength); skipping invalid chunk at offset \(offset)")
+            break
+        }
+        
+        let typeStart = offset + 4
+        let typeRange = typeStart..<(typeStart + 4)
+        guard typeRange.upperBound <= totalLength else {
+            print("DEBUG: Type range exceeds; breaking")
+            break
+        }
+        let typeData = data.subdata(in: typeRange)
+        let typeBytes = [UInt8](typeData)
+        let chunkType = String(bytes: typeBytes, encoding: .ascii) ?? ""
+        
+        // DEBUG: Log type bytes (remove after fix)
+        print("DEBUG: Type bytes: [\(typeBytes.map { String(format: "%02x", $0) }.joined(separator: " "))], chunk: \(chunkType) length: \(length)")
+        
+        // For tEXt chunk: keyword\0value
+        if chunkType == "tEXt" {
+            let textStart = typeStart + 4  // After type
+            let textRange = textStart ..< (textStart + Int(length))
+            guard textRange.lowerBound < textRange.upperBound else {
+                offset = fullChunkEnd
+                continue
+            }
+            let textData = data.subdata(in: textRange)
+            if let textStr = String(data: textData, encoding: .utf8),
+               let nullIndex = textStr.firstIndex(of: "\0") {
+                let keyword = String(textStr[..<nullIndex]).trimmingCharacters(in: .whitespaces)
+                if ["workflow", "prompt", "Workflow", "Prompt"].contains(keyword) {
+                    let valueStart = textStr.index(after: nullIndex)
+                    workflowStr = String(textStr[valueStart...]).trimmingCharacters(in: .whitespaces)
+                    print("DEBUG: Found \(keyword) in tEXt chunk: \(workflowStr!.prefix(100))...")
+                    break  // Found it
+                }
+            }
+        }
+        // For zTXt: Skip for now (ComfyUI uses tEXt; add decompression if logs show zTXt)
+        else if chunkType == "zTXt" {
+            print("DEBUG: zTXt chunk found at offset \(offset), length \(length); skipping (decompression needed?)")
+        }
+        
+        // Advance to next chunk
+        offset = fullChunkEnd
+        // DEBUG: (remove after fix)
+        print("DEBUG: Advanced to next offset: \(offset)")
+    }
+    
+    // Fallback to ImageIO if manual didn't find it
+    if workflowStr == nil {
+        print("DEBUG: No tEXt chunks found; falling back to ImageIO")
+        guard let src = CGImageSourceCreateWithURL(url as CFURL, nil),
+              let props = CGImageSourceCopyPropertiesAtIndex(src, 0, nil) as? NSDictionary,
+              let pngDict = props["{PNG}"] as? NSDictionary else {
+            print("DEBUG: ImageIO fallback failed - no {PNG} dict")
+            return []
+        }
+        print("DEBUG: ImageIO PNG dict keys: \(pngDict.allKeys)")
+        
+        let fallbackStr: String? = pngDict["workflow"] as? String ?? pngDict["prompt"] as? String ?? pngDict["Workflow"] as? String ?? pngDict["Prompt"] as? String ?? nil
+        workflowStr = fallbackStr
+        if let ws = workflowStr {
+            print("DEBUG: Found via ImageIO: \(ws.prefix(100))...")
+        } else {
+            print("DEBUG: No workflow/prompt keys in ImageIO. Available keys: \(pngDict.allKeys)")
+            return []
+        }
+    }
+    
+    guard let extractedWorkflowStr = workflowStr else {
+        print("DEBUG: No workflow string extracted after all methods")
+        return []
+    }
+    print("DEBUG: Workflow string length: \(extractedWorkflowStr.count)")
+    print("DEBUG: Using workflow str: \(extractedWorkflowStr.prefix(100))...")
+    
+    // Parse JSON
+    guard let jsonData = extractedWorkflowStr.data(using: .utf8),
+          let json = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any] else {
+        print("DEBUG: Failed to parse JSON. Raw preview: \(extractedWorkflowStr.prefix(200))")
+        return []
+    }
+    print("DEBUG: JSON parsed. Top-level keys: \(Array(json.keys).sorted())")
+    
+    var promptNodes: [NodeInfo] = []
+    
+    // Full workflow: "nodes" array
+    if let nodesArray = json["nodes"] as? [[String: Any]] {
+        print("DEBUG: Full workflow - \(nodesArray.count) nodes")
+        for node in nodesArray {
+            guard let nodeID = node["id"] as? Int,
+                  let classType = node["type"] as? String else { continue }
+            let nodeIDStr = String(nodeID)
+            
+            if classType.contains("CLIPTextEncode") {
+                let widgetsValues = node["widgets_values"] as? [Any] ?? []
+                let text = widgetsValues.compactMap { $0 as? String }.first ?? ""
+                let label = text.isEmpty ? "Node \(nodeIDStr)" : "Node \(nodeIDStr): \(text.prefix(50))\(text.count > 50 ? "..." : "")"
+                promptNodes.append(NodeInfo(id: nodeIDStr, label: label, promptText: text))
+                print("DEBUG: Added node \(nodeIDStr): \(label)")
+            }
+        }
+    } else {
+        // Flat "prompt" dict (API format)
+        print("DEBUG: Flat prompt dict mode")
+        for (nodeID, node) in json {
+            guard let nodeDict = node as? [String: Any], let classType = nodeDict["class_type"] as? String else { continue }
+            
+            if classType.contains("CLIPTextEncode") {
+                let text = (nodeDict["inputs"] as? [String: Any])?["text"] as? String ?? ""
+                let label = text.isEmpty ? "Node \(nodeID)" : "Node \(nodeID): \(text.prefix(50))\(text.count > 50 ? "..." : "")"
+                promptNodes.append(NodeInfo(id: nodeID, label: label, promptText: text))
+            }
+        }
+    }
+    
+    let result = promptNodes.sorted { $0.id < $1.id }
+    print("DEBUG: Total prompt nodes: \(result.count)")
+    return result
+}
+
 struct InputImagesSection: View {
     @Binding var imageSlots: [ImageSlot]
     @Binding var errorMessage: String?
@@ -292,252 +540,5 @@ struct InputImagesSection: View {
             slotBinding.promptNodes.wrappedValue = promptNodes.sorted { $0.id < $1.id }
             slotBinding.selectedPromptIndex.wrappedValue = 0
         }
-    }
-    
-    // New: Overload parsePromptNodes for Data
-    private func parsePromptNodes(from data: Data) -> [NodeInfo] {
-        print("DEBUG: Parsing prompts from pasted PNG data, size: \(data.count)")
-        
-        var offset: Int = 8  // Skip PNG signature
-        let totalLength = data.count
-        var workflowStr: String? = nil
-        
-        while offset + 11 < totalLength {
-            let lengthRange = offset..<(offset + 4)
-            let lengthData = data.subdata(in: lengthRange)
-            let lengthBytes = [UInt8](lengthData)
-            let length = (UInt32(lengthBytes[0]) << 24) | (UInt32(lengthBytes[1]) << 16) |
-                         (UInt32(lengthBytes[2]) << 8) | UInt32(lengthBytes[3])
-            
-            let fullChunkSize = 12 + Int(length)
-            let fullChunkEnd = offset + fullChunkSize
-            guard fullChunkEnd <= totalLength else { break }
-            
-            let typeStart = offset + 4
-            let typeRange = typeStart..<(typeStart + 4)
-            let typeData = data.subdata(in: typeRange)
-            let typeBytes = [UInt8](typeData)
-            let chunkType = String(bytes: typeBytes, encoding: .ascii) ?? ""
-            
-            if chunkType == "tEXt" {
-                let textStart = typeStart + 4
-                let textRange = textStart ..< (textStart + Int(length))
-                let textData = data.subdata(in: textRange)
-                if let textStr = String(data: textData, encoding: .utf8),
-                   let nullIndex = textStr.firstIndex(of: "\0") {
-                    let keyword = String(textStr[..<nullIndex]).trimmingCharacters(in: .whitespaces)
-                    if ["workflow", "prompt", "Workflow", "Prompt"].contains(keyword) {
-                        let valueStart = textStr.index(after: nullIndex)
-                        workflowStr = String(textStr[valueStart...]).trimmingCharacters(in: .whitespaces)
-                        break
-                    }
-                }
-            }
-            
-            offset = fullChunkEnd
-        }
-        
-        // Fallback to ImageIO (create temp URL for CGImageSource)
-        if workflowStr == nil {
-            let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".png")
-            do {
-                try data.write(to: tempURL)
-                defer { try? FileManager.default.removeItem(at: tempURL) }
-                return parsePromptNodes(from: tempURL)  // Reuse file version
-            } catch {
-                print("DEBUG: Temp file for ImageIO failed: \(error)")
-                return []
-            }
-        }
-        
-        guard let extractedWorkflowStr = workflowStr else { return [] }
-        
-        guard let jsonData = extractedWorkflowStr.data(using: .utf8),
-              let json = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any] else { return [] }
-        
-        var promptNodes: [NodeInfo] = []
-        
-        if let nodesArray = json["nodes"] as? [[String: Any]] {
-            for node in nodesArray {
-                guard let nodeID = node["id"] as? Int,
-                      let classType = node["type"] as? String else { continue }
-                let nodeIDStr = String(nodeID)
-                
-                if classType.contains("CLIPTextEncode") {
-                    let widgetsValues = node["widgets_values"] as? [Any] ?? []
-                    let text = widgetsValues.compactMap { $0 as? String }.first ?? ""
-                    let label = text.isEmpty ? "Node \(nodeIDStr)" : "Node \(nodeIDStr): \(text.prefix(50))\(text.count > 50 ? "..." : "")"
-                    promptNodes.append(NodeInfo(id: nodeIDStr, label: label, promptText: text))
-                }
-            }
-        } else {
-            for (nodeID, node) in json {
-                guard let nodeDict = node as? [String: Any],
-                      let classType = nodeDict["class_type"] as? String else { continue }
-                
-                if classType.contains("CLIPTextEncode") {
-                    let text = (nodeDict["inputs"] as? [String: Any])?["text"] as? String ?? ""
-                    let label = text.isEmpty ? "Node \(nodeID)" : "Node \(nodeID): \(text.prefix(50))\(text.count > 50 ? "..." : "")"
-                    promptNodes.append(NodeInfo(id: nodeID, label: label, promptText: text))
-                }
-            }
-        }
-        
-        return promptNodes.sorted { $0.id < $1.id }
-    }
-    
-    private func parsePromptNodes(from url: URL) -> [NodeInfo] {
-        print("DEBUG: Parsing prompts from PNG: \(url.path)")
-        
-        // Manual PNG chunk parsing to extract tEXt
-        guard let data = try? Data(contentsOf: url) else {
-            print("DEBUG: Failed to load PNG binary data")
-            return []
-        }
-        print("DEBUG: PNG binary loaded, size: \(data.count) bytes")
-        
-        var offset: Int = 8  // Skip PNG signature (first 8 bytes)
-        let totalLength = data.count
-        var workflowStr: String? = nil
-        
-        while offset + 11 < totalLength {  // Ensure room for min chunk (12 bytes) + safety
-            // Read chunk length (4 bytes, big-endian)
-            let lengthRange = offset..<(offset + 4)
-            guard lengthRange.upperBound <= totalLength else {
-                print("DEBUG: Length range exceeds file; breaking at offset \(offset)")
-                break
-            }
-            let lengthData = data.subdata(in: lengthRange)
-            
-            // Safer big-endian UInt32 read (manual shift for reliability)
-            let lengthBytes = [UInt8](lengthData)
-            let length = (UInt32(lengthBytes[0]) << 24) | (UInt32(lengthBytes[1]) << 16) |
-            (UInt32(lengthBytes[2]) << 8) | UInt32(lengthBytes[3])
-            
-            // DEBUG: Log length bytes (remove after fix)
-            print("DEBUG: Length bytes at offset \(offset): [\(lengthBytes.map { String(format: "%02x", $0) }.joined(separator: " "))], length: \(length)")
-            
-            let fullChunkSize = 12 + Int(length)  // 4 len + 4 type + len data + 4 CRC
-            let fullChunkEnd = offset + fullChunkSize
-            guard fullChunkEnd <= totalLength else {
-                print("DEBUG: Full chunk end \(fullChunkEnd) > total \(totalLength); skipping invalid chunk at offset \(offset)")
-                break
-            }
-            
-            let typeStart = offset + 4
-            let typeRange = typeStart..<(typeStart + 4)
-            guard typeRange.upperBound <= totalLength else {
-                print("DEBUG: Type range exceeds; breaking")
-                break
-            }
-            let typeData = data.subdata(in: typeRange)
-            let typeBytes = [UInt8](typeData)
-            let chunkType = String(bytes: typeBytes, encoding: .ascii) ?? ""
-            
-            // DEBUG: Log type bytes (remove after fix)
-            print("DEBUG: Type bytes: [\(typeBytes.map { String(format: "%02x", $0) }.joined(separator: " "))], chunk: \(chunkType) length: \(length)")
-            
-            // For tEXt chunk: keyword\0value
-            if chunkType == "tEXt" {
-                let textStart = typeStart + 4  // After type
-                let textRange = textStart ..< (textStart + Int(length))
-                guard textRange.lowerBound < textRange.upperBound else {
-                    offset = fullChunkEnd
-                    continue
-                }
-                let textData = data.subdata(in: textRange)
-                if let textStr = String(data: textData, encoding: .utf8),
-                   let nullIndex = textStr.firstIndex(of: "\0") {
-                    let keyword = String(textStr[..<nullIndex]).trimmingCharacters(in: .whitespaces)
-                    if ["workflow", "prompt", "Workflow", "Prompt"].contains(keyword) {
-                        let valueStart = textStr.index(after: nullIndex)
-                        workflowStr = String(textStr[valueStart...]).trimmingCharacters(in: .whitespaces)
-                        print("DEBUG: Found \(keyword) in tEXt chunk: \(workflowStr!.prefix(100))...")
-                        break  // Found it
-                    }
-                }
-            }
-            // For zTXt: Skip for now (ComfyUI uses tEXt; add decompression if logs show zTXt)
-            else if chunkType == "zTXt" {
-                print("DEBUG: zTXt chunk found at offset \(offset), length \(length); skipping (decompression needed?)")
-            }
-            
-            // Advance to next chunk
-            offset = fullChunkEnd
-            // DEBUG: (remove after fix)
-            print("DEBUG: Advanced to next offset: \(offset)")
-        }
-        
-        // Fallback to ImageIO if manual didn't find it
-        if workflowStr == nil {
-            print("DEBUG: No tEXt chunks found; falling back to ImageIO")
-            guard let src = CGImageSourceCreateWithURL(url as CFURL, nil),
-                  let props = CGImageSourceCopyPropertiesAtIndex(src, 0, nil) as? NSDictionary,
-                  let pngDict = props["{PNG}"] as? NSDictionary else {
-                print("DEBUG: ImageIO fallback failed - no {PNG} dict")
-                return []
-            }
-            print("DEBUG: ImageIO PNG dict keys: \(pngDict.allKeys)")
-            
-            let fallbackStr: String? = pngDict["workflow"] as? String ?? pngDict["prompt"] as? String ?? pngDict["Workflow"] as? String ?? pngDict["Prompt"] as? String ?? nil
-            workflowStr = fallbackStr
-            if let ws = workflowStr {
-                print("DEBUG: Found via ImageIO: \(ws.prefix(100))...")
-            } else {
-                print("DEBUG: No workflow/prompt keys in ImageIO. Available keys: \(pngDict.allKeys)")
-                return []
-            }
-        }
-        
-        guard let extractedWorkflowStr = workflowStr else {
-            print("DEBUG: No workflow string extracted after all methods")
-            return []
-        }
-        print("DEBUG: Workflow string length: \(extractedWorkflowStr.count)")
-        print("DEBUG: Using workflow str: \(extractedWorkflowStr.prefix(100))...")
-        
-        // Parse JSON
-        guard let jsonData = extractedWorkflowStr.data(using: .utf8),
-              let json = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any] else {
-            print("DEBUG: Failed to parse JSON. Raw preview: \(extractedWorkflowStr.prefix(200))")
-            return []
-        }
-        print("DEBUG: JSON parsed. Top-level keys: \(Array(json.keys).sorted())")
-        
-        var promptNodes: [NodeInfo] = []
-        
-        // Full workflow: "nodes" array
-        if let nodesArray = json["nodes"] as? [[String: Any]] {
-            print("DEBUG: Full workflow - \(nodesArray.count) nodes")
-            for node in nodesArray {
-                guard let nodeID = node["id"] as? Int,
-                      let classType = node["type"] as? String else { continue }
-                let nodeIDStr = String(nodeID)
-                
-                if classType.contains("CLIPTextEncode") {
-                    let widgetsValues = node["widgets_values"] as? [Any] ?? []
-                    let text = widgetsValues.compactMap { $0 as? String }.first ?? ""
-                    let label = text.isEmpty ? "Node \(nodeIDStr)" : "Node \(nodeIDStr): \(text.prefix(50))\(text.count > 50 ? "..." : "")"
-                    promptNodes.append(NodeInfo(id: nodeIDStr, label: label, promptText: text))
-                    print("DEBUG: Added node \(nodeIDStr): \(label)")
-                }
-            }
-        } else {
-            // Flat "prompt" dict (API format)
-            print("DEBUG: Flat prompt dict mode")
-            for (nodeID, node) in json {
-                guard let nodeDict = node as? [String: Any], let classType = nodeDict["class_type"] as? String else { continue }
-                
-                if classType.contains("CLIPTextEncode") {
-                    let text = (nodeDict["inputs"] as? [String: Any])?["text"] as? String ?? ""
-                    let label = text.isEmpty ? "Node \(nodeID)" : "Node \(nodeID): \(text.prefix(50))\(text.count > 50 ? "..." : "")"
-                    promptNodes.append(NodeInfo(id: nodeID, label: label, promptText: text))
-                }
-            }
-        }
-        
-        let result = promptNodes.sorted { $0.id < $1.id }
-        print("DEBUG: Total prompt nodes: \(result.count)")
-        return result
     }
 }

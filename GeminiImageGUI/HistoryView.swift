@@ -173,9 +173,7 @@ struct HistoryView: View {
             .help("Delete history item")
             
             Button(action: {
-                if let img = loadHistoryImage(for: item) {
-                    imageSlots.append(ImageSlot(path: item.imagePath ?? "", image: img))
-                }
+                addToInputImages(item: item)
             }) {
                 Image(systemName: "plus.circle.fill")
                     .foregroundColor(.blue.opacity(0.8))
@@ -296,6 +294,33 @@ struct HistoryView: View {
             return PlatformImage(contentsOfFile: fileURL.path)
         }
     }
+    
+    private func addToInputImages(item: HistoryItem) {
+        guard let img = loadHistoryImage(for: item), let path = item.imagePath else { return }
+        let url = URL(fileURLWithPath: path)
+        var promptNodes: [NodeInfo] = []
+        
+        if url.pathExtension.lowercased() == "png" {
+            if let dir = appState.settings.outputDirectory {
+                do {
+                    promptNodes = try withSecureAccess(to: dir) {
+                        parsePromptNodes(from: url)
+                    }
+                } catch {
+                    print("Failed to extract workflow from history PNG: \(error)")
+                }
+            } else {
+                promptNodes = parsePromptNodes(from: url)
+            }
+        }
+        
+        var newSlot = ImageSlot(path: path, image: img)
+        if !promptNodes.isEmpty {
+            newSlot.promptNodes = promptNodes.sorted { $0.id < $1.id }
+            newSlot.selectedPromptIndex = 0
+        }
+        appState.ui.imageSlots.append(newSlot)
+    }
 }
 
 struct FullHistoryItemView: View {
@@ -395,9 +420,7 @@ struct FullHistoryItemView: View {
                         Spacer()
                         
                         Button(action: {
-                            if let img = loadHistoryImage(for: item) {
-                                appState.ui.imageSlots.append(ImageSlot(path: item.imagePath ?? "", image: img))
-                            }
+                            addToInputImages(item: item)
                         }) {
                             Image(systemName: "plus.circle.fill")
                                 .font(.system(size: 24))
@@ -502,5 +525,32 @@ struct FullHistoryItemView: View {
     private func copyPromptToClipboard(_ prompt: String) {
         PlatformPasteboard.clearContents()
         PlatformPasteboard.writeString(prompt)
+    }
+    
+    private func addToInputImages(item: HistoryItem) {
+        guard let img = loadHistoryImage(for: item), let path = item.imagePath else { return }
+        let url = URL(fileURLWithPath: path)
+        var promptNodes: [NodeInfo] = []
+        
+        if url.pathExtension.lowercased() == "png" {
+            if let dir = appState.settings.outputDirectory {
+                do {
+                    promptNodes = try withSecureAccess(to: dir) {
+                        parsePromptNodes(from: url)
+                    }
+                } catch {
+                    print("Failed to extract workflow from history PNG: \(error)")
+                }
+            } else {
+                promptNodes = parsePromptNodes(from: url)
+            }
+        }
+        
+        var newSlot = ImageSlot(path: path, image: img)
+        if !promptNodes.isEmpty {
+            newSlot.promptNodes = promptNodes.sorted { $0.id < $1.id }
+            newSlot.selectedPromptIndex = 0
+        }
+        appState.ui.imageSlots.append(newSlot)
     }
 }
