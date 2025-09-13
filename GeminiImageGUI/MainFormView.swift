@@ -66,7 +66,7 @@ struct MainFormView: View {
     var body: some View {
         ZStack {
             VStack(spacing: 24) {
-                DisclosureGroup("Configuration", isExpanded: $configExpanded) {
+                DisclosureGroup(isExpanded: $configExpanded) {
                     ConfigurationSection(
                         showApiKey: $showApiKey,
                         apiKeyPath: $apiKeyPath,
@@ -78,8 +78,10 @@ struct MainFormView: View {
                         onOutputFolderSelected: onOutputFolderSelected,
                         onComfyJSONSelected: onComfyJSONSelected
                     )
+                } label: {
+                    Text("Configuration")
+                        .font(.system(size: 20, weight: .semibold))  // Increased label font size
                 }
-                .font(.system(.headline, design: .default, weight: .semibold))
                 .kerning(0.2)
                 .foregroundColor(.primary) // Ensure visibility
                 
@@ -91,9 +93,7 @@ struct MainFormView: View {
                 } label: {
                     HStack {
                         Text("Prompt")
-                            .font(.system(.headline, design: .default, weight: .semibold))
-                            .kerning(0.2)
-                            .foregroundColor(.primary)
+                            .font(.system(size: 20, weight: .semibold))  // Increased label font size
                         
                         Spacer()
                         
@@ -132,15 +132,17 @@ struct MainFormView: View {
                 Divider()
                     .foregroundStyle(.separator.opacity(0.5))
                 
-                DisclosureGroup("Input Images", isExpanded: $inputImagesExpanded) {
+                DisclosureGroup(isExpanded: $inputImagesExpanded) {
                     InputImagesSection(
                         imageSlots: $appState.ui.imageSlots,
                         errorMessage: $errorMessage,
                         showErrorAlert: $showErrorAlert,
                         onAnnotate: onAnnotate
                     )
+                } label: {
+                    Text("Input Images")
+                        .font(.system(size: 20, weight: .semibold))  // Increased label font size
                 }
-                .font(.system(.headline, design: .default, weight: .semibold))
                 .kerning(0.2)
                 .foregroundColor(.primary)
                 
@@ -169,7 +171,7 @@ struct MainFormView: View {
                     .foregroundStyle(.separator.opacity(0.5))
                 
                 // New: Batch Mode section
-                DisclosureGroup("Batch Mode", isExpanded: $batchExpanded) {
+                DisclosureGroup(isExpanded: $batchExpanded) {
                     VStack(alignment: .leading, spacing: 16) {
                         HStack(alignment: .center) {
                             Text("Batch File:")
@@ -233,8 +235,10 @@ struct MainFormView: View {
                         .offset(y: 0)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
+                } label: {
+                    Text("Batch Mode")
+                        .font(.system(size: 20, weight: .semibold))  // Increased label font size
                 }
-                .font(.system(.headline, design: .default, weight: .semibold))
                 .kerning(0.2)
                 .foregroundColor(.primary)
                 
@@ -251,8 +255,7 @@ struct MainFormView: View {
                 } label: {
                     HStack {
                         Text("Response")
-                            .font(.system(.headline, design: .default, weight: .semibold))
-                            .kerning(0.2)
+                            .font(.system(size: 20, weight: .semibold))  // Increased label font size
                         Spacer()
                         Button(action: onPopOut) {
                             Image(systemName: "arrow.up.forward.square")
