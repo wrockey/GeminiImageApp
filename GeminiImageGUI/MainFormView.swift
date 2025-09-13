@@ -147,10 +147,31 @@ struct MainFormView: View {
                 Divider()
                     .foregroundStyle(.separator.opacity(0.5))
                 
+                Group {
+                    if isLoading {
+                        LoadingView(mode: appState.settings.mode, progress: progress, isCancelled: $isCancelled, onStop: onStop)
+                    } else {
+                        Button("Submit") {
+                            onSubmit()
+                        }
+                        .controlSize(.large)
+                        .buttonStyle(.borderedProminent)
+                        .disabled(isSubmitDisabled)
+                        .frame(maxWidth: .infinity, minHeight: 50)
+                        .padding(.vertical, 8)
+                        .font(.system(size: 24, weight: .medium))
+                    }
+                }
+                .padding(.vertical, -12)
+                .offset(y: 0)
+                
+                Divider()
+                    .foregroundStyle(.separator.opacity(0.5))
+                
                 // New: Batch Mode section
                 DisclosureGroup("Batch Mode", isExpanded: $batchExpanded) {
                     VStack(alignment: .leading, spacing: 16) {
-                        HStack {
+                        HStack(alignment: .center) {
                             Text("Batch File:")
                                 .font(.system(.subheadline, design: .default, weight: .medium))
                                 .foregroundColor(.secondary)
@@ -159,6 +180,7 @@ struct MainFormView: View {
                             #else
                             Text(batchFilePath.isEmpty ? "No file selected" : batchFilePath)
                             #endif
+                            Spacer()
                             Button("Select File") {
                                 PlatformFilePicker.presentOpenPanel(allowedTypes: [.plainText], allowsMultiple: false, canChooseDirectories: false) { result in
                                     onBatchFileSelected(result)
@@ -169,6 +191,7 @@ struct MainFormView: View {
                             .font(.system(.body, design: .rounded, weight: .medium))
                             .shadow(color: .black.opacity(0.1), radius: 1)
                         }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                         
                         HStack {
                             Text("Starting Prompt:")
@@ -177,7 +200,9 @@ struct MainFormView: View {
                             TextField("1", text: $startPrompt)
                                 .textFieldStyle(.roundedBorder)
                                 .frame(maxWidth: 100)
+                            Spacer()
                         }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                         
                         HStack {
                             Text("Ending Prompt:")
@@ -186,41 +211,30 @@ struct MainFormView: View {
                             TextField("", text: $endPrompt)
                                 .textFieldStyle(.roundedBorder)
                                 .frame(maxWidth: 100)
+                            Spacer()
                         }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        
+                        Group {
+                            // New: Batch Submit button
+                            Button("Submit Batch Job") {
+                                onBatchSubmit()
+                            }
+                            .controlSize(.large)
+                            .buttonStyle(.borderedProminent)
+                            .disabled(isBatchSubmitDisabled)
+                            .frame(maxWidth: .infinity, minHeight: 50)
+                            .padding(.vertical, 8)
+                            .font(.system(size: 24, weight: .medium))
+                        }
+                        .padding(.vertical, -12)
+                        .offset(y: 0)
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .font(.system(.headline, design: .default, weight: .semibold))
                 .kerning(0.2)
                 .foregroundColor(.primary)
-                
-                Divider()
-                    .foregroundStyle(.separator.opacity(0.5))
-                
-                Group {
-                    if isLoading {
-                        LoadingView(mode: appState.settings.mode, progress: progress, isCancelled: $isCancelled, onStop: onStop)
-                    } else {
-                        SubmitButtonView(isDisabled: isSubmitDisabled, onSubmit: onSubmit)
-                            .controlSize(.large)
-                            .buttonStyle(.borderedProminent)
-                            .frame(minHeight: 50)
-                            .padding(.vertical, 8)
-                            .font(.system(size: 30, weight: .medium))
-                        
-                        // New: Batch Submit button
-                        Button("Submit Batch Job") {
-                            onBatchSubmit()
-                        }
-                        .controlSize(.large)
-                        .buttonStyle(.borderedProminent)
-                        .disabled(isBatchSubmitDisabled)
-                        .frame(minHeight: 50)
-                        .padding(.vertical, 8)
-                        .font(.system(size: 30, weight: .medium))
-                    }
-                }
-                .padding(.vertical, -12)
-                .offset(y: -5)
                 
                 Divider()
                     .foregroundStyle(.separator.opacity(0.5))

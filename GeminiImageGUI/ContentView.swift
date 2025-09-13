@@ -1234,7 +1234,9 @@ private var iOSLayout: some View {
             isCancelled = false
             
             // Listen for messages in a loop
+
             Task {
+                var isComplete = false
                 while let task = webSocketTask, !isCancelled {
                     do {
                         let message = try await task.receive()
@@ -1252,16 +1254,23 @@ private var iOSLayout: some View {
                                     }
                                 } else if type == "executing",
                                           let value = json["data"] as? [String: Any],
-                                          let nodeId = value["node"] as? String {
-                                    // Optional: Log executing node for more detailed progress
-                                    print("Executing node: \(nodeId)")
+                                          let node = value["node"] as? String {
+                                    print("Executing node: \(node)")
+                                } else if type == "executing",
+                                          let value = json["data"] as? [String: Any],
+                                          value["node"] == nil {  // Completion indicator: node is null
+                                    isComplete = true
+                                } else if type == "execution_success" {  // Alternative completion indicator
+                                    isComplete = true
                                 }
                             }
                         default: break
                         }
                     } catch {
                         await MainActor.run {
-                            if !isCancelled {
+                            let nsError = error as NSError
+                            print("WebSocket error caught: domain=\(nsError.domain), code=\(nsError.code), desc=\(error.localizedDescription), isCancelled=\(isCancelled), isComplete=\(isComplete)")
+                            if !((isCancelled || isComplete) && nsError.domain == NSPOSIXErrorDomain && nsError.code == 57) {
                                 errorMessage = "WebSocket error: \(error.localizedDescription)"
                                 showErrorAlert = true
                             }
