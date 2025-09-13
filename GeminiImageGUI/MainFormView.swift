@@ -197,6 +197,7 @@ struct MainFormView: View {
                             Text("Starting Prompt:")
                                 .font(.system(.subheadline, design: .default, weight: .medium))
                                 .foregroundColor(.secondary)
+                                .frame(width: 130, alignment: .leading) // Align labels
                             TextField("1", text: $startPrompt)
                                 .textFieldStyle(.roundedBorder)
                                 .frame(maxWidth: 100)
@@ -208,6 +209,7 @@ struct MainFormView: View {
                             Text("Ending Prompt:")
                                 .font(.system(.subheadline, design: .default, weight: .medium))
                                 .foregroundColor(.secondary)
+                                .frame(width: 130, alignment: .leading) // Align labels
                             TextField("", text: $endPrompt)
                                 .textFieldStyle(.roundedBorder)
                                 .frame(maxWidth: 100)
