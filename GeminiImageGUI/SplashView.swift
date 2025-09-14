@@ -2,27 +2,33 @@
 import SwiftUI
 
 struct SplashView: View {
-    let appState = AppState()  // Create the AppState instance here
+    let appState = AppState()  // Your shared state instance
     @State private var isActive = false
     
     var body: some View {
         if isActive {
-            // Transition to your main app view with environment object
+            // Main app content
             ContentView()
                 .environmentObject(appState)
         } else {
             ZStack {
-                Color.black  // Black background
+                Color.black  // Matches initial black screen for seamless start
                     .ignoresSafeArea()
                 
                 AbstractBloomExpansionLoading()
-                    .frame(width: 200, height: 200)  // Adjust size as needed
+                    .frame(width: 200, height: 200)  // Center the animation
             }
             .onAppear {
-                // Delay to show animation (e.g., 2-3 seconds, or until ready)
-                DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-                    withAnimation {
-                        isActive = true
+                // Start animation immediately (no delay here)
+                // If you have init tasks, run them async
+                DispatchQueue.global().async {
+                    // Example: Run heavy startup tasks here (e.g., performOnAppear logic)
+                    // appState.performInitialLoads() or similar
+                    
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {  // Adjust delay for perceived smoothness
+                        withAnimation(.easeInOut(duration: 0.5)) {
+                            isActive = true
+                        }
                     }
                 }
             }
