@@ -311,11 +311,20 @@ struct InputImagesSection: View {
                                     .shadow(radius: 4)
                             } else {
                                 if #available(macOS 14.0, *) {
-                                    Rectangle()
-                                        .fill(Color(backgroundColor))
-                                        .frame(width: 150, height: 150)
-                                        .cornerRadius(16)
-                                        .shadow(radius: 4)
+                                    if #available(iOS 17.0, *) {
+                                        Rectangle()
+                                            .fill(Color(backgroundColor))
+                                            .frame(width: 150, height: 150)
+                                            .cornerRadius(16)
+                                            .shadow(radius: 4)
+                                    } else {
+                                        Rectangle()
+                                            .fill(backgroundColor)
+                                            .frame(width: 150, height: 150)
+                                            .cornerRadius(16)
+                                            .shadow(radius: 4)
+                                        // Fallback on earlier versions
+                                    }
                                 } else {
                                     // Fallback on earlier versions
                                 }
@@ -406,9 +415,18 @@ struct InputImagesSection: View {
                             .shadow(radius: 2)
                         }
                         .padding(16)
-                        .background(Color(systemBackgroundColor).opacity(0.8))
-                        .cornerRadius(16)  // Card style for each slot
-                        .shadow(radius: 4)
+                        if #available(iOS 17.0, *) {
+                            Rectangle()
+                                .background(Color(systemBackgroundColor).opacity(0.8))
+                                .cornerRadius(16)  // Card style for each slot
+                                .shadow(radius: 4)
+                        } else {
+                            // Fallback on earlier versions
+                           Rectangle()
+                                .background(systemBackgroundColor.opacity(0.8))
+                                .cornerRadius(16)  // Card style for each slot
+                                .shadow(radius: 4)
+                        }
                     } else {
                         // Fallback on earlier versions
                     }

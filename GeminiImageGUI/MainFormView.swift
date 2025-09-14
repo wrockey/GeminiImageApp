@@ -85,8 +85,14 @@ struct MainFormView: View {
                 .kerning(0.2)
                 .foregroundColor(.primary) // Ensure visibility
                 
-                Divider()
-                    .foregroundStyle(.separator.opacity(0.5))
+                if #available(iOS 17.0, *) {
+                    Divider()
+                        .foregroundStyle(.separator.opacity(0.5))
+                } else {
+                    // Fallback on earlier versions
+                    Divider()
+                        .foregroundStyle(Color(UIColor.separator).opacity(0.5))
+                }  
                 
                 DisclosureGroup(isExpanded: $promptExpanded) {
                     PromptSection(prompt: $prompt)
@@ -129,8 +135,14 @@ struct MainFormView: View {
                     }
                 }
                 
-                Divider()
-                    .foregroundStyle(.separator.opacity(0.5))
+                if #available(iOS 17.0, *) {
+                    Divider()
+                        .foregroundStyle(.separator.opacity(0.5))
+                } else {
+                    // Fallback on earlier versions
+                    Divider()
+                        .foregroundStyle(Color(UIColor.separator).opacity(0.5))
+                }
                 
                 DisclosureGroup(isExpanded: $inputImagesExpanded) {
                     InputImagesSection(
@@ -146,8 +158,14 @@ struct MainFormView: View {
                 .kerning(0.2)
                 .foregroundColor(.primary)
                 
-                Divider()
-                    .foregroundStyle(.separator.opacity(0.5))
+                if #available(iOS 17.0, *) {
+                    Divider()
+                        .foregroundStyle(.separator.opacity(0.5))
+                } else {
+                    // Fallback on earlier versions
+                    Divider()
+                        .foregroundStyle(Color(UIColor.separator).opacity(0.5))
+                }
                 
                 Group {
                     if isLoading {
@@ -167,8 +185,14 @@ struct MainFormView: View {
                 .padding(.vertical, -12)
                 .offset(y: -5)
                 
-                Divider()
-                    .foregroundStyle(.separator.opacity(0.5))
+                if #available(iOS 17.0, *) {
+                    Divider()
+                        .foregroundStyle(.separator.opacity(0.5))
+                } else {
+                    // Fallback on earlier versions
+                    Divider()
+                        .foregroundStyle(Color(UIColor.separator).opacity(0.5))
+                }
                 
                 // New: Batch Mode section
                 DisclosureGroup(isExpanded: $batchExpanded) {
@@ -241,8 +265,14 @@ struct MainFormView: View {
                 .kerning(0.2)
                 .foregroundColor(.primary)
                 
-                Divider()
-                    .foregroundStyle(.separator.opacity(0.5))
+                if #available(iOS 17.0, *) {
+                    Divider()
+                        .foregroundStyle(.separator.opacity(0.5))
+                } else {
+                    // Fallback on earlier versions
+                    Divider()
+                        .foregroundStyle(Color(UIColor.separator).opacity(0.5))
+                }
                 
                 DisclosureGroup(isExpanded: $responseExpanded) {
                     ResponseSection(
