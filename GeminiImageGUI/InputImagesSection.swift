@@ -419,7 +419,7 @@ struct InputImagesSection: View {
                             Rectangle()
                                 .background(Color(systemBackgroundColor).opacity(0.8))
                                 .cornerRadius(16)  // Card style for each slot
-                                .shadow(radius: 4)
+                                .shadow(color: .black.opacity(0.1), radius: 2)
                         } else {
                             // Fallback on earlier versions
                            Rectangle()

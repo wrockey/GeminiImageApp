@@ -85,25 +85,7 @@ struct MainFormView: View {
                 .kerning(0.2)
                 .foregroundColor(.primary) // Ensure visibility
                 
-                if #available(iOS 17.0, *) {
-                    Divider()
-                        .foregroundStyle(.separator.opacity(0.5))
-                } else {
-                    // Fallback on earlier versions
-                #if os(iOS)
-                if #available(iOS 17.0, *) {
-                Divider()
-                .foregroundStyle(.separator.opacity(0.5))
-                } else {
-                // Fallback on earlier versions
-                Divider()
-                .foregroundStyle(Color(UIColor.separator).opacity(0.5))
-                }
-                #elseif os(macOS)
-                Divider()
-                .foregroundStyle(Color(nsColor: NSColor.separatorColor).opacity(0.5))
-                #endif
-                }
+                CustomDivider()
                 
                 DisclosureGroup(isExpanded: $promptExpanded) {
                     PromptSection(prompt: $prompt)
@@ -146,25 +128,7 @@ struct MainFormView: View {
                     }
                 }
                 
-                if #available(iOS 17.0, *) {
-                    Divider()
-                        .foregroundStyle(.separator.opacity(0.5))
-                } else {
-                    // Fallback on earlier versions
-                #if os(iOS)
-                if #available(iOS 17.0, *) {
-                Divider()
-                .foregroundStyle(.separator.opacity(0.5))
-                } else {
-                // Fallback on earlier versions
-                Divider()
-                .foregroundStyle(Color(UIColor.separator).opacity(0.5))
-                }
-                #elseif os(macOS)
-                Divider()
-                .foregroundStyle(Color(nsColor: NSColor.separatorColor).opacity(0.5))
-                #endif
-                }
+                CustomDivider()
                 
                 DisclosureGroup(isExpanded: $inputImagesExpanded) {
                     InputImagesSection(
@@ -180,36 +144,7 @@ struct MainFormView: View {
                 .kerning(0.2)
                 .foregroundColor(.primary)
                 
-                if #available(iOS 17.0, *) {
-                #if os(iOS)
-                if #available(iOS 17.0, *) {
-                Divider()
-                .foregroundStyle(.separator.opacity(0.5))
-                } else {
-                // Fallback on earlier versions
-                Divider()
-                .foregroundStyle(Color(UIColor.separator).opacity(0.5))
-                }
-                #elseif os(macOS)
-                Divider()
-                .foregroundStyle(Color(nsColor: NSColor.separatorColor).opacity(0.5))
-                #endif
-                } else {
-                    // Fallback on earlier versions
-                #if os(iOS)
-                if #available(iOS 17.0, *) {
-                Divider()
-                .foregroundStyle(.separator.opacity(0.5))
-                } else {
-                // Fallback on earlier versions
-                Divider()
-                .foregroundStyle(Color(UIColor.separator).opacity(0.5))
-                }
-                #elseif os(macOS)
-                Divider()
-                .foregroundStyle(Color(nsColor: NSColor.separatorColor).opacity(0.5))
-                #endif
-                }
+                CustomDivider()
                 
                 Group {
                     if isLoading {
@@ -229,36 +164,8 @@ struct MainFormView: View {
                 .padding(.vertical, -12)
                 .offset(y: -5)
                 
-                if #available(iOS 17.0, *) {
-                #if os(iOS)
-                if #available(iOS 17.0, *) {
-                Divider()
-                .foregroundStyle(.separator.opacity(0.5))
-                } else {
-                // Fallback on earlier versions
-                Divider()
-                .foregroundStyle(Color(UIColor.separator).opacity(0.5))
-                }
-                #elseif os(macOS)
-                Divider()
-                .foregroundStyle(Color(nsColor: NSColor.separatorColor).opacity(0.5))
-                #endif
-                } else {
-                    // Fallback on earlier versions
-                #if os(iOS)
-                if #available(iOS 17.0, *) {
-                Divider()
-                .foregroundStyle(.separator.opacity(0.5))
-                } else {
-                // Fallback on earlier versions
-                Divider()
-                .foregroundStyle(Color(UIColor.separator).opacity(0.5))
-                }
-                #elseif os(macOS)
-                Divider()
-                .foregroundStyle(Color(nsColor: NSColor.separatorColor).opacity(0.5))
-                #endif
-                }
+                CustomDivider()
+                
                 
                 // New: Batch Mode section
                 DisclosureGroup(isExpanded: $batchExpanded) {
@@ -331,25 +238,7 @@ struct MainFormView: View {
                 .kerning(0.2)
                 .foregroundColor(.primary)
                 
-                if #available(iOS 17.0, *) {
-                    Divider()
-                        .foregroundStyle(.separator.opacity(0.5))
-                } else {
-                    // Fallback on earlier versions
-                #if os(iOS)
-                if #available(iOS 17.0, *) {
-                Divider()
-                .foregroundStyle(.separator.opacity(0.5))
-                } else {
-                // Fallback on earlier versions
-                Divider()
-                .foregroundStyle(Color(UIColor.separator).opacity(0.5))
-                }
-                #elseif os(macOS)
-                Divider()
-                .foregroundStyle(Color(nsColor: NSColor.separatorColor).opacity(0.5))
-                #endif
-                }
+                CustomDivider()
                 
                 DisclosureGroup(isExpanded: $responseExpanded) {
                     ResponseSection(
