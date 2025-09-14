@@ -347,136 +347,159 @@ struct FullHistoryItemView: View {
     }
     
     var body: some View {
-        Group {
-            if let item = currentItem {
-                VStack(spacing: 16) {
-                    if let img = loadHistoryImage(for: item) {
-                        Image(platformImage: img)
-                            .resizable()
-                            .scaledToFit()
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    } else {
-                        Text("No image available")
-                            .font(.headline)
-                            .foregroundColor(.secondary)
-                    }
-                    
-                    VStack(alignment: .center, spacing: 4) {
-                        HStack(alignment: .center) {
-                            Text("Prompt: \(item.prompt)")
-                                .font(.body)
-                            Button(action: {
-                                copyPromptToClipboard(item.prompt)
-                                showCopiedMessage = true
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                                    withAnimation(.easeOut(duration: 0.3)) {
-                                        showCopiedMessage = false
-                                    }
-                                }
-                            }) {
-                                Image(systemName: "doc.on.doc")
-                                    .foregroundColor(.blue.opacity(0.8))
-                                    .symbolRenderingMode(.hierarchical)
-                            }
-                            .buttonStyle(.borderless)
-                            .help("Copy prompt to clipboard")
-                        }
-                        Text("Date: \(dateFormatter.string(from: item.date))")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                        if let mode = item.mode {
-                            Text("Created with: \(mode == .gemini ? "Gemini" : (item.workflowName ?? "ComfyUI"))")
-                                .font(.caption)
+        GeometryReader { geometry in
+            let isLandscape = geometry.size.width > geometry.size.height
+            
+            VStack(spacing: 16) {
+                if let item = currentItem {
+                    Group {
+                        if let img = loadHistoryImage(for: item) {
+                            Image(platformImage: img)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            #if os(iOS)
+                                .gesture(
+                                    DragGesture(minimumDistance: 50, coordinateSpace: .local)
+                                        .onEnded { value in
+                                            let horizontalAmount = value.translation.width
+                                            let verticalAmount = value.translation.height
+                                            
+                                            if abs(horizontalAmount) > abs(verticalAmount) {
+                                                if horizontalAmount < 0 {
+                                                    // Swipe left: next image (older)
+                                                    currentIndex = min(history.count - 1, currentIndex + 1)
+                                                } else {
+                                                    // Swipe right: previous image (newer)
+                                                    currentIndex = max(0, currentIndex - 1)
+                                                }
+                                            }
+                                        }
+                                )
+                            #endif
+                        } else {
+                            Text("No image available")
+                                .font(.headline)
                                 .foregroundColor(.secondary)
                         }
-                    }
-                    .padding()
-                    
-                    Spacer()
-                    
-                    HStack {
-                        Button(action: {
-                            currentIndex = max(0, currentIndex - 1)
-                        }) {
-                            Image(systemName: "arrow.left.circle.fill")
-                                .font(.system(size: 24))
-                                .symbolRenderingMode(.hierarchical)
+                        
+                        VStack(alignment: .center, spacing: 4) {
+                            HStack(alignment: .center) {
+                                Text("Prompt: \(item.prompt)")
+                                    .font(.system(size: 12))  // Smaller font for prompt
+                                Button(action: {
+                                    copyPromptToClipboard(item.prompt)
+                                    showCopiedMessage = true
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                                        withAnimation(.easeOut(duration: 0.3)) {
+                                            showCopiedMessage = false
+                                        }
+                                    }
+                                }) {
+                                    Image(systemName: "doc.on.doc")
+                                        .foregroundColor(.blue.opacity(0.8))
+                                        .symbolRenderingMode(.hierarchical)
+                                }
+                                .buttonStyle(.borderless)
+                                .help("Copy prompt to clipboard")
+                            }
+                            Text("Date: \(dateFormatter.string(from: item.date))")
+                                .font(.system(size: 10))
+                                .foregroundColor(.secondary)
+                            if let mode = item.mode {
+                                Text("Created with: \(mode == .gemini ? "Gemini" : (item.workflowName ?? "ComfyUI"))")
+                                    .font(.system(size: 10))
+                                    .foregroundColor(.secondary)
+                            }
                         }
-                        .disabled(currentIndex == 0)
-                        .buttonStyle(.plain)
+                        .padding()
                         
                         Spacer()
                         
-                        Button(action: {
-                            showDeleteAlert = true
-                        }) {
-                            Image(systemName: "trash.circle.fill")
-                                .font(.system(size: 24))
-                                .symbolRenderingMode(.hierarchical)
-                                .foregroundColor(.red.opacity(0.8))
+                        HStack {
+                            Button(action: {
+                                currentIndex = max(0, currentIndex - 1)
+                            }) {
+                                Image(systemName: "arrow.left.circle.fill")
+                                    .font(.system(size: 24))
+                                    .symbolRenderingMode(.hierarchical)
+                            }
+                            .disabled(currentIndex == 0)
+                            .buttonStyle(.plain)
+                            
+                            Spacer()
+                            
+                            Button(action: {
+                                showDeleteAlert = true
+                            }) {
+                                Image(systemName: "trash.circle.fill")
+                                    .font(.system(size: 24))
+                                    .symbolRenderingMode(.hierarchical)
+                                    .foregroundColor(.red.opacity(0.8))
+                            }
+                            .buttonStyle(.plain)
+                            
+                            Spacer()
+                            
+                            Button(action: {
+                                addToInputImages(item: item)
+                            }) {
+                                Image(systemName: "plus.circle.fill")
+                                    .font(.system(size: 24))
+                                    .symbolRenderingMode(.hierarchical)
+                                    .foregroundColor(.blue.opacity(0.8))
+                            }
+                            .buttonStyle(.plain)
+                            .help("Add to input images")
+                            
+                            Spacer()
+                            
+                            Button(action: {
+                                currentIndex = min(history.count - 1, currentIndex + 1)
+                            }) {
+                                Image(systemName: "arrow.right.circle.fill")
+                                    .font(.system(size: 24))
+                                    .symbolRenderingMode(.hierarchical)
+                            }
+                            .disabled(currentIndex == history.count - 1)
+                            .buttonStyle(.plain)
                         }
-                        .buttonStyle(.plain)
-                        
-                        Spacer()
-                        
-                        Button(action: {
-                            addToInputImages(item: item)
-                        }) {
-                            Image(systemName: "plus.circle.fill")
-                                .font(.system(size: 24))
-                                .symbolRenderingMode(.hierarchical)
-                                .foregroundColor(.blue.opacity(0.8))
+                        .padding()
+                    }
+                    .alert("Delete History Item", isPresented: $showDeleteAlert) {
+                        Button("Delete Prompt Only") {
+                            deleteHistoryItem(item: item, deleteFile: false)
                         }
-                        .buttonStyle(.plain)
-                        .help("Add to input images")
-                        
-                        Spacer()
-                        
-                        Button(action: {
-                            currentIndex = min(history.count - 1, currentIndex + 1)
-                        }) {
-                            Image(systemName: "arrow.right.circle.fill")
-                                .font(.system(size: 24))
-                                .symbolRenderingMode(.hierarchical)
+                        Button("Delete Prompt and Image File", role: .destructive) {
+                            deleteHistoryItem(item: item, deleteFile: true)
                         }
-                        .disabled(currentIndex == history.count - 1)
-                        .buttonStyle(.plain)
+                        Button("Cancel", role: .cancel) {}
+                    } message: {
+                        Text("Do you want to delete just the prompt or also the associated image file?")
                     }
-                    .padding()
+                    .overlay {
+                        if showCopiedMessage {
+                            Text("Copied to Clipboard")
+                                .font(.headline)
+                                .padding()
+                                .background(Color.black.opacity(0.7))
+                                .foregroundColor(.white)
+                                .cornerRadius(10)
+                                .transition(.opacity)
+                                .frame(maxHeight: .infinity, alignment: .top)
+                                .padding(.top, 50)
+                        }
+                    }
+                } else {
+                    Text("No item selected")
+                        .font(.headline)
+                        .foregroundColor(.secondary)
                 }
-                .alert("Delete History Item", isPresented: $showDeleteAlert) {
-                    Button("Delete Prompt Only") {
-                        deleteHistoryItem(item: item, deleteFile: false)
-                    }
-                    Button("Delete Prompt and Image File", role: .destructive) {
-                        deleteHistoryItem(item: item, deleteFile: true)
-                    }
-                    Button("Cancel", role: .cancel) {}
-                } message: {
-                    Text("Do you want to delete just the prompt or also the associated image file?")
-                }
-                .overlay {
-                    if showCopiedMessage {
-                        Text("Copied to Clipboard")
-                            .font(.headline)
-                            .padding()
-                            .background(Color.black.opacity(0.7))
-                            .foregroundColor(.white)
-                            .cornerRadius(10)
-                            .transition(.opacity)
-                            .frame(maxHeight: .infinity, alignment: .top)
-                            .padding(.top, 50)
-                    }
-                }
-            } else {
-                Text("No item selected")
-                    .font(.headline)
-                    .foregroundColor(.secondary)
             }
         }
         .onAppear {
             if currentIndex == -1 {
-                currentIndex = history.firstIndex(where: { $0 .id == initialId }) ?? 0
+                currentIndex = history.firstIndex(where: { $0.id == initialId }) ?? 0
             }
         }
     }
