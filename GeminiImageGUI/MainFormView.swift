@@ -90,9 +90,20 @@ struct MainFormView: View {
                         .foregroundStyle(.separator.opacity(0.5))
                 } else {
                     // Fallback on earlier versions
-                    Divider()
-                        .foregroundStyle(Color(UIColor.separator).opacity(0.5))
-                }  
+                #if os(iOS)
+                if #available(iOS 17.0, *) {
+                Divider()
+                .foregroundStyle(.separator.opacity(0.5))
+                } else {
+                // Fallback on earlier versions
+                Divider()
+                .foregroundStyle(Color(UIColor.separator).opacity(0.5))
+                }
+                #elseif os(macOS)
+                Divider()
+                .foregroundStyle(Color(nsColor: NSColor.separatorColor).opacity(0.5))
+                #endif
+                }
                 
                 DisclosureGroup(isExpanded: $promptExpanded) {
                     PromptSection(prompt: $prompt)
@@ -140,8 +151,19 @@ struct MainFormView: View {
                         .foregroundStyle(.separator.opacity(0.5))
                 } else {
                     // Fallback on earlier versions
-                    Divider()
-                        .foregroundStyle(Color(UIColor.separator).opacity(0.5))
+                #if os(iOS)
+                if #available(iOS 17.0, *) {
+                Divider()
+                .foregroundStyle(.separator.opacity(0.5))
+                } else {
+                // Fallback on earlier versions
+                Divider()
+                .foregroundStyle(Color(UIColor.separator).opacity(0.5))
+                }
+                #elseif os(macOS)
+                Divider()
+                .foregroundStyle(Color(nsColor: NSColor.separatorColor).opacity(0.5))
+                #endif
                 }
                 
                 DisclosureGroup(isExpanded: $inputImagesExpanded) {
@@ -159,12 +181,34 @@ struct MainFormView: View {
                 .foregroundColor(.primary)
                 
                 if #available(iOS 17.0, *) {
-                    Divider()
-                        .foregroundStyle(.separator.opacity(0.5))
+                #if os(iOS)
+                if #available(iOS 17.0, *) {
+                Divider()
+                .foregroundStyle(.separator.opacity(0.5))
+                } else {
+                // Fallback on earlier versions
+                Divider()
+                .foregroundStyle(Color(UIColor.separator).opacity(0.5))
+                }
+                #elseif os(macOS)
+                Divider()
+                .foregroundStyle(Color(nsColor: NSColor.separatorColor).opacity(0.5))
+                #endif
                 } else {
                     // Fallback on earlier versions
-                    Divider()
-                        .foregroundStyle(Color(UIColor.separator).opacity(0.5))
+                #if os(iOS)
+                if #available(iOS 17.0, *) {
+                Divider()
+                .foregroundStyle(.separator.opacity(0.5))
+                } else {
+                // Fallback on earlier versions
+                Divider()
+                .foregroundStyle(Color(UIColor.separator).opacity(0.5))
+                }
+                #elseif os(macOS)
+                Divider()
+                .foregroundStyle(Color(nsColor: NSColor.separatorColor).opacity(0.5))
+                #endif
                 }
                 
                 Group {
@@ -186,12 +230,34 @@ struct MainFormView: View {
                 .offset(y: -5)
                 
                 if #available(iOS 17.0, *) {
-                    Divider()
-                        .foregroundStyle(.separator.opacity(0.5))
+                #if os(iOS)
+                if #available(iOS 17.0, *) {
+                Divider()
+                .foregroundStyle(.separator.opacity(0.5))
+                } else {
+                // Fallback on earlier versions
+                Divider()
+                .foregroundStyle(Color(UIColor.separator).opacity(0.5))
+                }
+                #elseif os(macOS)
+                Divider()
+                .foregroundStyle(Color(nsColor: NSColor.separatorColor).opacity(0.5))
+                #endif
                 } else {
                     // Fallback on earlier versions
-                    Divider()
-                        .foregroundStyle(Color(UIColor.separator).opacity(0.5))
+                #if os(iOS)
+                if #available(iOS 17.0, *) {
+                Divider()
+                .foregroundStyle(.separator.opacity(0.5))
+                } else {
+                // Fallback on earlier versions
+                Divider()
+                .foregroundStyle(Color(UIColor.separator).opacity(0.5))
+                }
+                #elseif os(macOS)
+                Divider()
+                .foregroundStyle(Color(nsColor: NSColor.separatorColor).opacity(0.5))
+                #endif
                 }
                 
                 // New: Batch Mode section
@@ -270,8 +336,19 @@ struct MainFormView: View {
                         .foregroundStyle(.separator.opacity(0.5))
                 } else {
                     // Fallback on earlier versions
-                    Divider()
-                        .foregroundStyle(Color(UIColor.separator).opacity(0.5))
+                #if os(iOS)
+                if #available(iOS 17.0, *) {
+                Divider()
+                .foregroundStyle(.separator.opacity(0.5))
+                } else {
+                // Fallback on earlier versions
+                Divider()
+                .foregroundStyle(Color(UIColor.separator).opacity(0.5))
+                }
+                #elseif os(macOS)
+                Divider()
+                .foregroundStyle(Color(nsColor: NSColor.separatorColor).opacity(0.5))
+                #endif
                 }
                 
                 DisclosureGroup(isExpanded: $responseExpanded) {

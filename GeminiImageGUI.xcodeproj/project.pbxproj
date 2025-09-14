@@ -7,7 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		A976487B2E76D7E100E1C236 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = A976487A2E76D7E100E1C236 /* LaunchScreen.storyboard */; };
+		A976487B2E76D7E100E1C236 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = A976487A2E76D7E100E1C236 /* LaunchScreen.storyboard */; platformFilter = ios; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
