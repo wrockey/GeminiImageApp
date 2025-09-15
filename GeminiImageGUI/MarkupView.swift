@@ -1,3 +1,4 @@
+//
 // MarkupView.swift
 //
 import SwiftUI
@@ -92,38 +93,11 @@ struct MarkupView: View {
  
  let colors: [Color] = [.red, .green, .blue, .yellow, .purple, .orange, .black, .white]
  
- let paletteHeight: CGFloat = 120 // Increased to accommodate vertical layout
+ let paletteHeight: CGFloat = 160 // Increased to accommodate additional buttons
  
  var body: some View {
-     ZStack(alignment: .bottomLeading) {
-         GeometryReader { geo in
-             markupContent(geo: geo)
-         }
-         
-         HStack(spacing: 8) {
-             Button {
-                 addingText.toggle()
-             } label: {
-                 Image(systemName: "textformat.size")
-             }
-             .buttonStyle(.bordered)
-             
-             Button {
-                 undoLastAction()
-             } label: {
-                 Image(systemName: "arrow.uturn.backward.circle")
-             }
-             .buttonStyle(.bordered)
-             .disabled(!canUndo)
-             
-             Button {
-                 clearAll()
-             } label: {
-                 Image(systemName: "xmark.circle")
-             }
-             .buttonStyle(.bordered)
-         }
-         .padding(20)
+     GeometryReader { geo in
+         markupContent(geo: geo)
      }
 #if os(macOS)
      .frame(width: image.platformSize.width, height: image.platformSize.height + paletteHeight)
@@ -153,75 +127,12 @@ struct MarkupView: View {
      } message: {
          Text("Annotated image successfully saved as \(savedFilename)")
      }
- }
- 
- private func markupContent(geo: GeometryProxy) -> some View {
-     let availableW = geo.size.width
-     let availableH = geo.size.height - paletteHeight
-     let scale = min(availableW / image.platformSize.width, availableH / image.platformSize.height, 1.0)
-     let displaySize = CGSize(width: image.platformSize.width * scale, height: image.platformSize.height * scale)
-     
-     let vPadding = max(0, (availableH - displaySize.height) / 2)
-     let hPadding = max(0, (availableW - displaySize.width) / 2)
-     
-     return VStack(spacing: 0) { // Zero spacing for full height
-         if vPadding > 0 {
-             Color.clear
-                 .frame(height: vPadding)
-         }
-         HStack {
-             if hPadding > 0 {
-                 Color.clear
-                     .frame(width: hPadding)
-             }
-             ZStack {
-                 Color.white
-                     .allowsHitTesting(false)
-                 Image(platformImage: image)
-                     .resizable()
-                     .aspectRatio(contentMode: .fit)
-                     .frame(width: displaySize.width, height: displaySize.height)
-                     .allowsHitTesting(false)
-                     .background(
-                         GeometryReader { bgGeo in
-                             Color.clear.preference(key: FramePreferenceKey.self, value: bgGeo.frame(in: .named("markupZStack")))
-                         }
-                     )
-                 // Unified: Custom drawing for both platforms
-                 strokesOverlay
-                 currentPathOverlay
-                 // Shared: Text overlays
-                 textBoxesOverlay
-                 addingTextOverlay
-             }
-             .frame(width: displaySize.width, height: displaySize.height)
-             .coordinateSpace(name: "markupZStack")
-             .background(Color.clear.contentShape(Rectangle()))
-             .gesture( // Changed from highPriorityGesture to gesture to allow child gestures to take precedence
-                 DragGesture(minimumDistance: 0)
-                     .onChanged { value in
-                         print("DEBUG: Drag changed at \(value.location)") // Debug log
-                         if !addingText && editingTextID == nil {
-                             addPoint(to: $currentPath, point: value.location)
-                         }
-                     }
-                     .onEnded { value in
-                         print("DEBUG: Drag ended at \(value.location)") // Debug log
-                         let loc = value.location
-                         if addingText {
-                             textPosition = loc
-                             print("DEBUG: Tap location: \(loc)")
-                         } else if editingTextID == nil {
-                             addPoint(to: $currentPath, point: loc)
-                             saveToHistory()
-                             strokes.append(Stroke(path: currentPath, color: color, lineWidth: lineWidth))
-                             currentPath = Path()
-                         }
-                     }
-             )
-             .onTapGesture {
-                 if editingTextID != nil || addingText {
-                     textFieldFocused = false
+#if os(iOS)
+     .toolbar {
+         if addingText || editingTextID != nil {
+             ToolbarItemGroup(placement: .keyboard) {
+                 Spacer()
+                 Button("Done") {
                      if addingText {
                          commitText()
                      } else {
@@ -229,32 +140,51 @@ struct MarkupView: View {
                      }
                  }
              }
-             .onAppear {
-                 print("DEBUG: MarkupView appeared with image size: \(image.platformSize)")
-             }
-             .onPreferenceChange(FramePreferenceKey.self) { frame in
-                 imageFrame = frame
-                 print("DEBUG: Image frame updated: \(imageFrame)")
-             }
-             .onChange(of: addingText) { newValue in
-                 if newValue && imageFrame.size != .zero {
-                     textPosition = CGPoint(x: imageFrame.midX, y: imageFrame.midY)
-                     print("DEBUG: Initial text position set to center: \(textPosition) for imageFrame \(imageFrame)")
-                     DispatchQueue.main.async {
-                         textFieldFocused = true
+         }
+     }
+#endif
+ }
+ 
+ private func markupContent(geo: GeometryProxy) -> some View {
+     #if os(iOS)
+     let isLandscape = geo.size.width > geo.size.height
+     let scale = isLandscape ? geo.size.height / image.platformSize.height : geo.size.width / image.platformSize.width
+     let displaySize = CGSize(width: image.platformSize.width * scale, height: image.platformSize.height * scale)
+     let axes: Axis.Set = isLandscape ? .horizontal : .vertical
+     
+     return ZStack(alignment: .bottom) {
+         ScrollView(axes) {
+             if isLandscape {
+                 HStack(spacing: 0) {
+                     Spacer()
+                     VStack(spacing: 0) {
+                         Spacer()
+                         annotationZStack(displaySize: displaySize, geo: geo)
+                         Spacer()
                      }
-                 } else {
-                     textFieldFocused = false
+                     .frame(maxHeight: .infinity)
+                     Spacer()
+                 }
+             } else {
+                 VStack(spacing: 0) {
+                     Spacer()
+                     HStack(spacing: 0) {
+                         Spacer()
+                         annotationZStack(displaySize: displaySize, geo: geo)
+                         Spacer()
+                     }
+                     .frame(maxWidth: .infinity)
+                     Spacer()
                  }
              }
-             if hPadding > 0 {
-                 Color.clear
-                     .frame(width: hPadding)
-             }
          }
-         .frame(height: displaySize.height)
-         // Palette at bottom, full width, no scrolling - vertical layout
-         FloatingPaletteView(color: $color, lineWidth: $lineWidth, colors: colors,
+         .frame(maxWidth: .infinity, maxHeight: .infinity)
+         .simultaneousGesture(DragGesture(minimumDistance: 0))
+         
+         FloatingPaletteView(color: $color, lineWidth: $lineWidth, addingText: $addingText, colors: colors,
+                             onUndo: undoLastAction,
+                             onClear: clearAll,
+                             canUndo: canUndo,
                              onCancel: {
                                  dismiss()
                              },
@@ -275,25 +205,151 @@ struct MarkupView: View {
                                  dismiss()
                              })
          .frame(height: paletteHeight)
+         .frame(maxWidth: .infinity)
+         .background(Color.white)
+         
+         Button {
+             dismiss()
+         } label: {
+             Image(systemName: "xmark.circle.fill")
+                 .font(.system(size: 30))
+                 .foregroundColor(.gray)
+         }
+         .position(x: geo.size.width - 20, y: 40)
+     }
+     #else
+     let availableW = geo.size.width
+     let availableH = geo.size.height - paletteHeight
+     let scale = min(availableW / image.platformSize.width, availableH / image.platformSize.height, 1.0)
+     let displaySize = CGSize(width: image.platformSize.width * scale, height: image.platformSize.height * scale)
+     
+     let vPadding = max(0, (availableH - displaySize.height) / 2)
+     let hPadding = max(0, (availableW - displaySize.width) / 2)
+     
+     return VStack(spacing: 0) { // Zero spacing for full height
+         if vPadding > 0 {
+             Color.clear
+                 .frame(height: vPadding)
+         }
+         HStack {
+             if hPadding > 0 {
+                 Color.clear
+                     .frame(width: hPadding)
+             }
+             annotationZStack(displaySize: displaySize, geo: geo)
+             if hPadding > 0 {
+                 Color.clear
+                     .frame(width: hPadding)
+             }
+         }
+         .frame(height: displaySize.height)
+         // Palette at bottom, full width, no scrolling - vertical layout
+         FloatingPaletteView(color: $color, lineWidth: $lineWidth, colors: colors,
+                             addingText: $addingText,
+                             onUndo: undoLastAction,
+                             onClear: clearAll,
+                             canUndo: canUndo,
+                             onCancel: {
+                                 dismiss()
+                             },
+                             onSaveFile: {
+                                 if let img = renderAnnotatedImage() {
+                                     if let folderURL = appState.settings.outputDirectory {
+                                         saveImage(img, to: folderURL)
+                                     } else {
+                                         pendingSaveImage = img
+                                         showingFolderPicker = true
+                                     }
+                                 }
+                             },
+                             onDone: {
+                                 if let updatedImage = renderAnnotatedImage() {
+                                     onSave(updatedImage)
+                                 }
+                                 dismiss()
+                             })
+         .frame(height: paletteHeight)
+         .frame(maxWidth: .infinity)
          .background(Color.gray.opacity(0.1))
      }
      .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-#if os(iOS)
-     .toolbar {
-         if addingText || editingTextID != nil {
-             ToolbarItemGroup(placement: .keyboard) {
-                 Spacer()
-                 Button("Done") {
-                     if addingText {
-                         commitText()
-                     } else {
-                         editingTextID = nil
-                     }
+     #endif
+ }
+ 
+ private func annotationZStack(displaySize: CGSize, geo: GeometryProxy) -> some View {
+     ZStack {
+         Color.white
+             .allowsHitTesting(false)
+         Image(platformImage: image)
+             .resizable()
+             .aspectRatio(contentMode: .fit)
+             .frame(width: displaySize.width, height: displaySize.height)
+             .allowsHitTesting(false)
+             .background(
+                 GeometryReader { bgGeo in
+                     Color.clear.preference(key: FramePreferenceKey.self, value: bgGeo.frame(in: .named("markupZStack")))
                  }
+             )
+         // Unified: Custom drawing for both platforms
+         strokesOverlay
+         currentPathOverlay
+         // Shared: Text overlays
+         textBoxesOverlay
+         addingTextOverlay
+     }
+     .frame(width: displaySize.width, height: displaySize.height)
+     .coordinateSpace(name: "markupZStack")
+     .background(Color.clear.contentShape(Rectangle()))
+     .gesture(
+         DragGesture(minimumDistance: 0)
+             .onChanged { value in
+                 print("DEBUG: Drag changed at \(value.location)") // Debug log
+                 if !addingText && editingTextID == nil {
+                     addPoint(to: $currentPath, point: value.location)
+                 }
+             }
+             .onEnded { value in
+                 print("DEBUG: Drag ended at \(value.location)") // Debug log
+                 let loc = value.location
+                 if addingText {
+                     textPosition = loc
+                     print("DEBUG: Tap location: \(loc)")
+                 } else if editingTextID == nil {
+                     addPoint(to: $currentPath, point: loc)
+                     saveToHistory()
+                     strokes.append(Stroke(path: currentPath, color: color, lineWidth: lineWidth))
+                     currentPath = Path()
+                 }
+             }
+     )
+     .onTapGesture {
+         if editingTextID != nil || addingText {
+             textFieldFocused = false
+             if addingText {
+                 commitText()
+             } else {
+                 editingTextID = nil
              }
          }
      }
-#endif
+     .onAppear {
+         print("DEBUG: MarkupView appeared with image size: \(image.platformSize)")
+     }
+     .onPreferenceChange(FramePreferenceKey.self) { frame in
+         imageFrame = frame
+         print("DEBUG: Image frame updated: \(imageFrame)")
+     }
+     .onChange(of: addingText) { newValue in
+         if newValue && imageFrame.size != .zero {
+             textPosition = CGPoint(x: imageFrame.midX, y: imageFrame.midY)
+             print("DEBUG: Initial text position set to center: \(textPosition) for imageFrame \(imageFrame)")
+             DispatchQueue.main.async {
+                 textFieldFocused = true
+             }
+         } else {
+             textFieldFocused = false
+         }
+     }
  }
  
  private var strokesOverlay: some View {
@@ -538,13 +594,44 @@ struct ColorPickerButton: View {
 struct FloatingPaletteView: View {
  @Binding var color: Color
  @Binding var lineWidth: CGFloat
+ @Binding var addingText: Bool
  let colors: [Color]
+ let onUndo: () -> Void
+ let onClear: () -> Void
+ let canUndo: Bool
  var onCancel: () -> Void
  var onSaveFile: () -> Void
  var onDone: () -> Void
  
  var body: some View {
      VStack(spacing: 8) {
+         // Tools row
+         HStack(spacing: 8) {
+             Button {
+                 addingText.toggle()
+             } label: {
+                 Image(systemName: "textformat.size")
+             }
+             .buttonStyle(.bordered)
+             
+             Button {
+                 onUndo()
+             } label: {
+                 Image(systemName: "arrow.uturn.backward.circle")
+             }
+             .buttonStyle(.bordered)
+             .disabled(!canUndo)
+             
+             Button {
+                 onClear()
+             } label: {
+                 Image(systemName: "xmark.circle")
+             }
+             .buttonStyle(.bordered)
+             
+             Spacer()
+         }
+         
          // Colors row
          HStack(spacing: 4) {
              Text("Pen Color:")

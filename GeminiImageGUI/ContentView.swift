@@ -1,4 +1,4 @@
-//ContentView.swift
+// ContentView.swift
 import SwiftUI
 #if os(macOS)
 import AppKit
@@ -47,14 +47,6 @@ extension View {
             OnboardingView()
         }
     }
-
-#if os(iOS)
-func markupSheet(appState: AppState, showMarkupSheet: Binding<Bool>, selectedSlotId: UUID?) -> some View {
-    sheet(isPresented: showMarkupSheet) {
-        MarkupSheetContent(appState: appState, selectedSlotId: selectedSlotId)
-    }
-}
-#endif
 }
 
 enum GenerationError: Error {
@@ -133,7 +125,6 @@ struct ContentView: View {
             .onChange(of: appState.ui.outputImage) { _ in
                 imageScale = 1.0
             }
-            .markupSheet(appState: appState, showMarkupSheet: $appState.showMarkupSheet, selectedSlotId: selectedSlotId)
         #else
         macOSLayout
             .workflowErrorAlert(appState: appState)
@@ -185,8 +176,7 @@ private var iOSLayout: some View {
                         appState.showResponseSheet = true
                     },
                     onAnnotate: { slotId in
-                        appState.selectedSlotId = slotId
-                        appState.showMarkupSheet = true
+                        appState.showMarkupSlotId = slotId
                     },
                     onApiKeySelected: handleApiKeySelection,
                     onOutputFolderSelected: handleOutputFolderSelection,
@@ -225,6 +215,21 @@ private var iOSLayout: some View {
             if let id = appState.showFullHistoryItem {
                 FullHistoryItemView(initialId: id)
                     .environmentObject(appState)
+            }
+        }
+        .fullScreenCover(item: $appState.showMarkupSlotId) { slotId in
+            if let index = appState.ui.imageSlots.firstIndex(where: { $0.id == slotId }),
+               let image = appState.ui.imageSlots[index].image {
+                let path = appState.ui.imageSlots[index].path
+                let fileURL = URL(fileURLWithPath: path)
+                let lastComponent = fileURL.lastPathComponent
+                let components = lastComponent.components(separatedBy: ".")
+                let baseFileName = components.count > 1 ? components.dropLast().joined(separator: ".") : (lastComponent.isEmpty ? "image" : lastComponent)
+                let fileExtension = components.count > 1 ? components.last! : "png"
+                MarkupView(image: image, baseFileName: baseFileName, fileExtension: fileExtension) { updatedImage in
+                    appState.ui.imageSlots[index].image = updatedImage
+                }
+                .navigationTitle("Annotate Image")
             }
         }
     }

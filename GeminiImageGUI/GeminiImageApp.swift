@@ -281,8 +281,7 @@ class AppState: ObservableObject {
     
     #if os(iOS)
     @Published var showFullHistoryItem: UUID? = nil
-    @Published var showMarkupSheet: Bool = false
-    @Published var selectedSlotId: UUID? = nil
+    @Published var showMarkupSlotId: UUID? = nil
     @Published var showResponseSheet: Bool = false
     #endif
     
@@ -456,22 +455,6 @@ struct GeminiImageApp: App {
 //            ContentView()
                 .environmentObject(appState)
             #if os(iOS)
-            .sheet(isPresented: Binding(get: { appState.showMarkupSheet }, set: { appState.showMarkupSheet = $0 })) {
-                if let slotId = appState.selectedSlotId,
-                   let index = appState.ui.imageSlots.firstIndex(where: { $0.id == slotId }),
-                   let image = appState.ui.imageSlots[index].image {
-                    let path = appState.ui.imageSlots[index].path
-                    let fileURL = URL(fileURLWithPath: path)
-                    let lastComponent = fileURL.lastPathComponent
-                    let components = lastComponent.components(separatedBy: ".")
-                    let baseFileName = components.count > 1 ? components.dropLast().joined(separator: ".") : (lastComponent.isEmpty ? "image" : lastComponent)
-                    let fileExtension = components.count > 1 ? components.last! : "png"
-                    MarkupView(image: image, baseFileName: baseFileName, fileExtension: fileExtension) { updatedImage in
-                        appState.ui.imageSlots[index].image = updatedImage
-                    }
-                    .navigationTitle("Annotate Image")
-                }
-            }
             .sheet(isPresented: Binding(get: { appState.showResponseSheet }, set: { appState.showResponseSheet = $0 })) {
                 PopOutView()
                     .environmentObject(appState)
