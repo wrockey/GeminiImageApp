@@ -346,8 +346,7 @@ struct FullHistoryItemView: View {
     #if os(iOS)
     @Environment(\.dismiss) private var dismiss
     #endif
-    @State private var currentIndex: Int = -1
-    @State private var selectedId: UUID?
+    @State private var selectedId: UUID? = nil
     @State private var showDeleteAlert: Bool = false
     @State private var showCopiedMessage: Bool = false
     
@@ -363,8 +362,11 @@ struct FullHistoryItemView: View {
     }
     
     private var currentItem: HistoryItem? {
-        guard currentIndex >= 0 && currentIndex < history.count else { return nil }
-        return history[currentIndex]
+        history.first { $0.id == selectedId }
+    }
+    
+    private var currentIndex: Int? {
+        history.firstIndex { $0.id == selectedId }
     }
     
     var body: some View {
@@ -375,12 +377,11 @@ struct FullHistoryItemView: View {
                     ScrollView(.horizontal, showsIndicators: false) {
                         LazyHStack(spacing: 0) {
                             ForEach(history) { item in
-                                GeometryReader { proxy in
+                                Group {
                                     if let img = loadHistoryImage(for: item) {
                                         Image(platformImage: img)
                                             .resizable()
                                             .scaledToFit()
-                                            .frame(width: geometry.size.width, height: geometry.size.height)
                                             .shadow(radius: 5)
                                     } else {
                                         Text("No image available")
@@ -389,10 +390,12 @@ struct FullHistoryItemView: View {
                                     }
                                 }
                                 .frame(width: geometry.size.width, height: geometry.size.height)
+                                .id(item.id) // Ensure scrollPosition tracks correctly
                             }
                         }
                     }
                     .scrollTargetBehavior(.paging)
+                    .scrollTargetLayout()
                     .scrollPosition(id: $selectedId)
                 } else {
                     #if os(iOS)
@@ -404,12 +407,12 @@ struct FullHistoryItemView: View {
                                     .scaledToFit()
                                     .frame(width: geometry.size.width, height: geometry.size.height)
                                     .shadow(radius: 5)
-                                    .tag(item.id)
+                                    .tag(item.id as UUID?)
                             } else {
                                 Text("No image available")
                                     .font(.headline)
                                     .foregroundColor(.secondary)
-                                    .tag(item.id)
+                                    .tag(item.id as UUID?)
                             }
                         }
                     }
@@ -479,8 +482,10 @@ struct FullHistoryItemView: View {
                         
                         HStack {
                             Button(action: {
-                                currentIndex = max(0, currentIndex - 1)
-                                selectedId = history[currentIndex].id
+                                if let idx = currentIndex {
+                                    let newIdx = max(0, idx - 1)
+                                    selectedId = history[newIdx].id
+                                }
                             }) {
                                 Image(systemName: "arrow.left.circle.fill")
                                     .font(.system(size: 24))
@@ -518,8 +523,10 @@ struct FullHistoryItemView: View {
                             Spacer()
                             
                             Button(action: {
-                                currentIndex = min(history.count - 1, currentIndex + 1)
-                                selectedId = history[currentIndex].id
+                                if let idx = currentIndex {
+                                    let newIdx = min(history.count - 1, idx + 1)
+                                    selectedId = history[newIdx].id
+                                }
                             }) {
                                 Image(systemName: "arrow.right.circle.fill")
                                     .font(.system(size: 24))
@@ -580,14 +587,18 @@ struct FullHistoryItemView: View {
             }
         }
         .onAppear {
-            if currentIndex == -1 {
-                currentIndex = history.firstIndex(where: { $0.id == initialId }) ?? 0
-            }
-            selectedId = history[currentIndex].id
+            selectedId = initialId
         }
-        .onChange(of: selectedId) { newId in
-            if let index = history.firstIndex(where: { $0.id == newId }) {
-                currentIndex = index
+        .onChange(of: selectedId) { oldValue, newValue in
+            print("Selected ID changed from \(oldValue?.uuidString ?? "nil") to \(newValue?.uuidString ?? "nil")")
+            if let item = history.first(where: { $0.id == newValue }) {
+                print("Current prompt: \(item.prompt)")
+                print("Current date: \(dateFormatter.string(from: item.date))")
+                if let mode = item.mode {
+                    print("Created with: \(mode == .gemini ? "Gemini" : (item.workflowName ?? "ComfyUI"))")
+                }
+            } else {
+                print("No item found for selected ID")
             }
         }
     }
@@ -612,10 +623,10 @@ struct FullHistoryItemView: View {
             appState.historyState.saveHistory()
         }
         
-        // Adjust currentIndex after deletion
-        if currentIndex >= appState.historyState.history.count {
-            currentIndex = max(0, appState.historyState.history.count - 1)
-            selectedId = history.isEmpty ? nil : history[currentIndex].id
+        // Adjust selectedId after deletion
+        if let idx = currentIndex, idx >= appState.historyState.history.count {
+            let newIdx = max(0, appState.historyState.history.count - 1)
+            selectedId = appState.historyState.history.isEmpty ? nil : appState.historyState.history[newIdx].id
         }
     }
     
