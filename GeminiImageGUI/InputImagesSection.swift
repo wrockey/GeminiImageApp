@@ -1,5 +1,6 @@
 import SwiftUI
 import ImageIO  // For PNG metadata extraction
+import UniformTypeIdentifiers  // Added for UTType on macOS
 #if os(macOS)
 import AppKit
 #elseif os(iOS)
@@ -300,128 +301,16 @@ struct InputImagesSection: View {
                 }
 
                 ForEach($imageSlots) { $slot in
-                    if #available(macOS 14.0, *) {
-                        HStack(spacing: 16) {
-                            if let img = slot.image {
-                                Image(platformImage: img)
-                                    .resizable()
-                                    .scaledToFit()
-                                    .frame(width: 150, height: 150)  // Larger preview
-                                    .cornerRadius(16)
-                                    .shadow(radius: 4)
-                            } else {
-                                if #available(macOS 14.0, *) {
-                                    if #available(iOS 17.0, *) {
-                                        Rectangle()
-                                            .fill(Color(backgroundColor))
-                                            .frame(width: 150, height: 150)
-                                            .cornerRadius(16)
-                                            .shadow(radius: 4)
-                                    } else {
-                                        Rectangle()
-                                            .fill(backgroundColor)
-                                            .frame(width: 150, height: 150)
-                                            .cornerRadius(16)
-                                            .shadow(radius: 4)
-                                        // Fallback on earlier versions
-                                    }
-                                } else {
-                                    // Fallback on earlier versions
-                                }
-                            }
-                            
-                            VStack(alignment: .leading, spacing: 12) {  // More spacing
-                                Text(slot.path.isEmpty ? "No image selected" : {
-    #if os(iOS)
-                                    return URL(fileURLWithPath: slot.path).lastPathComponent
-    #else
-                                    return slot.path
-    #endif
-                                }())
-                                .font(.system(.body, weight: .medium))
-                                .foregroundColor(.primary)
-                                
-                                HStack(spacing: 8) {  // Group buttons horizontally for compactness
-                                    Button("Browse") { showImageOpenPanel(for: $slot)}
-                                        .buttonStyle(.borderedProminent)
-                                        .tint(.blue)
-                                        .cornerRadius(10)
-                                        .shadow(radius: 2)
-                                    
-                                    Button("Paste") { pasteImage(for: $slot) }
-                                        .buttonStyle(.borderedProminent)
-                                        .tint(.green)
-                                        .cornerRadius(10)
-                                        .shadow(radius: 2)
-                                    
-                                    Button("Annotate") {
-                                        if slot.image != nil {
-                                            print("DEBUG: Annotate tapped for slot \(slot.id), image exists: true")
-                                            onAnnotate(slot.id)
-                                        } else {
-                                            print("DEBUG: Annotate tapped but no image in slot \(slot.id)")
-                                            errorMessage = "No image loaded to annotate."
-                                            showErrorAlert = true
-                                        }
-                                    }
-                                    .buttonStyle(.borderedProminent)
-                                    .tint(.purple)
-                                    .cornerRadius(10)
-                                    .shadow(radius: 2)
-                                }
-                                
-                                if !slot.promptNodes.isEmpty {
-                                    VStack(alignment: .leading, spacing: 8) {
-                                        Text("Embedded Workflow Prompts")
-                                            .font(.caption)
-                                            .foregroundColor(.secondary)
-                                        
-                                        Picker("Select Prompt", selection: $slot.selectedPromptIndex) {
-                                            ForEach(0..<slot.promptNodes.count, id: \.self) { index in
-                                                Text(slot.promptNodes[index].label)
-                                                    .tag(index)
-                                            }
-                                        }
-                                        .pickerStyle(.menu)  // Dropdown-style menu on both iOS and macOS
-                                        
-                                        Button("Copy Prompt") {
-                                            let selectedText = slot.promptNodes[slot.selectedPromptIndex].promptText ?? ""
-                                            copyToClipboard(selectedText)
-                                            withAnimation {
-                                                showCopiedMessage = true
-                                            }
-                                            DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                                                withAnimation {
-                                                    showCopiedMessage = false
-                                                }
-                                            }
-                                        }
-                                        .buttonStyle(.bordered)
-                                        .tint(.green)
-                                        .cornerRadius(10)
-                                        .shadow(radius: 2)
-                                    }
-                                }
-                            }
-                            
-                            Spacer()
-                            
-                            Button(action: { removeImageSlot(slot.id) }) {
-                                Image(systemName: "minus.circle.fill")
-                                    .font(.system(size: 24))
-                                    .foregroundColor(.red)
-                            }
-                            .buttonStyle(.plain)
-                            .shadow(radius: 2)
-                        }
-                        .padding(16)
-//caused thick black line
-//                        .background(Color(systemBackgroundColor).opacity(0.8))
-                        .cornerRadius(16)  // Card style for each slot
-                        .shadow(color: .black.opacity(0.1), radius: 2)  // Softer shadow
-                    } else {
-                        // Fallback on earlier versions
-                    }
+                    ImageSlotItemView(
+                        slot: $slot,
+                        errorMessage: $errorMessage,
+                        showErrorAlert: $showErrorAlert,
+                        onAnnotate: onAnnotate,
+                        onRemove: removeImageSlot,
+                        showCopiedMessage: $showCopiedMessage,
+                        backgroundColor: backgroundColor,
+                        systemBackgroundColor: systemBackgroundColor
+                    )
                 }
             }
             
@@ -441,58 +330,13 @@ struct InputImagesSection: View {
         imageSlots.append(ImageSlot())
     }
     
-    private func removeImageSlot(_ id: UUID) {
-        if let index = imageSlots.firstIndex(where: { $0.id == id }) {
-            imageSlots.remove(at: index)
-        }
-    }
-    
     private func clearImageSlots() {
         imageSlots.removeAll()
     }
     
-    // Updated: Takes Binding<ImageSlot> for the slot
-    // Updated showImageOpenPanel (fix closure: no param, use url directly inside)
-    private func showImageOpenPanel(for slotBinding: Binding<ImageSlot>) {
-        let slotId = slotBinding.wrappedValue.id
-        let index = imageSlots.firstIndex(where: { $0.id == slotId }) ?? -1
-        if index == -1 { return }
-        
-        PlatformFilePicker.presentOpenPanel(allowedTypes: [.image], allowsMultiple: false, canChooseDirectories: false) { result in
-            switch result {
-            case .success(let urls):
-                guard let url = urls.first else { return }
-                do {
-                    // Load image and extract prompts within secure access scope (use url directly in closure)
-                    let (image, promptNodes) = try withSecureAccess(to: url) {
-                        let img = PlatformImage(contentsOf: url)
-                        var nodes: [NodeInfo] = []
-                        if url.pathExtension.lowercased() == "png" {
-                            nodes = parsePromptNodes(from: url)
-                        }
-                        return (img, nodes)
-                    }
-                    
-                    if let img = image {
-                        imageSlots[index].image = img
-                        imageSlots[index].path = url.path
-                        
-                        if !promptNodes.isEmpty {
-                            imageSlots[index].promptNodes = promptNodes.sorted { $0.id < $1.id }
-                            imageSlots[index].selectedPromptIndex = 0
-                        }
-                    } else {
-                        errorMessage = "Failed to load image."
-                        showErrorAlert = true
-                    }
-                } catch {
-                    errorMessage = "Failed to access image: \(error.localizedDescription)"
-                    showErrorAlert = true
-                }
-            case .failure(let error):
-                errorMessage = "Failed to select image: \(error.localizedDescription)"
-                showErrorAlert = true
-            }
+    private func removeImageSlot(_ id: UUID) {
+        if let index = imageSlots.firstIndex(where: { $0.id == id }) {
+            imageSlots.remove(at: index)
         }
     }
     
@@ -506,9 +350,169 @@ struct InputImagesSection: View {
         pasteboard.setString(text, forType: .string)
 #endif
     }
+}
+
+struct ImageSlotItemView: View {
+    @Binding var slot: ImageSlot
+    @Binding var errorMessage: String?
+    @Binding var showErrorAlert: Bool
+    let onAnnotate: (UUID) -> Void
+    let onRemove: (UUID) -> Void  // Added for remove
+    @Binding var showCopiedMessage: Bool
+    let backgroundColor: Color
+    let systemBackgroundColor: Color
     
-    // New: Paste from clipboard
-    private func pasteImage(for slotBinding: Binding<ImageSlot>) {
+    @State private var isDropTargeted: Bool = false  // Added for drop highlight
+    
+    var body: some View {
+        if #available(macOS 14.0, *) {
+            HStack(spacing: 16) {
+                ZStack {
+                    if let img = slot.image {
+                        Image(platformImage: img)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 150, height: 150)  // Larger preview
+                            .cornerRadius(16)
+                            .shadow(radius: 4)
+                    } else {
+                        if #available(iOS 17.0, *) {
+                            Rectangle()
+                                .fill(Color(backgroundColor))
+                                .frame(width: 150, height: 150)
+                                .cornerRadius(16)
+                                .shadow(radius: 4)
+                        } else {
+                            Rectangle()
+                                .fill(backgroundColor)
+                                .frame(width: 150, height: 150)
+                                .cornerRadius(16)
+                                .shadow(radius: 4)
+                            // Fallback on earlier versions
+                        }
+                    }
+                    
+                    // Highlight border for drop target
+                    if isDropTargeted {
+                        RoundedRectangle(cornerRadius: 16)
+                            .stroke(Color.blue, lineWidth: 2)
+                            .frame(width: 150, height: 150)
+                    }
+                }
+                #if os(macOS)
+                .onDrop(of: [UTType.fileURL], isTargeted: $isDropTargeted) { providers in
+                    handleDrop(providers: providers)
+                }
+                #endif
+                
+                VStack(alignment: .leading, spacing: 12) {  // More spacing
+                    Text(slot.path.isEmpty ? "No image selected" : {
+#if os(iOS)
+                        return URL(fileURLWithPath: slot.path).lastPathComponent
+#else
+                        return slot.path
+#endif
+                    }())
+                    .font(.system(.body, weight: .medium))
+                    .foregroundColor(.primary)
+                    
+                    HStack(spacing: 8) {  // Group buttons horizontally for compactness
+                        Button("Browse") { showImageOpenPanel() }
+                            .buttonStyle(.borderedProminent)
+                            .tint(.blue)
+                            .cornerRadius(10)
+                            .shadow(radius: 2)
+                        
+                        Button("Paste") { pasteImage() }
+                            .buttonStyle(.borderedProminent)
+                            .tint(.green)
+                            .cornerRadius(10)
+                            .shadow(radius: 2)
+                        
+                        Button("Annotate") {
+                            if slot.image != nil {
+                                print("DEBUG: Annotate tapped for slot \(slot.id), image exists: true")
+                                onAnnotate(slot.id)
+                            } else {
+                                print("DEBUG: Annotate tapped but no image in slot \(slot.id)")
+                                errorMessage = "No image loaded to annotate."
+                                showErrorAlert = true
+                            }
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(.purple)
+                        .cornerRadius(10)
+                        .shadow(radius: 2)
+                    }
+                    
+                    if !slot.promptNodes.isEmpty {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Embedded Workflow Prompts")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                            
+                            Picker("Select Prompt", selection: $slot.selectedPromptIndex) {
+                                ForEach(0..<slot.promptNodes.count, id: \.self) { index in
+                                    Text(slot.promptNodes[index].label)
+                                        .tag(index)
+                                }
+                            }
+                            .pickerStyle(.menu)  // Dropdown-style menu on both iOS and macOS
+                            
+                            Button("Copy Prompt") {
+                                let selectedText = slot.promptNodes[slot.selectedPromptIndex].promptText ?? ""
+                                copyToClipboard(selectedText)
+                                withAnimation {
+                                    showCopiedMessage = true
+                                }
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                                    withAnimation {
+                                        showCopiedMessage = false
+                                    }
+                                }
+                            }
+                            .buttonStyle(.bordered)
+                            .tint(.green)
+                            .cornerRadius(10)
+                            .shadow(radius: 2)
+                        }
+                    }
+                }
+                
+                Spacer()
+                
+                Button(action: { onRemove(slot.id) }) {
+                    Image(systemName: "minus.circle.fill")
+                        .font(.system(size: 24))
+                        .foregroundColor(.red)
+                }
+                .buttonStyle(.plain)
+                .shadow(radius: 2)
+            }
+            .padding(16)
+            //caused thick black line
+            //                        .background(Color(systemBackgroundColor).opacity(0.8))
+            .cornerRadius(16)  // Card style for each slot
+            .shadow(color: .black.opacity(0.1), radius: 2)  // Softer shadow
+        } else {
+            // Fallback on earlier versions
+        }
+    }
+    
+    private func showImageOpenPanel() {
+        PlatformFilePicker.presentOpenPanel(allowedTypes: [.image], allowsMultiple: false, canChooseDirectories: false) { result in
+            switch result {
+            case .success(let urls):
+                guard let url = urls.first else { return }
+                loadImageFromURL(url)
+            case .failure(let error):
+                errorMessage = "Failed to select image: \(error.localizedDescription)"
+                showErrorAlert = true
+            }
+        }
+    }
+    
+    private func pasteImage() {
         var pngData: Data? = nil
         var image: PlatformImage? = nil
         
@@ -537,8 +541,8 @@ struct InputImagesSection: View {
             return
         }
         
-        slotBinding.image.wrappedValue = pastedImage
-        slotBinding.path.wrappedValue = "Pasted from Clipboard"
+        slot.image = pastedImage
+        slot.path = "Pasted from Clipboard"
         
         // Extract prompts if PNG data available
         var promptNodes: [NodeInfo] = []
@@ -547,8 +551,82 @@ struct InputImagesSection: View {
         }
         
         if !promptNodes.isEmpty {
-            slotBinding.promptNodes.wrappedValue = promptNodes.sorted { $0.id < $1.id }
-            slotBinding.selectedPromptIndex.wrappedValue = 0
+            slot.promptNodes = promptNodes.sorted { $0.id < $1.id }
+            slot.selectedPromptIndex = 0
+        }
+    }
+    
+    private func copyToClipboard(_ text: String) {
+        #if os(iOS)
+        UIPasteboard.general.string = text
+        #elseif os(macOS)
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(text, forType: .string)
+        #endif
+    }
+    
+    // New: Handle drop (macOS only)
+    #if os(macOS)
+    private func handleDrop(providers: [NSItemProvider]) -> Bool {
+        guard let provider = providers.first else { return false }
+        
+        provider.loadObject(ofClass: URL.self) { reading, error in
+            if let error = error {
+                DispatchQueue.main.async {
+                    self.errorMessage = "Drop error: \(error.localizedDescription)"
+                    self.showErrorAlert = true
+                }
+                return
+            }
+            
+            guard let url = reading as? URL else { return }
+            
+            // Check if it's an image
+            guard let contentType = try? url.resourceValues(forKeys: [.contentTypeKey]).contentType,
+                  contentType.conforms(to: .image) else {
+                DispatchQueue.main.async {
+                    self.errorMessage = "Dropped file is not an image."
+                    self.showErrorAlert = true
+                }
+                return
+            }
+            
+            DispatchQueue.main.async {
+                self.loadImageFromURL(url)
+            }
+        }
+        
+        return true
+    }
+    #endif
+    
+    private func loadImageFromURL(_ url: URL) {
+        do {
+            let (image, promptNodes) = try withSecureAccess(to: url) {
+                let img = PlatformImage(contentsOf: url)
+                var nodes: [NodeInfo] = []
+                if url.pathExtension.lowercased() == "png" {
+                    nodes = parsePromptNodes(from: url)
+                }
+                return (img, nodes)
+            }
+            
+            if let img = image {
+                slot.image = img
+                slot.path = url.path
+                
+                if !promptNodes.isEmpty {
+                    slot.promptNodes = promptNodes.sorted { $0.id < $1.id }
+                    slot.selectedPromptIndex = 0
+                }
+            } else {
+                errorMessage = "Failed to load image."
+                showErrorAlert = true
+            }
+        } catch {
+            errorMessage = "Failed to access image: \(error.localizedDescription)"
+            showErrorAlert = true
         }
     }
 }
