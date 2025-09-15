@@ -245,7 +245,7 @@ struct MarkupView: View {
          }
          .frame(height: displaySize.height)
          // Palette at bottom, full width, no scrolling - vertical layout
-         FloatingPaletteView(color: $color, lineWidth: $lineWidth,  addingText: $addingText, colors: colors,
+         FloatingPaletteView(color: $color, lineWidth: $lineWidth, addingText: $addingText, colors: colors,
                              onUndo: undoLastAction,
                              onClear: clearAll,
                              canUndo: canUndo,
@@ -341,10 +341,10 @@ struct MarkupView: View {
      }
      .onChange(of: addingText) { newValue in
          if newValue {
-             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                 if imageFrame.size != .zero {
-                     textPosition = CGPoint(x: geo.size.width / 2, y: geo.size.height / 2 - paletteHeight / 2)
-                     print("DEBUG: Initial text position set to screen center: \(textPosition)")
+             if imageFrame.size != .zero {
+                 textPosition = CGPoint(x: imageFrame.midX, y: imageFrame.midY)
+                 print("DEBUG: Initial text position set to screen center: \(textPosition)")
+                 DispatchQueue.main.async {
                      textFieldFocused = true
                  }
              }
@@ -659,6 +659,7 @@ struct FloatingPaletteView: View {
          }
          
          // Cancel, Save, Done row
+         Spacer()
          HStack(spacing: 8) {
              Spacer()
              
@@ -690,7 +691,8 @@ struct FloatingPaletteView: View {
      .padding(.horizontal)
  }
 }
-#if os(iOS)
+
+#if os (iOS)
 extension View {
     @ViewBuilder
     func applySafeAreaPadding(_ edge: Edge.Set, _ length: CGFloat) -> some View {
