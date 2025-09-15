@@ -103,7 +103,6 @@ struct MarkupView: View {
      .frame(width: image.platformSize.width, height: image.platformSize.height + paletteHeight)
      .nonResizableWindow()
 #else
-     .ignoresSafeArea()
      .navigationBarHidden(true)
 #endif
      .onChange(of: editingTextID) { newValue in
@@ -215,8 +214,10 @@ struct MarkupView: View {
                  .font(.system(size: 30))
                  .foregroundColor(.gray)
          }
-         .position(x: geo.size.width - 20, y: 40)
+         .position(x: geo.size.width - 20 - geo.safeAreaInsets.trailing, y: geo.safeAreaInsets.top + 20)
      }
+     .applySafeAreaPadding(.top, geo.safeAreaInsets.top)
+     .applySafeAreaPadding(.bottom, geo.safeAreaInsets.bottom)
      #else
      let availableW = geo.size.width
      let availableH = geo.size.height - paletteHeight
@@ -244,8 +245,7 @@ struct MarkupView: View {
          }
          .frame(height: displaySize.height)
          // Palette at bottom, full width, no scrolling - vertical layout
-         FloatingPaletteView(color: $color, lineWidth: $lineWidth, colors: colors,
-                             addingText: $addingText,
+         FloatingPaletteView(color: $color, lineWidth: $lineWidth,  addingText: $addingText, colors: colors,
                              onUndo: undoLastAction,
                              onClear: clearAll,
                              canUndo: canUndo,
@@ -340,11 +340,13 @@ struct MarkupView: View {
          print("DEBUG: Image frame updated: \(imageFrame)")
      }
      .onChange(of: addingText) { newValue in
-         if newValue && imageFrame.size != .zero {
-             textPosition = CGPoint(x: imageFrame.midX, y: imageFrame.midY)
-             print("DEBUG: Initial text position set to center: \(textPosition) for imageFrame \(imageFrame)")
-             DispatchQueue.main.async {
-                 textFieldFocused = true
+         if newValue {
+             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                 if imageFrame.size != .zero {
+                     textPosition = CGPoint(x: geo.size.width / 2, y: geo.size.height / 2 - paletteHeight / 2)
+                     print("DEBUG: Initial text position set to screen center: \(textPosition)")
+                     textFieldFocused = true
+                 }
              }
          } else {
              textFieldFocused = false
@@ -688,3 +690,15 @@ struct FloatingPaletteView: View {
      .padding(.horizontal)
  }
 }
+#if os(iOS)
+extension View {
+    @ViewBuilder
+    func applySafeAreaPadding(_ edge: Edge.Set, _ length: CGFloat) -> some View {
+        if #available(iOS 17.0, *) {
+            self.safeAreaPadding(edge, length)
+        } else {
+            self.padding(edge, length)
+        }
+    }
+}
+#endif
