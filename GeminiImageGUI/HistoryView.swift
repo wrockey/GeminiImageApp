@@ -348,6 +348,7 @@ struct FullHistoryItemView: View {
     #endif
     @State private var selectedId: UUID? = nil
     @State private var showDeleteAlert: Bool = false
+    @State private var previousSelectedId: UUID? = nil 
     @State private var showCopiedMessage: Bool = false
     
     private var dateFormatter: DateFormatter {
@@ -588,8 +589,13 @@ struct FullHistoryItemView: View {
         }
         .onAppear {
             selectedId = initialId
+            previousSelectedId = nil // Initialize previous
         }
-        .onChange(of: selectedId) { oldValue, newValue in
+        .onChange(of: selectedId) { newValue in
+            if #available(iOS 17.0, macOS 14.0, *) {
+                // This branch is not needed since the single-param .onChange works on 17+ too, but for clarity
+            }
+            let oldValue = previousSelectedId
             print("Selected ID changed from \(oldValue?.uuidString ?? "nil") to \(newValue?.uuidString ?? "nil")")
             if let item = history.first(where: { $0.id == newValue }) {
                 print("Current prompt: \(item.prompt)")
@@ -600,8 +606,10 @@ struct FullHistoryItemView: View {
             } else {
                 print("No item found for selected ID")
             }
+            previousSelectedId = newValue // Update previous for next change
         }
     }
+
     
     private func deleteHistoryItem(item: HistoryItem, deleteFile: Bool) {
         if deleteFile, let path = item.imagePath {
