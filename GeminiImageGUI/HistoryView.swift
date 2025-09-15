@@ -370,28 +370,75 @@ struct FullHistoryItemView: View {
     var body: some View {
         GeometryReader { geometry in
             ZStack {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    LazyHStack(spacing: 0) {
-                        ForEach(history) { item in
-                            GeometryReader { proxy in
-                                if let img = loadHistoryImage(for: item) {
-                                    Image(platformImage: img)
-                                        .resizable()
-                                        .scaledToFit()
-                                        .frame(width: geometry.size.width, height: geometry.size.height)
-                                        .shadow(radius: 5)
-                                } else {
-                                    Text("No image available")
-                                        .font(.headline)
-                                        .foregroundColor(.secondary)
+                #if os(iOS) || os(macOS)
+                if #available(iOS 17.0, macOS 14.0, *) {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        LazyHStack(spacing: 0) {
+                            ForEach(history) { item in
+                                GeometryReader { proxy in
+                                    if let img = loadHistoryImage(for: item) {
+                                        Image(platformImage: img)
+                                            .resizable()
+                                            .scaledToFit()
+                                            .frame(width: geometry.size.width, height: geometry.size.height)
+                                            .shadow(radius: 5)
+                                    } else {
+                                        Text("No image available")
+                                            .font(.headline)
+                                            .foregroundColor(.secondary)
+                                    }
                                 }
+                                .frame(width: geometry.size.width, height: geometry.size.height)
                             }
-                            .frame(width: geometry.size.width, height: geometry.size.height)
                         }
                     }
+                    .scrollTargetBehavior(.paging)
+                    .scrollPosition(id: $selectedId)
+                } else {
+                    #if os(iOS)
+                    TabView(selection: $selectedId) {
+                        ForEach(history) { item in
+                            if let img = loadHistoryImage(for: item) {
+                                Image(platformImage: img)
+                                    .resizable()
+                                    .scaledToFit()
+                                    .frame(width: geometry.size.width, height: geometry.size.height)
+                                    .shadow(radius: 5)
+                                    .tag(item.id)
+                            } else {
+                                Text("No image available")
+                                    .font(.headline)
+                                    .foregroundColor(.secondary)
+                                    .tag(item.id)
+                            }
+                        }
+                    }
+                    .tabViewStyle(.page(indexDisplayMode: .never))
+                    .ignoresSafeArea()
+                    #else
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        LazyHStack(spacing: 0) {
+                            ForEach(history) { item in
+                                GeometryReader { proxy in
+                                    if let img = loadHistoryImage(for: item) {
+                                        Image(platformImage: img)
+                                            .resizable()
+                                            .scaledToFit()
+                                            .frame(width: geometry.size.width, height: geometry.size.height)
+                                            .shadow(radius: 5)
+                                    } else {
+                                        Text("No image available")
+                                            .font(.headline)
+                                            .foregroundColor(.secondary)
+                                    }
+                                }
+                                .frame(width: geometry.size.width, height: geometry.size.height)
+                            }
+                        }
+                    }
+                    #endif
                 }
-                .scrollTargetBehavior(.paging)
-                .scrollPosition(id: $selectedId)
+                #endif
                 
             }
             .overlay(alignment: .bottom) {
