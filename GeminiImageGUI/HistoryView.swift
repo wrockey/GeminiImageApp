@@ -403,6 +403,7 @@ struct FullHistoryItemView: View {
                                     .font(.system(size: 12))
                                     .multilineTextAlignment(.leading)
                                     .lineLimit(nil)
+                                    .foregroundColor(.black)
                                 Button(action: {
                                     copyPromptToClipboard(item.prompt)
                                     showCopiedMessage = true
@@ -421,11 +422,11 @@ struct FullHistoryItemView: View {
                             }
                             Text("Date: \(dateFormatter.string(from: item.date))")
                                 .font(.system(size: 10))
-                                .foregroundColor(.secondary)
+                                .foregroundColor(.gray)
                             if let mode = item.mode {
                                 Text("Created with: \(mode == .gemini ? "Gemini" : (item.workflowName ?? "ComfyUI"))")
                                     .font(.system(size: 10))
-                                    .foregroundColor(.secondary)
+                                    .foregroundColor(.gray)
                             }
                         }
                         
@@ -437,6 +438,7 @@ struct FullHistoryItemView: View {
                                 Image(systemName: "arrow.left.circle.fill")
                                     .font(.system(size: 24))
                                     .symbolRenderingMode(.hierarchical)
+                                    .foregroundColor(.black)
                             }
                             .disabled(currentIndex == 0)
                             .buttonStyle(.plain)
@@ -475,6 +477,7 @@ struct FullHistoryItemView: View {
                                 Image(systemName: "arrow.right.circle.fill")
                                     .font(.system(size: 24))
                                     .symbolRenderingMode(.hierarchical)
+                                    .foregroundColor(.black)
                             }
                             .disabled(currentIndex == history.count - 1)
                             .buttonStyle(.plain)
