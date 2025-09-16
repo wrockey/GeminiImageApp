@@ -91,10 +91,15 @@ struct MarkupView: View {
  @State private var showSaveSuccess: Bool = false
  @State private var savedFilename: String = ""
  @State private var showCancelConfirmation: Bool = false
+ @State private var previousScale: CGFloat? = nil
  
  let colors: [Color] = [.red, .green, .blue, .yellow, .purple, .orange, .black, .white]
  
  let paletteHeight: CGFloat = 80 // Increased slightly for more vertical space
+ 
+ private var hasChanges: Bool {
+     !strokes.isEmpty || !textBoxes.isEmpty
+ }
  
  var body: some View {
      GeometryReader { geo in
@@ -107,7 +112,15 @@ struct MarkupView: View {
      .navigationBarHidden(true)
 #endif
      .onChange(of: addingText) { newValue in
-         if !newValue {
+         if newValue {
+             if imageFrame.size != .zero {
+                 textPosition = CGPoint(x: imageFrame.midX, y: imageFrame.midY)
+                 print("DEBUG: Initial text position set to screen center: \(textPosition)")
+             }
+             DispatchQueue.main.async {
+                 textFieldFocused = true
+             }
+         } else {
              textFieldFocused = false
          }
      }
@@ -207,20 +220,17 @@ struct MarkupView: View {
              }
              FloatingPaletteView(color: $color, lineWidth: $lineWidth, addingText: $addingText, colors: colors,
                                  onStartAddingText: {
-                                     if imageFrame.size != .zero {
-                                         textPosition = CGPoint(x: imageFrame.midX, y: imageFrame.midY)
-                                         print("DEBUG: Initial text position set to screen center: \(textPosition)")
-                                     }
                                      addingText = true
-                                     DispatchQueue.main.async {
-                                         textFieldFocused = true
-                                     }
                                  },
                                  onUndo: undoLastAction,
                                  onClear: clearAll,
                                  canUndo: canUndo,
                                  onCancel: {
-                                     showCancelConfirmation = true
+                                     if hasChanges {
+                                         showCancelConfirmation = true
+                                     } else {
+                                         dismiss()
+                                     }
                                  },
                                  onSaveFile: {
                                      if let img = renderAnnotatedImage() {
@@ -244,7 +254,11 @@ struct MarkupView: View {
          }
          
          Button {
-             showCancelConfirmation = true
+             if hasChanges {
+                 showCancelConfirmation = true
+             } else {
+                 dismiss()
+             }
          } label: {
              Image(systemName: "xmark.circle.fill")
                  .font(.system(size: 30))
@@ -283,20 +297,17 @@ struct MarkupView: View {
          // Palette at bottom, full width, no scrolling - vertical layout
          FloatingPaletteView(color: $color, lineWidth: $lineWidth, addingText: $addingText, colors: colors,
                              onStartAddingText: {
-                                 if imageFrame.size != .zero {
-                                     textPosition = CGPoint(x: imageFrame.midX, y: imageFrame.midY)
-                                     print("DEBUG: Initial text position set to screen center: \(textPosition)")
-                                 }
                                  addingText = true
-                                 DispatchQueue.main.async {
-                                     textFieldFocused = true
-                                 }
                              },
                              onUndo: undoLastAction,
                              onClear: clearAll,
                              canUndo: canUndo,
                              onCancel: {
-                                 showCancelConfirmation = true
+                                 if hasChanges {
+                                     showCancelConfirmation = true
+                                 } else {
+                                     dismiss()
+                                 }
                              },
                              onSaveFile: {
                                  if let img = renderAnnotatedImage() {
@@ -382,6 +393,23 @@ struct MarkupView: View {
          print("DEBUG: MarkupView appeared with image size: \(image.platformSize)")
      }
      .onPreferenceChange(FramePreferenceKey.self) { frame in
+         let newScale = frame.size.width / image.platformSize.width
+         if let prev = previousScale, prev != newScale, prev > 0 {
+             let ratio = newScale / prev
+             for i in 0..<strokes.count {
+                 strokes[i].path = strokes[i].path.applying(CGAffineTransform(scaleX: ratio, y: ratio))
+             }
+             for i in 0..<textBoxes.count {
+                 textBoxes[i].position = CGPoint(x: textBoxes[i].position.x * ratio, y: textBoxes[i].position.y * ratio)
+             }
+             if !currentPath.isEmpty {
+                 currentPath = currentPath.applying(CGAffineTransform(scaleX: ratio, y: ratio))
+             }
+             if addingText {
+                 textPosition = CGPoint(x: textPosition.x * ratio, y: textPosition.y * ratio)
+             }
+         }
+         previousScale = newScale
          imageFrame = frame
          print("DEBUG: Image frame updated: \(imageFrame)")
      }
