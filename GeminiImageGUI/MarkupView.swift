@@ -147,65 +147,79 @@ struct MarkupView: View {
  private func markupContent(geo: GeometryProxy) -> some View {
      #if os(iOS)
      let isLandscape = geo.size.width > geo.size.height
-     let scale = isLandscape ? geo.size.height / image.platformSize.height : geo.size.width / image.platformSize.width
+     let inset = geo.safeAreaInsets
+     let effectiveWidth = geo.size.width - inset.leading - inset.trailing
+     let effectiveHeight = geo.size.height - inset.top - inset.bottom
+     let paletteAdjustedHeight = effectiveHeight - paletteHeight
+     let scale = isLandscape ? paletteAdjustedHeight / image.platformSize.height : effectiveWidth / image.platformSize.width
      let displaySize = CGSize(width: image.platformSize.width * scale, height: image.platformSize.height * scale)
      let axes: Axis.Set = isLandscape ? .horizontal : .vertical
      
-     return ZStack(alignment: .bottom) {
-         ScrollView(axes) {
-             if isLandscape {
-                 HStack(spacing: 0) {
-                     Spacer()
-                     VStack(spacing: 0) {
-                         Spacer()
-                         annotationZStack(displaySize: displaySize, geo: geo)
-                         Spacer()
+     return ZStack {
+         VStack(spacing: 0) {
+             ScrollViewReader { proxy in
+                 ScrollView(axes) {
+                     if isLandscape {
+                         HStack(spacing: 0) {
+                             Spacer()
+                             VStack(spacing: 0) {
+                                 Spacer()
+                                 annotationZStack(displaySize: displaySize, geo: geo)
+                                     .id("annotation")
+                                 Spacer()
+                             }
+                             .frame(maxHeight: .infinity)
+                             Spacer()
+                         }
+                         .frame(minWidth: geo.size.width)
+                     } else {
+                         VStack(spacing: 0) {
+                             Spacer()
+                             HStack(spacing: 0) {
+                                 Spacer()
+                                 annotationZStack(displaySize: displaySize, geo: geo)
+                                     .id("annotation")
+                                 Spacer()
+                             }
+                             .frame(maxWidth: .infinity)
+                             Spacer()
+                         }
+                         .frame(minHeight: paletteAdjustedHeight)
                      }
-                     .frame(maxHeight: .infinity)
-                     Spacer()
                  }
-             } else {
-                 VStack(spacing: 0) {
-                     Spacer()
-                     HStack(spacing: 0) {
-                         Spacer()
-                         annotationZStack(displaySize: displaySize, geo: geo)
-                         Spacer()
-                     }
-                     .frame(maxWidth: .infinity)
-                     Spacer()
+                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                 .simultaneousGesture(DragGesture(minimumDistance: 0))
+                 .onAppear {
+                     proxy.scrollTo("annotation", anchor: .center)
                  }
              }
-         }
-         .frame(maxWidth: .infinity, maxHeight: .infinity)
-         .simultaneousGesture(DragGesture(minimumDistance: 0))
-         
-         FloatingPaletteView(color: $color, lineWidth: $lineWidth, addingText: $addingText, colors: colors,
-                             onUndo: undoLastAction,
-                             onClear: clearAll,
-                             canUndo: canUndo,
-                             onCancel: {
-                                 dismiss()
-                             },
-                             onSaveFile: {
-                                 if let img = renderAnnotatedImage() {
-                                     if let folderURL = appState.settings.outputDirectory {
-                                         saveImage(img, to: folderURL)
-                                     } else {
-                                         pendingSaveImage = img
-                                         showingFolderPicker = true
+             FloatingPaletteView(color: $color, lineWidth: $lineWidth, addingText: $addingText, colors: colors,
+                                 onUndo: undoLastAction,
+                                 onClear: clearAll,
+                                 canUndo: canUndo,
+                                 onCancel: {
+                                     dismiss()
+                                 },
+                                 onSaveFile: {
+                                     if let img = renderAnnotatedImage() {
+                                         if let folderURL = appState.settings.outputDirectory {
+                                             saveImage(img, to: folderURL)
+                                         } else {
+                                             pendingSaveImage = img
+                                             showingFolderPicker = true
+                                         }
                                      }
-                                 }
-                             },
-                             onDone: {
-                                 if let updatedImage = renderAnnotatedImage() {
-                                     onSave(updatedImage)
-                                 }
-                                 dismiss()
-                             })
-         .frame(height: paletteHeight)
-         .frame(maxWidth: .infinity)
-         .background(Color.white)
+                                 },
+                                 onDone: {
+                                     if let updatedImage = renderAnnotatedImage() {
+                                         onSave(updatedImage)
+                                     }
+                                     dismiss()
+                                 })
+             .frame(height: paletteHeight)
+             .frame(maxWidth: .infinity)
+             .background(Color.white)
+         }
          
          Button {
              dismiss()
@@ -245,7 +259,8 @@ struct MarkupView: View {
          }
          .frame(height: displaySize.height)
          // Palette at bottom, full width, no scrolling - vertical layout
-         FloatingPaletteView(color: $color, lineWidth: $lineWidth, addingText: $addingText, colors: colors,
+         FloatingPaletteView(color: $color, lineWidth: $lineWidth, colors: colors,
+                             addingText: $addingText,
                              onUndo: undoLastAction,
                              onClear: clearAll,
                              canUndo: canUndo,
@@ -344,12 +359,20 @@ struct MarkupView: View {
              if imageFrame.size != .zero {
                  textPosition = CGPoint(x: imageFrame.midX, y: imageFrame.midY)
                  print("DEBUG: Initial text position set to screen center: \(textPosition)")
-                 DispatchQueue.main.async {
-                     textFieldFocused = true
-                 }
+             }
+             DispatchQueue.main.async {
+                 textFieldFocused = true
              }
          } else {
              textFieldFocused = false
+         }
+     }
+     .onChange(of: imageFrame) { newFrame in
+         if addingText && newFrame.size != .zero && textPosition == .zero {
+             textPosition = CGPoint(x: newFrame.midX, y: newFrame.midY)
+             DispatchQueue.main.async {
+                 textFieldFocused = true
+             }
          }
      }
  }
@@ -607,82 +630,85 @@ struct FloatingPaletteView: View {
  
  var body: some View {
      VStack(spacing: 8) {
-         // Tools row
-         HStack(spacing: 8) {
-             Button {
-                 addingText.toggle()
-             } label: {
-                 Image(systemName: "textformat.size")
-             }
-             .buttonStyle(.bordered)
-             
-             Button {
-                 onUndo()
-             } label: {
-                 Image(systemName: "arrow.uturn.backward.circle")
-             }
-             .buttonStyle(.bordered)
-             .disabled(!canUndo)
-             
-             Button {
-                 onClear()
-             } label: {
-                 Image(systemName: "xmark.circle")
-             }
-             .buttonStyle(.bordered)
-             
-             Spacer()
-         }
-         
-         // Colors row
-         HStack(spacing: 4) {
-             Text("Pen Color:")
-                 .font(.caption)
-             
-             ForEach(colors, id: \.self) { col in
-                 Button(action: { color = col }) {
-                     ColorPickerButton(col: col, isSelected: col == $color.wrappedValue)
-                 }
-                 .buttonStyle(.plain)
-             }
-         }
-         
-         // Width row
-         HStack(spacing: 8) {
-             Text("Width:")
-                 .font(.caption)
-             
-             Slider(value: $lineWidth, in: 1...20)
-                 .frame(width: 80)
-             
-             Spacer()
-         }
-         
-         // Cancel, Save, Done row
          Spacer()
-         HStack(spacing: 8) {
-             Spacer()
-             
+         VStack(spacing: 8) {
+             // Tools row
              HStack(spacing: 8) {
-                 Button("Cancel") {
-                     onCancel()
+                 Button {
+                     addingText.toggle()
+                 } label: {
+                     Image(systemName: "textformat.size")
                  }
-                 .buttonStyle(.borderedProminent)
-                 .font(.caption)
+                 .buttonStyle(.bordered)
                  
-                 Button("Save") {
-                     onSaveFile()
+                 Button {
+                     onUndo()
+                 } label: {
+                     Image(systemName: "arrow.uturn.backward.circle")
                  }
-                 .buttonStyle(.borderedProminent)
-                 .font(.caption)
+                 .buttonStyle(.bordered)
+                 .disabled(!canUndo)
                  
-                 Button("Done") {
-                     onDone()
+                 Button {
+                     onClear()
+                 } label: {
+                     Image(systemName: "xmark.circle")
                  }
-                 .buttonStyle(.borderedProminent)
-                 .font(.caption)
+                 .buttonStyle(.bordered)
+                 
+                 Spacer()
+             }
+             
+             // Colors row
+             HStack(spacing: 4) {
+                 Text("Pen Color:")
+                     .font(.caption)
+                 
+                 ForEach(colors, id: \.self) { col in
+                     Button(action: { color = col }) {
+                         ColorPickerButton(col: col, isSelected: col == $color.wrappedValue)
+                     }
+                     .buttonStyle(.plain)
+                 }
+             }
+             
+             // Width row
+             HStack(spacing: 8) {
+                 Text("Width:")
+                     .font(.caption)
+                 
+                 Slider(value: $lineWidth, in: 1...20)
+                     .frame(width: 80)
+                 
+                 Spacer()
+             }
+             
+             // Cancel, Save, Done row
+             HStack(spacing: 8) {
+                 Spacer()
+                 
+                 HStack(spacing: 8) {
+                     Button("Cancel") {
+                         onCancel()
+                     }
+                     .buttonStyle(.borderedProminent)
+                     .font(.caption)
+                     
+                     Button("Save") {
+                         onSaveFile()
+                     }
+                     .buttonStyle(.borderedProminent)
+                     .font(.caption)
+                     
+                     Button("Done") {
+                         onDone()
+                     }
+                     .buttonStyle(.borderedProminent)
+                     .font(.caption)
+                 }
              }
          }
+         Spacer()
      }
      .padding(.horizontal, 8)
      .background(Color.secondary.opacity(0.1))
