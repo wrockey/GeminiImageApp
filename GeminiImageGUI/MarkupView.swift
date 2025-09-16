@@ -112,15 +112,7 @@ struct MarkupView: View {
      .navigationBarHidden(true)
 #endif
      .onChange(of: addingText) { newValue in
-         if newValue {
-             if imageFrame.size != .zero {
-                 textPosition = CGPoint(x: imageFrame.midX, y: imageFrame.midY)
-                 print("DEBUG: Initial text position set to screen center: \(textPosition)")
-             }
-             DispatchQueue.main.async {
-                 textFieldFocused = true
-             }
-         } else {
+         if !newValue {
              textFieldFocused = false
          }
      }
@@ -393,25 +385,40 @@ struct MarkupView: View {
          print("DEBUG: MarkupView appeared with image size: \(image.platformSize)")
      }
      .onPreferenceChange(FramePreferenceKey.self) { frame in
-         let newScale = frame.size.width / image.platformSize.width
-         if let prev = previousScale, prev != newScale, prev > 0 {
-             let ratio = newScale / prev
-             for i in 0..<strokes.count {
-                 strokes[i].path = strokes[i].path.applying(CGAffineTransform(scaleX: ratio, y: ratio))
+         if frame.size.width > 0 {
+             let newScale = frame.size.width / image.platformSize.width
+             if let prev = previousScale, prev != newScale, prev > 0, newScale > 0 {
+                 let ratio = newScale / prev
+                 for i in 0..<strokes.count {
+                     strokes[i].path = strokes[i].path.applying(CGAffineTransform(scaleX: ratio, y: ratio))
+                 }
+                 for i in 0..<textBoxes.count {
+                     textBoxes[i].position = CGPoint(x: textBoxes[i].position.x * ratio, y: textBoxes[i].position.y * ratio)
+                 }
+                 if !currentPath.isEmpty {
+                     currentPath = currentPath.applying(CGAffineTransform(scaleX: ratio, y: ratio))
+                 }
+                 if addingText {
+                     textPosition = CGPoint(x: textPosition.x * ratio, y: textPosition.y * ratio)
+                 }
              }
-             for i in 0..<textBoxes.count {
-                 textBoxes[i].position = CGPoint(x: textBoxes[i].position.x * ratio, y: textBoxes[i].position.y * ratio)
-             }
-             if !currentPath.isEmpty {
-                 currentPath = currentPath.applying(CGAffineTransform(scaleX: ratio, y: ratio))
-             }
-             if addingText {
-                 textPosition = CGPoint(x: textPosition.x * ratio, y: textPosition.y * ratio)
-             }
+             previousScale = newScale
+             imageFrame = frame
+             print("DEBUG: Image frame updated: \(imageFrame)")
          }
-         previousScale = newScale
-         imageFrame = frame
-         print("DEBUG: Image frame updated: \(imageFrame)")
+     }
+     .onChange(of: addingText) { newValue in
+         if newValue {
+             if imageFrame.size != .zero {
+                 textPosition = CGPoint(x: imageFrame.midX, y: imageFrame.midY)
+                 print("DEBUG: Initial text position set to screen center: \(textPosition)")
+                 DispatchQueue.main.async {
+                     textFieldFocused = true
+                 }
+             }
+         } else {
+             textFieldFocused = false
+         }
      }
      .onChange(of: imageFrame) { newFrame in
          if addingText && newFrame.size != .zero && textPosition == .zero {
