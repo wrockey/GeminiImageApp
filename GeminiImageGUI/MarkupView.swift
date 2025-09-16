@@ -63,6 +63,22 @@ extension View {
     }
 }
 
+#if os(macOS)
+struct WindowAccessor: NSViewRepresentable {
+    @Binding var window: NSWindow?
+    
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        DispatchQueue.main.async {
+            self.window = view.window
+        }
+        return view
+    }
+    
+    func updateNSView(_ nsView: NSView, context: Context) {}
+}
+#endif
+
 // Markup View with unified implementation (custom drawing for both platforms)
 struct MarkupView: View {
  let image: PlatformImage
@@ -92,6 +108,9 @@ struct MarkupView: View {
  @State private var savedFilename: String = ""
  @State private var showCancelConfirmation: Bool = false
  @State private var previousScale: CGFloat? = nil
+ #if os(macOS)
+ @State private var editorWindow: NSWindow? = nil
+ #endif
  
  let colors: [Color] = [.red, .green, .blue, .yellow, .purple, .orange, .black, .white]
  
@@ -104,6 +123,13 @@ struct MarkupView: View {
  var body: some View {
      GeometryReader { geo in
          markupContent(geo: geo)
+     }
+     .background {
+         #if os(macOS)
+         WindowAccessor(window: $editorWindow)
+         #else
+         EmptyView()
+         #endif
      }
 #if os(macOS)
      .frame(width: image.platformSize.width, height: image.platformSize.height + paletteHeight)
@@ -139,7 +165,7 @@ struct MarkupView: View {
      }
      .alert("Are you sure you want to exit and discard changes?", isPresented: $showCancelConfirmation) {
          Button("Discard Changes", role: .destructive) {
-             dismiss()
+             closeEditor()
          }
          Button("Cancel", role: .cancel) {}
      }
@@ -221,7 +247,7 @@ struct MarkupView: View {
                                      if hasChanges {
                                          showCancelConfirmation = true
                                      } else {
-                                         dismiss()
+                                         closeEditor()
                                      }
                                  },
                                  onSaveFile: {
@@ -238,7 +264,7 @@ struct MarkupView: View {
                                      if let updatedImage = renderAnnotatedImage() {
                                          onSave(updatedImage)
                                      }
-                                     dismiss()
+                                     closeEditor()
                                  })
              .frame(height: paletteHeight)
              .frame(maxWidth: .infinity)
@@ -249,7 +275,7 @@ struct MarkupView: View {
              if hasChanges {
                  showCancelConfirmation = true
              } else {
-                 dismiss()
+                 closeEditor()
              }
          } label: {
              Image(systemName: "xmark.circle.fill")
@@ -298,7 +324,7 @@ struct MarkupView: View {
                                  if hasChanges {
                                      showCancelConfirmation = true
                                  } else {
-                                     dismiss()
+                                     closeEditor()
                                  }
                              },
                              onSaveFile: {
@@ -306,16 +332,16 @@ struct MarkupView: View {
                                      if let folderURL = appState.settings.outputDirectory {
                                          saveImage(img, to: folderURL)
                                      } else {
-                                         pendingSaveImage = img
-                                         showingFolderPicker = true
-                                     }
+                                             pendingSaveImage = img
+                                             showingFolderPicker = true
+                                         }
                                  }
                              },
                              onDone: {
                                  if let updatedImage = renderAnnotatedImage() {
                                      onSave(updatedImage)
                                  }
-                                 dismiss()
+                                 closeEditor()
                              })
          .frame(height: paletteHeight)
          .frame(maxWidth: .infinity)
@@ -605,6 +631,15 @@ struct MarkupView: View {
          print("Error saving image: \(error)")
      }
  }
+    
+    private func closeEditor() {
+        #if os(macOS)
+        editorWindow?.close()
+        #else
+        dismiss()
+        #endif
+    }
+
 }
 
 struct DraggableText: View {
