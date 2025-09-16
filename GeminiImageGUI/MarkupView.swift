@@ -105,6 +105,11 @@ struct MarkupView: View {
 #else
      .navigationBarHidden(true)
 #endif
+     .onChange(of: addingText) { newValue in
+         if !newValue {
+             textFieldFocused = false
+         }
+     }
      .onChange(of: editingTextID) { newValue in
          if newValue != nil {
              saveToHistory()
@@ -194,6 +199,16 @@ struct MarkupView: View {
                  }
              }
              FloatingPaletteView(color: $color, lineWidth: $lineWidth, addingText: $addingText, colors: colors,
+                                 onStartAddingText: {
+                                     if imageFrame.size != .zero {
+                                         textPosition = CGPoint(x: imageFrame.midX, y: imageFrame.midY)
+                                         print("DEBUG: Initial text position set to screen center: \(textPosition)")
+                                     }
+                                     addingText = true
+                                     DispatchQueue.main.async {
+                                         textFieldFocused = true
+                                     }
+                                 },
                                  onUndo: undoLastAction,
                                  onClear: clearAll,
                                  canUndo: canUndo,
@@ -259,8 +274,17 @@ struct MarkupView: View {
          }
          .frame(height: displaySize.height)
          // Palette at bottom, full width, no scrolling - vertical layout
-         FloatingPaletteView(color: $color, lineWidth: $lineWidth, colors: colors,
-                             addingText: $addingText,
+         FloatingPaletteView(color: $color, lineWidth: $lineWidth, addingText: $addingText, colors: colors,
+                             onStartAddingText: {
+                                 if imageFrame.size != .zero {
+                                     textPosition = CGPoint(x: imageFrame.midX, y: imageFrame.midY)
+                                     print("DEBUG: Initial text position set to screen center: \(textPosition)")
+                                 }
+                                 addingText = true
+                                 DispatchQueue.main.async {
+                                     textFieldFocused = true
+                                 }
+                             },
                              onUndo: undoLastAction,
                              onClear: clearAll,
                              canUndo: canUndo,
@@ -353,19 +377,6 @@ struct MarkupView: View {
      .onPreferenceChange(FramePreferenceKey.self) { frame in
          imageFrame = frame
          print("DEBUG: Image frame updated: \(imageFrame)")
-     }
-     .onChange(of: addingText) { newValue in
-         if newValue {
-             if imageFrame.size != .zero {
-                 textPosition = CGPoint(x: imageFrame.midX, y: imageFrame.midY)
-                 print("DEBUG: Initial text position set to screen center: \(textPosition)")
-             }
-             DispatchQueue.main.async {
-                 textFieldFocused = true
-             }
-         } else {
-             textFieldFocused = false
-         }
      }
      .onChange(of: imageFrame) { newFrame in
          if addingText && newFrame.size != .zero && textPosition == .zero {
@@ -621,6 +632,7 @@ struct FloatingPaletteView: View {
  @Binding var lineWidth: CGFloat
  @Binding var addingText: Bool
  let colors: [Color]
+ let onStartAddingText: () -> Void
  let onUndo: () -> Void
  let onClear: () -> Void
  let canUndo: Bool
@@ -635,7 +647,11 @@ struct FloatingPaletteView: View {
              // Tools row
              HStack(spacing: 8) {
                  Button {
-                     addingText.toggle()
+                     if addingText {
+                         addingText = false
+                     } else {
+                         onStartAddingText()
+                     }
                  } label: {
                      Image(systemName: "textformat.size")
                  }
