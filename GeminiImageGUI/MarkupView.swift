@@ -90,10 +90,11 @@ struct MarkupView: View {
  @State private var pendingSaveImage: PlatformImage? = nil
  @State private var showSaveSuccess: Bool = false
  @State private var savedFilename: String = ""
+ @State private var showCancelConfirmation: Bool = false
  
  let colors: [Color] = [.red, .green, .blue, .yellow, .purple, .orange, .black, .white]
  
- let paletteHeight: CGFloat = 160 // Increased to accommodate additional buttons
+ let paletteHeight: CGFloat = 80 // Increased slightly for more vertical space
  
  var body: some View {
      GeometryReader { geo in
@@ -130,6 +131,12 @@ struct MarkupView: View {
          Button("OK") {}
      } message: {
          Text("Annotated image successfully saved as \(savedFilename)")
+     }
+     .alert("Are you sure you want to exit and discard changes?", isPresented: $showCancelConfirmation) {
+         Button("Discard Changes", role: .destructive) {
+             dismiss()
+         }
+         Button("Cancel", role: .cancel) {}
      }
 #if os(iOS)
      .toolbar {
@@ -213,7 +220,7 @@ struct MarkupView: View {
                                  onClear: clearAll,
                                  canUndo: canUndo,
                                  onCancel: {
-                                     dismiss()
+                                     showCancelConfirmation = true
                                  },
                                  onSaveFile: {
                                      if let img = renderAnnotatedImage() {
@@ -233,11 +240,11 @@ struct MarkupView: View {
                                  })
              .frame(height: paletteHeight)
              .frame(maxWidth: .infinity)
-             .background(Color.white)
+             .background(Color.gray.opacity(0.1))
          }
          
          Button {
-             dismiss()
+             showCancelConfirmation = true
          } label: {
              Image(systemName: "xmark.circle.fill")
                  .font(.system(size: 30))
@@ -289,7 +296,7 @@ struct MarkupView: View {
                              onClear: clearAll,
                              canUndo: canUndo,
                              onCancel: {
-                                 dismiss()
+                                 showCancelConfirmation = true
                              },
                              onSaveFile: {
                                  if let img = renderAnnotatedImage() {
@@ -641,93 +648,96 @@ struct FloatingPaletteView: View {
  var onDone: () -> Void
  
  var body: some View {
-     VStack(spacing: 8) {
+     HStack(spacing: 8) {
+         // Tools group
+         HStack(spacing: 8) {
+             Button {
+                 if addingText {
+                     addingText = false
+                 } else {
+                     onStartAddingText()
+                 }
+             } label: {
+                 Image(systemName: "textformat.size")
+             }
+             .buttonStyle(.bordered)
+             .frame(width: 44, height: 44)
+             
+             Button {
+                 onUndo()
+             } label: {
+                 Image(systemName: "arrow.uturn.backward.circle")
+             }
+             .buttonStyle(.bordered)
+             .disabled(!canUndo)
+             .frame(width: 44, height: 44)
+             
+             Button {
+                 onClear()
+             } label: {
+                 Image(systemName: "xmark.circle")
+             }
+             .buttonStyle(.bordered)
+             .frame(width: 44, height: 44)
+         }
+         
          Spacer()
-         VStack(spacing: 8) {
-             // Tools row
-             HStack(spacing: 8) {
-                 Button {
-                     if addingText {
-                         addingText = false
-                     } else {
-                         onStartAddingText()
-                     }
-                 } label: {
-                     Image(systemName: "textformat.size")
-                 }
-                 .buttonStyle(.bordered)
-                 
-                 Button {
-                     onUndo()
-                 } label: {
-                     Image(systemName: "arrow.uturn.backward.circle")
-                 }
-                 .buttonStyle(.bordered)
-                 .disabled(!canUndo)
-                 
-                 Button {
-                     onClear()
-                 } label: {
-                     Image(systemName: "xmark.circle")
-                 }
-                 .buttonStyle(.bordered)
-                 
-                 Spacer()
-             }
+         
+         // Color group
+         HStack(spacing: 4) {
+             Text("Pen Color:")
+                 .font(.caption)
              
-             // Colors row
-             HStack(spacing: 4) {
-                 Text("Pen Color:")
-                     .font(.caption)
-                 
-                 ForEach(colors, id: \.self) { col in
-                     Button(action: { color = col }) {
-                         ColorPickerButton(col: col, isSelected: col == $color.wrappedValue)
-                     }
-                     .buttonStyle(.plain)
+             ForEach(colors, id: \.self) { col in
+                 Button(action: { color = col }) {
+                     ColorPickerButton(col: col, isSelected: col == $color.wrappedValue)
                  }
-             }
-             
-             // Width row
-             HStack(spacing: 8) {
-                 Text("Width:")
-                     .font(.caption)
-                 
-                 Slider(value: $lineWidth, in: 1...20)
-                     .frame(width: 80)
-                 
-                 Spacer()
-             }
-             
-             // Cancel, Save, Done row
-             HStack(spacing: 8) {
-                 Spacer()
-                 
-                 HStack(spacing: 8) {
-                     Button("Cancel") {
-                         onCancel()
-                     }
-                     .buttonStyle(.borderedProminent)
-                     .font(.caption)
-                     
-                     Button("Save") {
-                         onSaveFile()
-                     }
-                     .buttonStyle(.borderedProminent)
-                     .font(.caption)
-                     
-                     Button("Done") {
-                         onDone()
-                     }
-                     .buttonStyle(.borderedProminent)
-                     .font(.caption)
-                 }
+                 .buttonStyle(.plain)
              }
          }
+         
          Spacer()
+         
+         // Width group
+         HStack(spacing: 8) {
+             Text("Width:")
+                 .font(.caption)
+             
+             Slider(value: $lineWidth, in: 1...20)
+                 .frame(width: 100) // Slightly wider slider for better usability
+         }
+         
+         Spacer()
+         
+         // Actions group
+         HStack(spacing: 8) {
+             Button {
+                 onCancel()
+             } label: {
+                 Image(systemName: "xmark")
+             }
+             .buttonStyle(.borderedProminent)
+             .frame(width: 44, height: 44)
+             
+             Button {
+                 onSaveFile()
+             } label: {
+                 Image(systemName: "square.and.arrow.down")
+             }
+             .buttonStyle(.borderedProminent)
+             .frame(width: 44, height: 44)
+             
+             Button {
+                 onDone()
+             } label: {
+                 Image(systemName: "checkmark")
+             }
+             .buttonStyle(.borderedProminent)
+             .frame(width: 44, height: 44)
+         }
      }
      .padding(.horizontal, 8)
-     .background(Color.secondary.opacity(0.1))
+     .background(Color.gray.opacity(0.1))
      .cornerRadius(8)
      .shadow(radius: 4)
      .padding(.horizontal)
