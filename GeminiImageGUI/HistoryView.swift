@@ -56,7 +56,7 @@ struct HistoryView: View {
             searchField
             historyList
         }
-        .frame(minWidth: 200, maxHeight: .infinity)
+        .frame(minWidth: 200, maxWidth: .infinity, maxHeight: .infinity) // Added maxWidth: .infinity for better iOS sizing
         .navigationTitle("History")
         .alert("Delete History Item", isPresented: $showDeleteAlert) {
             Button("Delete Prompt Only") {
@@ -77,15 +77,11 @@ struct HistoryView: View {
         } message: {
             Text("Are you sure you want to clear the history?")
         }
-        #if os(iOS)
-        .fullScreenCover(item: $fullHistoryItemId) { id in
-            FullHistoryItemView(initialId: id)
-                .environmentObject(appState)
-        }
-        #endif
+
     }
     
     private var header: some View {
+        #if os(macOS)
         HStack {
             Button(action: {
                 withAnimation(.easeInOut(duration: 0.3)) {
@@ -116,6 +112,22 @@ struct HistoryView: View {
             .help("Clear all history")
         }
         .padding(.horizontal)
+        #else
+        HStack {
+            Spacer()
+            
+            Button(action: {
+                showClearHistoryAlert = true
+            }) {
+                Image(systemName: "trash")
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundColor(.red.opacity(0.8))
+            }
+            .buttonStyle(.borderless)
+            .help("Clear all history")
+        }
+        .padding(.horizontal)
+        #endif
     }
     
     private var searchField: some View {
@@ -348,7 +360,7 @@ struct FullHistoryItemView: View {
     #endif
     @State private var selectedId: UUID? = nil
     @State private var showDeleteAlert: Bool = false
-    @State private var previousSelectedId: UUID? = nil 
+    @State private var previousSelectedId: UUID? = nil
     @State private var showCopiedMessage: Bool = false
     
     private var dateFormatter: DateFormatter {
