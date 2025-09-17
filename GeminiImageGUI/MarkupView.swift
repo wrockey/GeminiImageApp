@@ -77,6 +77,14 @@ struct WindowAccessor: NSViewRepresentable {
     
     func updateNSView(_ nsView: NSView, context: Context) {}
 }
+
+class WindowCloseDelegate: NSObject, NSWindowDelegate {
+    var onAttemptClose: (() -> Bool)?
+    
+    func windowShouldClose(_ sender: NSWindow) -> Bool {
+        return onAttemptClose?() ?? true
+    }
+}
 #endif
 
 // Markup View with unified implementation (custom drawing for both platforms)
@@ -108,8 +116,10 @@ struct MarkupView: View {
  @State private var savedFilename: String = ""
  @State private var showCancelConfirmation: Bool = false
  @State private var previousScale: CGFloat? = nil
+ @State private var forceClose: Bool = false
  #if os(macOS)
  @State private var editorWindow: NSWindow? = nil
+ @State private var windowDelegate: WindowCloseDelegate? = nil
  #endif
  
  let colors: [Color] = [.red, .green, .blue, .yellow, .purple, .orange, .black, .white]
@@ -165,6 +175,7 @@ struct MarkupView: View {
      }
      .alert("Are you sure you want to exit and discard changes?", isPresented: $showCancelConfirmation) {
          Button("Discard Changes", role: .destructive) {
+             forceClose = true
              closeEditor()
          }
          Button("Cancel", role: .cancel) {}
@@ -182,6 +193,25 @@ struct MarkupView: View {
                      }
                  }
              }
+         }
+     }
+#endif
+#if os(macOS)
+     .onChange(of: editorWindow) { newWindow in
+         if let window = newWindow, windowDelegate == nil {
+             let del = WindowCloseDelegate()
+             del.onAttemptClose = {
+                 if forceClose {
+                     return true
+                 } else if hasChanges {
+                     showCancelConfirmation = true
+                     return false
+                 } else {
+                     return true
+                 }
+             }
+             window.delegate = del
+             windowDelegate = del
          }
      }
 #endif
