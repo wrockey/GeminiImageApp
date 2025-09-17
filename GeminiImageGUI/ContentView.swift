@@ -104,11 +104,11 @@ struct ContentView: View {
 
     
     private var topColor: Color {
-        colorScheme == .light ? Color(red: 242.0 / 255.0, green: 242.0 / 255.0, blue: 247.0 / 255.0) : Color(red: 28.0 / 255.0, green: 28.0 / 255.0, blue: 28.0 / 255.0)
+        colorScheme == .light ? Color(white: 0.98) : Color(white: 0.1)
     }
 
     private var bottomColor: Color {
-        colorScheme == .light ? Color(red: 229.0 / 255.0, green: 229.0 / 255.0, blue: 234.0 / 255.0) : Color(red: 44.0 / 255.0, green: 44.0 / 255.0, blue: 46.0 / 255.0)
+        colorScheme == .light ? Color(white: 0.95) : Color(white: 0.15)
     }
 
     var body: some View {
@@ -188,7 +188,7 @@ private var iOSLayout: some View {
                     endPrompt: $endPrompt
                 )
                 .environmentObject(appState)
-                .padding(.horizontal, 24)  // Increased horizontal padding for iPad comfort
+                .padding(.horizontal, 20)  // Increased horizontal padding for iPad comfort
             }
         }
         .background(LinearGradient(gradient: Gradient(colors: [topColor, bottomColor]), startPoint: .top, endPoint: .bottom))
@@ -277,7 +277,7 @@ private var iOSLayout: some View {
 
                 )
                 .environmentObject(appState)
-                .padding(.horizontal, 24)  // Add padding for better readability and alignment with iOS
+                .padding(.horizontal, 20)  // Add padding for better readability and alignment with iOS
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
