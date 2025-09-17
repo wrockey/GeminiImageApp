@@ -198,11 +198,9 @@ private var iOSLayout: some View {
                 toolbarContent
             }
         }
-        .sheet(isPresented: $showHistory) {
-            NavigationStack {
-                HistoryView(imageSlots: $appState.ui.imageSlots, columnVisibility: $columnVisibility)
-                    .environmentObject(appState)
-            }
+        .fullScreenCover(isPresented: $showHistory) {
+            HistoryView(imageSlots: $appState.ui.imageSlots, columnVisibility: $columnVisibility)
+                .environmentObject(appState)
         }
         .sheet(isPresented: Binding(get: { appState.showResponseSheet }, set: { appState.showResponseSheet = $0 })) {
             PopOutView()
@@ -342,3 +340,4 @@ private var iOSLayout: some View {
         
     
 }
+

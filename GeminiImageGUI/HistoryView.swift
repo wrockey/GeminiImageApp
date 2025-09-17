@@ -51,13 +51,12 @@ struct HistoryView: View {
     }
     
     var body: some View {
-        VStack(alignment: .leading) {
+        VStack(alignment: .leading, spacing: 0) { // Reduced spacing to 0 to minimize gaps
             header
             searchField
             historyList
         }
         .frame(minWidth: 200, maxWidth: .infinity, maxHeight: .infinity) // Added maxWidth: .infinity for better iOS sizing
-        .navigationTitle("History")
         .alert("Delete History Item", isPresented: $showDeleteAlert) {
             Button("Delete Prompt Only") {
                 deleteHistoryItem(deleteFile: false)
@@ -77,7 +76,12 @@ struct HistoryView: View {
         } message: {
             Text("Are you sure you want to clear the history?")
         }
-
+        #if os(iOS)
+        .fullScreenCover(item: $fullHistoryItemId) { id in
+            FullHistoryItemView(initialId: id)
+                .environmentObject(appState)
+        }
+        #endif
     }
     
     private var header: some View {
@@ -113,8 +117,11 @@ struct HistoryView: View {
         }
         .padding(.horizontal)
         #else
-        HStack {
-            Spacer()
+        HStack(spacing: 8) {
+            
+            Text("History")
+                .font(.system(size: 24, weight: .semibold, design: .default))
+                .kerning(0.2)
             
             Button(action: {
                 showClearHistoryAlert = true
@@ -125,8 +132,21 @@ struct HistoryView: View {
             }
             .buttonStyle(.borderless)
             .help("Clear all history")
+            
+            Spacer()
+            
+            Button(action: {
+                dismiss()
+            }) {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: 24))
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundColor(.gray)
+            }
+            .buttonStyle(.plain)
         }
         .padding(.horizontal)
+        .padding(.vertical, 8) // Reduced vertical padding to minimize space above
         #endif
     }
     
@@ -704,3 +724,4 @@ struct FullHistoryItemView: View {
         appState.ui.imageSlots.append(newSlot)
     }
 }
+

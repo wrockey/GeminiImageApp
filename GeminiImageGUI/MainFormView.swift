@@ -158,7 +158,7 @@ struct MainFormView: View {
                         .disabled(isSubmitDisabled)
                         .frame(maxWidth: .infinity, minHeight: 50)
                         .padding(.vertical, 12)
-                        .font(.system(size: 24, weight: .medium))
+                        .font(.system(size: 20, weight: .medium))
                     }
                 }
                 .padding(.vertical, -12)
@@ -225,7 +225,7 @@ struct MainFormView: View {
                             .disabled(isBatchSubmitDisabled || isLoading)
                             .frame(maxWidth: .infinity, minHeight: 50)
                             .padding(.vertical, 18)
-                            .font(.system(size: 24, weight: .medium))
+                            .font(.system(size: 20, weight: .medium))
                         }
                         .padding(.vertical, -12)
                         .offset(y: -5)
