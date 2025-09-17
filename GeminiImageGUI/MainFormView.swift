@@ -81,6 +81,7 @@ struct MainFormView: View {
                 } label: {
                     Text("Configuration")
                         .font(.system(size: 20, weight: .semibold))  // Increased label font size
+                        .help("Configure API keys, output paths, and other settings for image generation")
                 }
                 .kerning(0.2)
                 .foregroundColor(.primary) // Ensure visibility
@@ -93,6 +94,7 @@ struct MainFormView: View {
                     HStack {
                         Text("Prompt")
                             .font(.system(size: 20, weight: .semibold))  // Increased label font size
+                            .help("Enter or manage the text prompt for image generation")
                         
                         Spacer()
                         
@@ -102,7 +104,7 @@ struct MainFormView: View {
                                 .foregroundColor(.blue)
                         }
                         .buttonStyle(.borderless)
-                        .help("Paste from clipboard")
+                        .help("Paste text from clipboard into the prompt field")
                         
                         Button(action: { copyPromptToClipboard() }) {
                             Image(systemName: "doc.on.doc")
@@ -110,7 +112,7 @@ struct MainFormView: View {
                                 .foregroundColor(.green)
                         }
                         .buttonStyle(.borderless)
-                        .help("Copy to clipboard")
+                        .help("Copy the current prompt to the clipboard")
                         
                         Button(action: {
                             if !prompt.isEmpty {
@@ -124,7 +126,7 @@ struct MainFormView: View {
                                 .foregroundColor(.red)
                         }
                         .buttonStyle(.borderless)
-                        .help("Clear prompt")
+                        .help("Clear the current prompt (can be undone)")
                     }
                 }
                 
@@ -140,6 +142,7 @@ struct MainFormView: View {
                 } label: {
                     Text("Input Images")
                         .font(.system(size: 20, weight: .semibold))  // Increased label font size
+                        .help("Add or manage input images for the generation process")
                 }
                 .kerning(0.2)
                 .foregroundColor(.primary)
@@ -159,6 +162,7 @@ struct MainFormView: View {
                         .disabled(isSubmitDisabled)
                         .frame(maxWidth: .infinity, minHeight: 44)  // Standard iOS button height
                         .font(.system(size: 17, weight: .semibold))
+                        .help("Submit the current prompt and settings to generate an image")
                     }
                 }
                 .padding(.vertical, 5)
@@ -174,10 +178,13 @@ struct MainFormView: View {
                             Text("Batch File:")
                                 .font(.system(.subheadline, design: .default, weight: .medium))
                                 .foregroundColor(.secondary)
+                                .help("Select a text file containing one prompt per line for batch processing")
                             #if os(iOS)
                             Text(batchFilePath.isEmpty ? "No file selected" : URL(fileURLWithPath: batchFilePath).lastPathComponent)
+                                .help("Currently selected batch file path")
                             #else
                             Text(batchFilePath.isEmpty ? "No file selected" : batchFilePath)
+                                .help("Currently selected batch file path")
                             #endif
                             Spacer().frame(width:30)
                             
@@ -190,6 +197,7 @@ struct MainFormView: View {
                             .tint(.blue.opacity(0.8))
                             .font(.system(.body, design: .rounded, weight: .medium))
                             .shadow(color: .black.opacity(0.1), radius: 1)
+                            .help("Choose a .txt file with multiple prompts for batch generation")
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                         
@@ -198,9 +206,11 @@ struct MainFormView: View {
                                 .font(.system(.subheadline, design: .default, weight: .medium))
                                 .foregroundColor(.secondary)
                                 .frame(width: 60, alignment: .leading) // Align labels
+                                .help("Specify the starting prompt number in the batch file")
                             TextField("1", text: $startPrompt)
                                 .textFieldStyle(.roundedBorder)
                                 .frame(maxWidth: 100)
+                                .help("Enter the 1-based index of the first prompt to process (default: 1)")
                             
                             Spacer().frame(width: 50)  // Add 50px space between boxes
                             
@@ -208,9 +218,11 @@ struct MainFormView: View {
                                 .font(.system(.subheadline, design: .default, weight: .medium))
                                 .foregroundColor(.secondary)
                                 .frame(width: 60, alignment: .leading) // Align labels
+                                .help("Specify the ending prompt number in the batch file")
                             TextField("", text: $endPrompt)
                                 .textFieldStyle(.roundedBorder)
                                 .frame(maxWidth: 100)
+                                .help("Enter the 1-based index of the last prompt to process (default: last prompt)")
                             Spacer()
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -219,6 +231,7 @@ struct MainFormView: View {
                                 .foregroundColor(.secondary)
                                 .font(.system(size: 14))
                                 .padding(.top, 4)
+                                .help("The batch file should contain one prompt per line for sequential processing")
                         }
                         
                         Group {
@@ -232,6 +245,7 @@ struct MainFormView: View {
                             .disabled(isBatchSubmitDisabled || isLoading)
                             .frame(maxWidth: .infinity, minHeight: 44)
                             .font(.system(size: 17, weight: .semibold))
+                            .help("Start generating images for the selected range of prompts in batch mode")
                         }
                         .padding(.vertical, 5)
                         .offset(y: 5)
@@ -240,6 +254,7 @@ struct MainFormView: View {
                 } label: {
                     Text("Batch Mode")
                         .font(.system(size: 20, weight: .semibold))  // Increased label font size
+                        .help("Process multiple prompts from a file in batch for efficient generation")
                 }
                 .kerning(0.2)
                 .foregroundColor(.primary)
@@ -257,12 +272,13 @@ struct MainFormView: View {
                     HStack {
                         Text("Response")
                             .font(.system(size: 20, weight: .semibold))  // Increased label font size
+                            .help("View generated images and responses from the AI")
                         Spacer()
                         Button(action: onPopOut) {
                             Image(systemName: "arrow.up.forward.square")
                         }
                         .buttonStyle(.borderless)
-                        .help("Pop out to new window")
+                        .help("Pop out the response section to a new window for better viewing")
                     }
                 }
                 .foregroundColor(.primary)
@@ -277,6 +293,7 @@ struct MainFormView: View {
                     .foregroundColor(.white)
                     .cornerRadius(10)
                     .transition(.opacity)
+                    .help("Confirmation that the prompt was copied to the clipboard")
             }
         }
         .onChange(of: appState.batchPrompts) { newPrompts in  // New: Update start/end on batch load

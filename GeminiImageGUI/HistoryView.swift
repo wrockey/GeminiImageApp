@@ -568,14 +568,12 @@ struct FullHistoryItemView: View {
                             
                             Button(action: {
                                 addToInputImages(item: item)
-                                #if os(iOS)
                                 showAddedMessage = true
                                 DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
                                     withAnimation(.easeOut(duration: 0.3)) {
                                         showAddedMessage = false
                                     }
                                 }
-                                #endif
                             }) {
                                 Image(systemName: "plus.circle.fill")
                                     .font(.system(size: 24))
@@ -651,10 +649,9 @@ struct FullHistoryItemView: View {
                     .padding(.top, 50)
             }
         }
-        #if os(iOS)
         .overlay {
             if showAddedMessage {
-                Text("Image added to input images")
+                Text("Image added to input slot")
                     .font(.headline)
                     .padding()
                     .background(Color.black.opacity(0.7))
@@ -665,7 +662,6 @@ struct FullHistoryItemView: View {
                     .padding(.top, 50)
             }
         }
-        #endif
         .onAppear {
             selectedId = initialId
             previousHistory = history
