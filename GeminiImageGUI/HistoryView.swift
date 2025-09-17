@@ -118,6 +118,7 @@ struct HistoryView: View {
             Text("History")
                 .font(.system(.headline, design: .default, weight: .semibold))
                 .kerning(0.2)
+                .help("View past generated images and prompts")
             
             Spacer()
             
@@ -130,6 +131,7 @@ struct HistoryView: View {
             }
             .buttonStyle(.borderless)
             .help("Clear all history")
+            .accessibilityLabel("Clear all history")
         }
         .padding(.horizontal)
         #else
@@ -138,6 +140,7 @@ struct HistoryView: View {
             Text("History")
                 .font(.system(size: 24, weight: .semibold, design: .default))
                 .kerning(0.2)
+                .help("View past generated images and prompts")
             
             Button(action: {
                 showClearHistoryAlert = true
@@ -148,6 +151,7 @@ struct HistoryView: View {
             }
             .buttonStyle(.borderless)
             .help("Clear all history")
+            .accessibilityLabel("Clear all history")
             
             Spacer()
             
@@ -160,6 +164,8 @@ struct HistoryView: View {
                     .foregroundColor(.gray)
             }
             .buttonStyle(.plain)
+            .help("Close history view")
+            .accessibilityLabel("Close history view")
         }
         .padding(.horizontal)
         .padding(.vertical, 8) // Reduced vertical padding to minimize space above
@@ -170,6 +176,8 @@ struct HistoryView: View {
         TextField("Search prompts or dates...", text: $searchText)
             .textFieldStyle(.roundedBorder)
             .padding(.horizontal)
+            .help("Search history by prompt text or date")
+            .accessibilityLabel("Search prompts or dates")
     }
     
     private var historyList: some View {
@@ -177,6 +185,7 @@ struct HistoryView: View {
             if filteredHistory.isEmpty {
                 Text("No history yet.")
                     .foregroundColor(.secondary)
+                    .help("No generation history available yet")
             } else {
                 ForEach(filteredHistory.sorted(by: { $0.date > $1.date })) { item in
                     itemRow(for: item)
@@ -194,13 +203,17 @@ struct HistoryView: View {
                 Text(item.prompt.prefix(50) + (item.prompt.count > 50 ? "..." : ""))
                     .font(.subheadline)
                     .lineLimit(1)
+                    .help("Prompt: \(item.prompt)")
+                    .accessibilityLabel("Prompt: \(item.prompt)")
                 Text(dateFormatter.string(from: item.date))
                     .font(.caption)
                     .foregroundColor(.secondary)
+                    .help("Date: \(dateFormatter.string(from: item.date))")
                 if let mode = item.mode {
                     Text(mode == .gemini ? "Gemini" : (item.workflowName ?? "ComfyUI"))
                         .font(.caption)
                         .foregroundColor(.secondary)
+                        .help("Generated with: \(mode == .gemini ? "Gemini" : (item.workflowName ?? "ComfyUI"))")
                 }
             }
             
@@ -224,6 +237,7 @@ struct HistoryView: View {
             }
             .buttonStyle(.borderless)
             .help("View full image")
+            .accessibilityLabel("View full image")
             
             Button(action: {
                 selectedHistoryItem = item
@@ -236,6 +250,7 @@ struct HistoryView: View {
             }
             .buttonStyle(.borderless)
             .help("Delete history item")
+            .accessibilityLabel("Delete history item")
             
             Button(action: {
                 addToInputImages(item: item)
@@ -255,12 +270,14 @@ struct HistoryView: View {
             }
             .buttonStyle(.borderless)
             .help("Add to input images")
+            .accessibilityLabel("Add to input images")
         }
         .padding(.vertical, 4)
         .contextMenu {
             Button("Copy Prompt") {
                 copyPromptToClipboard(item.prompt)
             }
+            .help("Copy the prompt to clipboard")
         }
         .draggable(item.imagePath.map { URL(fileURLWithPath: $0) } ?? URL(string: "")!)
     }
@@ -271,6 +288,13 @@ struct HistoryView: View {
         @State private var thumbnail: PlatformImage? = nil
         @EnvironmentObject var appState: AppState
         
+        private var dateFormatter: DateFormatter {
+            let formatter = DateFormatter()
+            formatter.dateStyle = .short
+            formatter.timeStyle = .short
+            return formatter
+        }
+        
         var body: some View {
             Group {
                 if let img = thumbnail {
@@ -280,10 +304,13 @@ struct HistoryView: View {
                         .frame(width: 50, height: 50)
                         .cornerRadius(12)
                         .shadow(color: .black.opacity(0.2), radius: 4, x: 0, y: 2)
+                        .help("Thumbnail of generated image")
+                        .accessibilityLabel("Thumbnail of image generated on \(dateFormatter.string(from: item.date))")
                 } else {
                     Image(systemName: "photo")
                         .font(.system(size: 50))
                         .foregroundColor(.secondary)
+                        .help("Placeholder for image thumbnail")
                 }
             }
             .onAppear {
@@ -440,10 +467,13 @@ struct FullHistoryItemView: View {
                                             .resizable()
                                             .scaledToFit()
                                             .shadow(radius: 5)
+                                            .help("Full view of generated image")
+                                            .accessibilityLabel("Image generated with prompt: \(item.prompt)")
                                     } else {
                                         Text("No image available")
                                             .font(.headline)
                                             .foregroundColor(.secondary)
+                                            .help("No image available for this history item")
                                     }
                                 }
                                 .frame(width: geometry.size.width, height: geometry.size.height)
@@ -465,11 +495,14 @@ struct FullHistoryItemView: View {
                                     .frame(width: geometry.size.width, height: geometry.size.height)
                                     .shadow(radius: 5)
                                     .tag(item.id as UUID?)
+                                    .help("Full view of generated image")
+                                    .accessibilityLabel("Image generated with prompt: \(item.prompt)")
                             } else {
                                 Text("No image available")
                                     .font(.headline)
                                     .foregroundColor(.secondary)
                                     .tag(item.id as UUID?)
+                                    .help("No image available for this history item")
                             }
                         }
                     }
@@ -486,10 +519,13 @@ struct FullHistoryItemView: View {
                                             .scaledToFit()
                                             .frame(width: geometry.size.width, height: geometry.size.height)
                                             .shadow(radius: 5)
+                                            .help("Full view of generated image")
+                                            .accessibilityLabel("Image generated with prompt: \(item.prompt)")
                                     } else {
                                         Text("No image available")
                                             .font(.headline)
                                             .foregroundColor(.secondary)
+                                            .help("No image available for this history item")
                                     }
                                 }
                                 .frame(width: geometry.size.width, height: geometry.size.height)
@@ -511,6 +547,8 @@ struct FullHistoryItemView: View {
                                     .multilineTextAlignment(.leading)
                                     .lineLimit(nil)
                                     .foregroundColor(.black)
+                                    .help("The prompt used for this image")
+                                    .accessibilityLabel("Prompt: \(item.prompt)")
                                 Button(action: {
                                     copyPromptToClipboard(item.prompt)
                                     showCopiedMessage = true
@@ -526,14 +564,17 @@ struct FullHistoryItemView: View {
                                 }
                                 .buttonStyle(.borderless)
                                 .help("Copy prompt to clipboard")
+                                .accessibilityLabel("Copy prompt")
                             }
                             Text("Date: \(dateFormatter.string(from: item.date))")
                                 .font(.system(size: 10))
                                 .foregroundColor(.gray)
+                                .help("Date the image was generated")
                             if let mode = item.mode {
                                 Text("Created with: \(mode == .gemini ? "Gemini" : (item.workflowName ?? "ComfyUI"))")
                                     .font(.system(size: 10))
                                     .foregroundColor(.gray)
+                                    .help("Generation mode or workflow used")
                             }
                         }
                         
@@ -551,6 +592,8 @@ struct FullHistoryItemView: View {
                             }
                             .disabled(currentIndex == 0)
                             .buttonStyle(.plain)
+                            .help("Previous image in history")
+                            .accessibilityLabel("Previous image")
                             
                             Spacer()
                             
@@ -563,6 +606,8 @@ struct FullHistoryItemView: View {
                                     .foregroundColor(.red.opacity(0.8))
                             }
                             .buttonStyle(.plain)
+                            .help("Delete this history item")
+                            .accessibilityLabel("Delete item")
                             
                             Spacer()
                             
@@ -582,6 +627,7 @@ struct FullHistoryItemView: View {
                             }
                             .buttonStyle(.plain)
                             .help("Add to input images")
+                            .accessibilityLabel("Add to input slot")
                             
                             Spacer()
                             
@@ -598,6 +644,8 @@ struct FullHistoryItemView: View {
                             }
                             .disabled(currentIndex == history.count - 1)
                             .buttonStyle(.plain)
+                            .help("Next image in history")
+                            .accessibilityLabel("Next image")
                         }
                     }
                     .padding(8)
@@ -617,6 +665,8 @@ struct FullHistoryItemView: View {
                 }
                 .buttonStyle(.plain)
                 .padding()
+                .help("Close full image view")
+                .accessibilityLabel("Close")
             }
             #endif
         }
@@ -647,6 +697,7 @@ struct FullHistoryItemView: View {
                     .transition(.opacity)
                     .frame(maxHeight: .infinity, alignment: .top)
                     .padding(.top, 50)
+                    .help("Confirmation: Prompt copied to clipboard")
             }
         }
         .overlay {
@@ -660,6 +711,7 @@ struct FullHistoryItemView: View {
                     .transition(.opacity)
                     .frame(maxHeight: .infinity, alignment: .top)
                     .padding(.top, 50)
+                    .help("Confirmation: Image added to input slot")
             }
         }
         .onAppear {
