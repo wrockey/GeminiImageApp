@@ -11,7 +11,7 @@ struct CustomDivider: View {
         Rectangle()
             .fill(dividerColor)
             .frame(height: 1)  // Fixed thin height
-            .edgesIgnoringSafeArea(.horizontal)  // Full width
+            .padding(.vertical, 8) // Full width
     }
 
     private var dividerColor: Color {

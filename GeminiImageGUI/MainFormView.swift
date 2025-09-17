@@ -161,8 +161,8 @@ struct MainFormView: View {
                         .font(.system(size: 17, weight: .semibold))
                     }
                 }
-                .padding(.vertical, -12)
-                .offset(y: -5)
+                .padding(.vertical, 5)
+                .offset(y: 0)
                 
                 CustomDivider()
                 
@@ -214,6 +214,12 @@ struct MainFormView: View {
                             Spacer()
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
+                        if appState.batchPrompts.isEmpty {
+                            Text("Select a .txt file with one prompt per line.")
+                                .foregroundColor(.secondary)
+                                .font(.system(size: 14))
+                                .padding(.top, 4)
+                        }
                         
                         Group {
                             // New: Batch Submit button
@@ -227,8 +233,8 @@ struct MainFormView: View {
                             .frame(maxWidth: .infinity, minHeight: 44)
                             .font(.system(size: 17, weight: .semibold))
                         }
-                        .padding(.vertical, -12)
-                        .offset(y: -5)
+                        .padding(.vertical, 5)
+                        .offset(y: 5)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                 } label: {

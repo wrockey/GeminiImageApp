@@ -299,18 +299,24 @@ struct InputImagesSection: View {
                     .buttonStyle(.plain)
                     .shadow(radius: 2)
                 }
-
-                ForEach($imageSlots) { $slot in
-                    ImageSlotItemView(
-                        slot: $slot,
-                        errorMessage: $errorMessage,
-                        showErrorAlert: $showErrorAlert,
-                        onAnnotate: onAnnotate,
-                        onRemove: removeImageSlot,
-                        showCopiedMessage: $showCopiedMessage,
-                        backgroundColor: backgroundColor,
-                        systemBackgroundColor: systemBackgroundColor
-                    )
+                
+                if imageSlots.isEmpty {
+                    Text("Add images for reference (optional)")
+                        .foregroundColor(.secondary)
+                        .font(.system(size: 14))
+                } else {
+                    ForEach($imageSlots) { $slot in
+                        ImageSlotItemView(
+                            slot: $slot,
+                            errorMessage: $errorMessage,
+                            showErrorAlert: $showErrorAlert,
+                            onAnnotate: onAnnotate,
+                            onRemove: removeImageSlot,
+                            showCopiedMessage: $showCopiedMessage,
+                            backgroundColor: backgroundColor,
+                            systemBackgroundColor: systemBackgroundColor
+                        )
+                    }
                 }
             }
             
