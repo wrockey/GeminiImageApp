@@ -212,6 +212,27 @@ struct MarkupView: View {
              }
              window.delegate = del
              windowDelegate = del
+             
+             // Optimize window size
+             let screen = window.screen ?? NSScreen.main
+             guard let visibleFrame = screen?.visibleFrame else { return }
+             
+             let titleBarHeight: CGFloat = 28 // Approximate title bar height
+             let maxWidth = visibleFrame.width
+             let maxHeight = visibleFrame.height - titleBarHeight
+             
+             let imgW = image.platformSize.width
+             let imgH = image.platformSize.height
+             
+             let scaleW = maxWidth / imgW
+             let scaleH = (maxHeight - paletteHeight) / imgH
+             let scale = min(scaleW, scaleH, 1.0)
+             
+             let contentW = imgW * scale
+             let contentH = imgH * scale + paletteHeight
+             
+             window.setContentSize(CGSize(width: contentW, height: contentH))
+             window.center()
          }
      }
 #endif
@@ -354,17 +375,17 @@ struct MarkupView: View {
                                  if hasChanges {
                                      showCancelConfirmation = true
                                  } else {
-                                     closeEditor()
-                                 }
-                             },
-                             onSaveFile: {
-                                 if let img = renderAnnotatedImage() {
-                                     if let folderURL = appState.settings.outputDirectory {
-                                         saveImage(img, to: folderURL)
-                                     } else {
-                                             pendingSaveImage = img
-                                             showingFolderPicker = true
-                                         }
+                                 closeEditor()
+                             }
+                         },
+                         onSaveFile: {
+                             if let img = renderAnnotatedImage() {
+                                 if let folderURL = appState.settings.outputDirectory {
+                                     saveImage(img, to: folderURL)
+                                 } else {
+                                         pendingSaveImage = img
+                                         showingFolderPicker = true
+                                     }
                                  }
                              },
                              onDone: {
