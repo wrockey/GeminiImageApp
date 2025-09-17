@@ -31,6 +31,8 @@ struct ConfigurationSection: View {
             }
             .pickerStyle(.segmented)
             .padding(.bottom, 8)
+            .help("Select the generation mode: Gemini or ComfyUI")
+            .accessibilityLabel("Generation mode selector")
             
             if appState.settings.mode == .gemini {
                 geminiConfiguration
@@ -42,10 +44,13 @@ struct ConfigurationSection: View {
                 Text("Output Folder:")
                     .font(.system(.subheadline, design: .default, weight: .medium))
                     .foregroundColor(.secondary)
+                    .help("Select the folder where generated images will be saved")
                 #if os(iOS)
                 Text(outputPath.isEmpty ? "No folder selected" : URL(fileURLWithPath: outputPath).lastPathComponent)
+                    .help("Currently selected output folder")
                 #else
                 Text(outputPath.isEmpty ? "No folder selected" : outputPath)
+                    .help("Currently selected output folder")
                 #endif
                 Button("Browse") {
                     print("Showing output folder picker")
@@ -57,6 +62,8 @@ struct ConfigurationSection: View {
                 .tint(.blue.opacity(0.8))
                 .font(.system(.body, design: .rounded, weight: .medium))
                 .shadow(color: .black.opacity(0.1), radius: 1)
+                .help("Browse to select an output folder")
+                .accessibilityLabel("Browse output folder")
             }
             .padding(.top, 8)
             .frame(maxWidth: .infinity, alignment: .leading)  // Left-align output folder row
@@ -75,10 +82,13 @@ struct ConfigurationSection: View {
                 Text("API Key File:")
                     .font(.system(.subheadline, design: .default, weight: .medium))
                     .foregroundColor(.secondary)
+                    .help("Select a file containing your API key")
                 #if os(iOS)
                 Text(apiKeyPath.isEmpty ? "No file selected" : URL(fileURLWithPath: apiKeyPath).lastPathComponent)
+                    .help("Currently selected API key file")
                 #else
                 Text(apiKeyPath.isEmpty ? "No file selected" : apiKeyPath)
+                    .help("Currently selected API key file")
                 #endif
                 Button("Browse") {
                     print("Showing api file picker")
@@ -90,17 +100,22 @@ struct ConfigurationSection: View {
                 .tint(.blue.opacity(0.8))
                 .font(.system(.body, design: .rounded, weight: .medium))
                 .shadow(color: .black.opacity(0.1), radius: 1)
+                .help("Browse to select an API key file")
+                .accessibilityLabel("Browse API key file")
             }
             
             HStack {
                 Text("API Key:")
                     .font(.system(.subheadline, design: .default, weight: .medium))
                     .foregroundColor(.secondary)
+                    .help("Enter your API key here")
                 Group {
                     if showApiKey {
                         TextField("Enter or paste API key", text: $appState.settings.apiKey)
+                            .help("Visible API key input")
                     } else {
                         SecureField("Enter or paste API key", text: $appState.settings.apiKey)
+                            .help("Hidden API key input")
                     }
                 }
                 .textFieldStyle(.roundedBorder)
@@ -109,12 +124,15 @@ struct ConfigurationSection: View {
                 .cornerRadius(8)
                 .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.4), lineWidth: 1))
                 .autocorrectionDisabled()
+                .accessibilityLabel("API key input")
+                
                 Toggle(isOn: $showApiKey) {
                     Image(systemName: showApiKey ? "eye.slash" : "eye")
                         .symbolRenderingMode(.hierarchical)
                 }
                 .toggleStyle(.button)
                 .help("Toggle API Key Visibility")
+                .accessibilityLabel("Toggle API key visibility")
                 
                 Button("Test API") {
                     testApiKey()
@@ -124,6 +142,8 @@ struct ConfigurationSection: View {
                 .font(.system(.body, design: .rounded, weight: .medium))
                 .shadow(color: .black.opacity(0.1), radius: 1)
                 .disabled(appState.settings.apiKey.isEmpty || isTestingApi)
+                .help("Test the entered API key")
+                .accessibilityLabel("Test API key")
             }
         }
     }
@@ -136,6 +156,7 @@ struct ConfigurationSection: View {
                     Text("Server URL:")
                         .font(.system(.subheadline, design: .default, weight: .medium))
                         .foregroundColor(.secondary)
+                        .help("Enter the URL of your ComfyUI server")
                     TextField("e.g., http://localhost:8188", text: $appState.settings.comfyServerURL)
                         .textFieldStyle(.roundedBorder)
                         .font(.system(size: 15, weight: .medium, design: .monospaced))
@@ -143,16 +164,21 @@ struct ConfigurationSection: View {
                         .cornerRadius(8)
                         .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.4), lineWidth: 1))
                         .autocorrectionDisabled()
+                        .help("Server URL, e.g., http://localhost:8188")
+                        .accessibilityLabel("ComfyUI server URL")
                 }
                 
                 HStack {
                     Text("Workflow JSON or PNG:")
                         .font(.system(.subheadline, design: .default, weight: .medium))
                         .foregroundColor(.secondary)
+                        .help("Select a JSON or PNG file for the workflow")
                     #if os(iOS)
                     Text(appState.settings.comfyJSONPath.isEmpty ? "No file selected" : URL(fileURLWithPath: appState.settings.comfyJSONPath).lastPathComponent)
+                        .help("Currently selected workflow file")
                     #else
                     Text(appState.settings.comfyJSONPath.isEmpty ? "No file selected" : appState.settings.comfyJSONPath)
+                        .help("Currently selected workflow file")
                     #endif
                     Button("Browse") {
                         print("Showing json file picker")
@@ -163,6 +189,8 @@ struct ConfigurationSection: View {
                     .buttonStyle(.bordered)
                     .tint(.accentColor)  // Use system accent
                     .font(.system(size: 15, weight: .medium))
+                    .help("Browse to select a workflow JSON or PNG file")
+                    .accessibilityLabel("Browse workflow file")
                 }
                 
                 if !appState.generation.promptNodes.isEmpty {
@@ -170,12 +198,15 @@ struct ConfigurationSection: View {
                         Text("Prompt Node:")
                             .font(.system(.subheadline, design: .default, weight: .medium))
                             .foregroundColor(.secondary)
+                            .help("Select the prompt node from the workflow")
                         Picker("", selection: $appState.generation.comfyPromptNodeID) {
                             ForEach(appState.generation.promptNodes) { node in
                                 Text(node.label).tag(node.id)
                             }
                         }
                         .pickerStyle(.menu)
+                        .help("Choose the prompt node")
+                        .accessibilityLabel("Prompt node selector")
                         
                         Button(action: {
                             if let selectedNode = appState.generation.promptNodes.first(where: { $0.id == appState.generation.comfyPromptNodeID }) {
@@ -195,6 +226,7 @@ struct ConfigurationSection: View {
                         }
                         .buttonStyle(.plain)
                         .help("Copy prompt text to clipboard")
+                        .accessibilityLabel("Copy prompt text")
                     }
                 }
                 
@@ -203,12 +235,15 @@ struct ConfigurationSection: View {
                         Text("Image Node:")
                             .font(.system(.subheadline, design: .default, weight: .medium))
                             .foregroundColor(.secondary)
+                            .help("Select the image node from the workflow")
                         Picker("", selection: $appState.generation.comfyImageNodeID) {
                             ForEach(appState.generation.imageNodes) { node in
                                 Text(node.label).tag(node.id)
                             }
                         }
                         .pickerStyle(.menu)
+                        .help("Choose the image node")
+                        .accessibilityLabel("Image node selector")
                     }
                 }
                 
@@ -217,12 +252,15 @@ struct ConfigurationSection: View {
                         Text("Output Node:")
                             .font(.system(.subheadline, design: .default, weight: .medium))
                             .foregroundColor(.secondary)
+                            .help("Select the output node from the workflow")
                         Picker("", selection: $appState.generation.comfyOutputNodeID) {
                             ForEach(appState.generation.outputNodes) { node in
                                 Text(node.label).tag(node.id)
                             }
                         }
                         .pickerStyle(.menu)
+                        .help("Choose the output node")
+                        .accessibilityLabel("Output node selector")
                     }
                 }
             }
@@ -235,6 +273,7 @@ struct ConfigurationSection: View {
                     .foregroundColor(.white)
                     .cornerRadius(10)
                     .transition(.opacity)
+                    .help("Confirmation that text was copied to clipboard")
             }
         }
     }
