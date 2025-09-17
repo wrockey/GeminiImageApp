@@ -118,7 +118,7 @@ struct HistoryView: View {
         .padding(.horizontal)
         #else
         HStack(spacing: 8) {
-            
+
             Text("History")
                 .font(.system(size: 24, weight: .semibold, design: .default))
                 .kerning(0.2)
@@ -375,13 +375,12 @@ struct HistoryView: View {
 struct FullHistoryItemView: View {
     let initialId: UUID
     @EnvironmentObject var appState: AppState
-    #if os(iOS)
-    @Environment(\.dismiss) private var dismiss
-    #endif
+    @Environment(\.dismiss) private var dismiss // Removed #if os(iOS) to enable on macOS
     @State private var selectedId: UUID? = nil
     @State private var showDeleteAlert: Bool = false
     @State private var previousSelectedId: UUID? = nil
     @State private var showCopiedMessage: Bool = false
+    @State private var previousHistory: [HistoryItem] = []
     
     private var dateFormatter: DateFormatter {
         let formatter = DateFormatter()
@@ -621,7 +620,25 @@ struct FullHistoryItemView: View {
         }
         .onAppear {
             selectedId = initialId
+            previousHistory = history
             previousSelectedId = nil // Initialize previous
+        }
+        .onChange(of: history) { newHistory in
+            if let sid = selectedId, !newHistory.contains(where: { $0.id == sid }) {
+                if newHistory.isEmpty {
+                    selectedId = nil
+                    dismiss()
+                } else {
+                    let oldSorted = previousHistory
+                    if let oldIdx = oldSorted.firstIndex(where: { $0.id == sid }) {
+                        let newIdx = min(oldIdx, newHistory.count - 1)
+                        selectedId = newHistory[newIdx].id
+                    } else {
+                        selectedId = newHistory.first?.id
+                    }
+                }
+            }
+            previousHistory = newHistory
         }
         .onChange(of: selectedId) { newValue in
             if #available(iOS 17.0, macOS 14.0, *) {

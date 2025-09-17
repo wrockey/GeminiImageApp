@@ -321,7 +321,7 @@ struct ImageSlot: Identifiable {
     var selectedPromptIndex: Int = 0
 }
  
-struct HistoryItem: Identifiable, Codable {
+struct HistoryItem: Identifiable, Codable, Equatable {
     let id = UUID()
     let prompt: String
     let responseText: String
