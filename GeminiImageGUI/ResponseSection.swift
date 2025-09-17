@@ -78,6 +78,8 @@ struct ResponseSection: View {
                             imageScale = finalScale
                         }
                     )
+                    .help("Generated image. Pinch to zoom.")
+                    .accessibilityLabel("Generated image")
                     .overlay(
                         Group {
                             if showCopiedOverlay {
@@ -88,6 +90,8 @@ struct ResponseSection: View {
                                     .foregroundColor(.white)
                                     .cornerRadius(10)
                                     .transition(.opacity)
+                                    .help("Confirmation that the image was copied to the clipboard")
+                                    .accessibilityLabel("Image copied to clipboard")
                             }
                         }
                     )
@@ -100,6 +104,8 @@ struct ResponseSection: View {
                     .tint(.blue)
                     .cornerRadius(10)
                     .shadow(radius: 2)
+                    .help("View the full-size image")
+                    .accessibilityLabel("View full image")
                     
                     Button("Copy") {
                         PlatformPasteboard.clearContents()
@@ -117,6 +123,8 @@ struct ResponseSection: View {
                     .tint(.green)
                     .cornerRadius(10)
                     .shadow(radius: 2)
+                    .help("Copy the image to the clipboard")
+                    .accessibilityLabel("Copy image")
                     
                     Button("Save As...") {
                         saveImageAs(image: platformImage)
@@ -125,6 +133,8 @@ struct ResponseSection: View {
                     .tint(.purple)
                     .cornerRadius(10)
                     .shadow(radius: 2)
+                    .help("Save the image to a file")
+                    .accessibilityLabel("Save image as")
                 }
             }
             .frame(maxWidth: .infinity)
@@ -134,6 +144,8 @@ struct ResponseSection: View {
                 Text("No image generated.")
                     .font(.system(.body, weight: .medium))
                     .foregroundColor(.secondary)
+                    .help("No image has been generated yet")
+                    .accessibilityLabel("No image generated")
             }
             .frame(maxWidth: .infinity)
         }
@@ -147,6 +159,8 @@ struct ResponseSection: View {
                 .frame(maxWidth: .infinity, minHeight: 60, maxHeight: 60)  // Small initial height (decreased by ~75% from typical 60)
                 .cornerRadius(12)
                 .shadow(radius: 2)
+                .help("Placeholder for response text")
+                .accessibilityLabel("No response text")
         } else {
             Text(appState.ui.responseText)
                 .font(.system(.body))
@@ -157,6 +171,8 @@ struct ResponseSection: View {
                 .background(secondarySystemBackgroundColor)
                 .cornerRadius(12)
                 .shadow(radius: 2)
+                .help("Generated text response")
+                .accessibilityLabel("Response text: \(appState.ui.responseText)")
         }
     }
     
