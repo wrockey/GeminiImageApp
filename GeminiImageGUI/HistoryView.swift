@@ -24,6 +24,7 @@ struct HistoryView: View {
     @State private var searchText: String = ""
     @Binding var columnVisibility: NavigationSplitViewVisibility
     @State private var fullHistoryItemId: UUID? = nil
+    @State private var showAddedMessage: Bool = false
     
     #if os(macOS)
     @available(macOS 13.0, *)
@@ -80,6 +81,21 @@ struct HistoryView: View {
         .fullScreenCover(item: $fullHistoryItemId) { id in
             FullHistoryItemView(initialId: id)
                 .environmentObject(appState)
+        }
+        #endif
+        #if os(iOS)
+        .overlay {
+            if showAddedMessage {
+                Text("Image added to input images")
+                    .font(.headline)
+                    .padding()
+                    .background(Color.black.opacity(0.7))
+                    .foregroundColor(.white)
+                    .cornerRadius(10)
+                    .transition(.opacity)
+                    .frame(maxHeight: .infinity, alignment: .top)
+                    .padding(.top, 50)
+            }
         }
         #endif
     }
@@ -223,6 +239,14 @@ struct HistoryView: View {
             
             Button(action: {
                 addToInputImages(item: item)
+                #if os(iOS)
+                showAddedMessage = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                    withAnimation(.easeOut(duration: 0.3)) {
+                        showAddedMessage = false
+                    }
+                }
+                #endif
             }) {
                 Image(systemName: "plus.circle.fill")
                     .foregroundColor(.blue.opacity(0.8))
@@ -380,6 +404,7 @@ struct FullHistoryItemView: View {
     @State private var showDeleteAlert: Bool = false
     @State private var previousSelectedId: UUID? = nil
     @State private var showCopiedMessage: Bool = false
+    @State private var showAddedMessage: Bool = false
     @State private var previousHistory: [HistoryItem] = []
     
     private var dateFormatter: DateFormatter {
@@ -543,6 +568,14 @@ struct FullHistoryItemView: View {
                             
                             Button(action: {
                                 addToInputImages(item: item)
+                                #if os(iOS)
+                                showAddedMessage = true
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                                    withAnimation(.easeOut(duration: 0.3)) {
+                                        showAddedMessage = false
+                                    }
+                                }
+                                #endif
                             }) {
                                 Image(systemName: "plus.circle.fill")
                                     .font(.system(size: 24))
@@ -618,6 +651,21 @@ struct FullHistoryItemView: View {
                     .padding(.top, 50)
             }
         }
+        #if os(iOS)
+        .overlay {
+            if showAddedMessage {
+                Text("Image added to input images")
+                    .font(.headline)
+                    .padding()
+                    .background(Color.black.opacity(0.7))
+                    .foregroundColor(.white)
+                    .cornerRadius(10)
+                    .transition(.opacity)
+                    .frame(maxHeight: .infinity, alignment: .top)
+                    .padding(.top, 50)
+            }
+        }
+        #endif
         .onAppear {
             selectedId = initialId
             previousHistory = history
@@ -741,4 +789,3 @@ struct FullHistoryItemView: View {
         appState.ui.imageSlots.append(newSlot)
     }
 }
-
