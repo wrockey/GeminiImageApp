@@ -302,6 +302,7 @@ private var iOSLayout: some View {
             }) {
                 Image(systemName: "key")
                     .symbolRenderingMode(.hierarchical)
+
             }
             .help("Load API Key")
 

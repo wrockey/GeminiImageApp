@@ -153,12 +153,12 @@ struct MainFormView: View {
                         Button("Submit") {
                             onSubmit()
                         }
-                        .controlSize(.large)
                         .buttonStyle(.borderedProminent)
+                        .tint(.blue)  // System blue for accent
+                        .controlSize(.large)
                         .disabled(isSubmitDisabled)
-                        .frame(maxWidth: .infinity, minHeight: 50)
-                        .padding(.vertical, 12)
-                        .font(.system(size: 20, weight: .medium))
+                        .frame(maxWidth: .infinity, minHeight: 44)  // Standard iOS button height
+                        .font(.system(size: 17, weight: .semibold))
                     }
                 }
                 .padding(.vertical, -12)
@@ -220,12 +220,12 @@ struct MainFormView: View {
                             Button("Submit Batch Job") {
                                 onBatchSubmit()
                             }
-                            .controlSize(.large)
                             .buttonStyle(.borderedProminent)
+                            .tint(.blue)
+                            .controlSize(.large)
                             .disabled(isBatchSubmitDisabled || isLoading)
-                            .frame(maxWidth: .infinity, minHeight: 50)
-                            .padding(.vertical, 18)
-                            .font(.system(size: 20, weight: .medium))
+                            .frame(maxWidth: .infinity, minHeight: 44)
+                            .font(.system(size: 17, weight: .semibold))
                         }
                         .padding(.vertical, -12)
                         .offset(y: -5)

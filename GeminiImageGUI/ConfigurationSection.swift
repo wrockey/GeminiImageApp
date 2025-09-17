@@ -98,13 +98,13 @@ struct ConfigurationSection: View {
                     .foregroundColor(.secondary)
                 Group {
                     if showApiKey {
-                        TextField("API Key", text: $appState.settings.apiKey)
+                        TextField("Enter or paste API key", text: $appState.settings.apiKey)
                     } else {
-                        SecureField("API Key", text: $appState.settings.apiKey)
+                        SecureField("Enter or paste API key", text: $appState.settings.apiKey)
                     }
                 }
                 .textFieldStyle(.roundedBorder)
-                .font(.system(.body, design: .monospaced))
+                .font(.system(size: 15, weight: .medium, design: .monospaced))
                 .background(Color.black.opacity(0.1))
                 .cornerRadius(8)
                 .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.4), lineWidth: 1))
@@ -136,9 +136,9 @@ struct ConfigurationSection: View {
                     Text("Server URL:")
                         .font(.system(.subheadline, design: .default, weight: .medium))
                         .foregroundColor(.secondary)
-                    TextField("http://localhost:8188", text: $appState.settings.comfyServerURL)
+                    TextField("e.g., http://localhost:8188", text: $appState.settings.comfyServerURL)
                         .textFieldStyle(.roundedBorder)
-                        .font(.system(.body, design: .monospaced))
+                        .font(.system(size: 15, weight: .medium, design: .monospaced))
                         .background(Color.black.opacity(0.1))
                         .cornerRadius(8)
                         .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.4), lineWidth: 1))
@@ -161,9 +161,8 @@ struct ConfigurationSection: View {
                         }
                     }
                     .buttonStyle(.bordered)
-                    .tint(.blue.opacity(0.8))
-                    .font(.system(.body, design: .rounded, weight: .medium))
-                    .shadow(color: .black.opacity(0.1), radius: 1)
+                    .tint(.accentColor)  // Use system accent
+                    .font(.system(size: 15, weight: .medium))
                 }
                 
                 if !appState.generation.promptNodes.isEmpty {

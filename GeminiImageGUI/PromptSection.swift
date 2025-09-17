@@ -7,12 +7,19 @@ struct PromptSection: View {
     var body: some View {
         VStack(spacing: 16) {
             TextEditor(text: $prompt)
-                .frame(minHeight: 150)
-                .background(Color.black.opacity(0.1))
-                .cornerRadius(8)
-                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.4), lineWidth: 1))
-                .font(.system(.body, design: .default))
-                .autocorrectionDisabled()
+                .frame(minHeight: 120)  // Slightly reduced for compactness
+                .background(Color(.systemBackground).opacity(0.5))
+                .cornerRadius(12)  // Softer corners
+                .overlay {
+                    if prompt.isEmpty {
+                        Text("Enter your image generation prompt here...")
+                            .foregroundColor(.secondary)
+                            .padding(8)
+                            .allowsHitTesting(false)
+                    }
+                }
+                .font(.system(size: 16, weight: .regular, design: .default))
         }
     }
+    
 }
