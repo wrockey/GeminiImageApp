@@ -47,6 +47,12 @@ extension View {
             OnboardingView()
         }
     }
+
+    func helpSheet(showHelp: Binding<Bool>, mode: GenerationMode) -> some View {
+        sheet(isPresented: showHelp) {
+            HelpView(mode: mode)
+        }
+    }
 }
 
 enum GenerationError: Error {
@@ -89,6 +95,7 @@ struct ContentView: View {
     @State var endPrompt: String = ""  // Removed 'private'
     @State var successMessage: String = ""  // Removed 'private'
     @State var showSuccessAlert: Bool = false  // Removed 'private'
+    @State var showHelp: Bool = false  // New: For help sheet
     @AppStorage("hasLaunchedBefore") var hasLaunchedBefore: Bool = false
     @AppStorage("configExpanded") private var configExpanded: Bool = true
     @AppStorage("promptExpanded") private var promptExpanded: Bool = true
@@ -119,6 +126,7 @@ struct ContentView: View {
             .errorAlert(showErrorAlert: $showErrorAlert, errorMessage: errorMessage)
             .successAlert(showSuccessAlert: $showSuccessAlert, successMessage: successMessage)
             .onboardingSheet(showOnboarding: $showOnboarding)
+            .helpSheet(showHelp: $showHelp, mode: appState.settings.mode)
             .onAppear {
                 performOnAppear()
             }
@@ -132,6 +140,7 @@ struct ContentView: View {
             .errorAlert(showErrorAlert: $showErrorAlert, errorMessage: errorMessage)
             .successAlert(showSuccessAlert: $showSuccessAlert, successMessage: successMessage)
             .onboardingSheet(showOnboarding: $showOnboarding)
+            .helpSheet(showHelp: $showHelp, mode: appState.settings.mode)
             .onAppear {
                 performOnAppear()
             }
@@ -192,7 +201,7 @@ private var iOSLayout: some View {
             }
         }
         .background(LinearGradient(gradient: Gradient(colors: [topColor, bottomColor]), startPoint: .top, endPoint: .bottom))
-        .navigationTitle("Gemini Image")
+        .navigationTitle("")
         .toolbar {
             ToolbarItemGroup(placement: .navigationBarTrailing) {
                 toolbarContent
@@ -336,9 +345,24 @@ private var iOSLayout: some View {
                     .symbolRenderingMode(.hierarchical)
             }
             .help("Toggle History Sidebar")
+
+            Button(action: {
+                showHelp = true
+            }) {
+                Image(systemName: "questionmark.circle")
+                    .symbolRenderingMode(.hierarchical)
+            }
+            .help("Help & Guide")
+
+            Button(action: {
+                showOnboarding = true
+            }) {
+                Image(systemName: "info.circle")
+                    .symbolRenderingMode(.hierarchical)
+            }
+            .help("Show onboarding guide")
         }
     }
         
     
 }
-
