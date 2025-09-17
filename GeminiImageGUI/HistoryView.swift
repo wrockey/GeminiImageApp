@@ -612,6 +612,10 @@ struct FullHistoryItemView: View {
 
     
     private func deleteHistoryItem(item: HistoryItem, deleteFile: Bool) {
+        // Compute sorted history and current index before deletion
+        let currentHistory = appState.historyState.history.sorted(by: { $0.date > $1.date })
+        guard let oldIdx = currentHistory.firstIndex(where: { $0.id == item.id }) else { return }
+        
         if deleteFile, let path = item.imagePath {
             let fileURL = URL(fileURLWithPath: path)
             let fileManager = FileManager.default
@@ -631,10 +635,13 @@ struct FullHistoryItemView: View {
             appState.historyState.saveHistory()
         }
         
-        // Adjust selectedId after deletion
-        if let idx = currentIndex, idx >= appState.historyState.history.count {
-            let newIdx = max(0, appState.historyState.history.count - 1)
-            selectedId = appState.historyState.history.isEmpty ? nil : appState.historyState.history[newIdx].id
+        // Recompute sorted history after deletion
+        let newHistory = appState.historyState.history.sorted(by: { $0.date > $1.date })
+        if newHistory.isEmpty {
+            selectedId = nil
+        } else {
+            let newIdx = min(oldIdx, newHistory.count - 1)
+            selectedId = newHistory[newIdx].id
         }
     }
     
