@@ -26,10 +26,18 @@ struct ResponseSection: View {
             imageScale = 1.0
         }
         .alert("Delete Response", isPresented: $showDeleteAlert) {
-            Button("Delete Text Only") {
+            Button("Delete Image from History Only") {
                 appState.ui.responseText = ""
+                appState.ui.outputImage = nil
+                if let latestItem = appState.historyState.history.max(by: { $0.date < $1.date }) {
+                    // remove from history without deleting file
+                    if let index = appState.historyState.history.firstIndex(where: { $0.id == latestItem.id }) {
+                        appState.historyState.history.remove(at: index)
+                        appState.historyState.saveHistory()
+                    }
+                }
             }
-            Button("Delete Text and Image", role: .destructive) {
+            Button("Delete History and File", role: .destructive) {
                 appState.ui.responseText = ""
                 appState.ui.outputImage = nil
                 if let latestItem = appState.historyState.history.max(by: { $0.date < $1.date }) {
@@ -62,7 +70,7 @@ struct ResponseSection: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Do you want to delete just the text or also the image?")
+            Text("Do you want to delete the image from history only or also delete the file?")
         }
     }
     
