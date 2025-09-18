@@ -57,7 +57,7 @@ struct HistoryView: View {
             searchField
             historyList
         }
-        .frame(minWidth: 200, maxWidth: .infinity, maxHeight: .infinity) // Added maxWidth: .infinity for better iOS sizing
+        .frame(minWidth: 300, maxWidth: .infinity, maxHeight: .infinity) // Added maxWidth: .infinity for better iOS sizing
         .alert("Delete History Item", isPresented: $showDeleteAlert) {
             Button("Delete from History Only") {
                 deleteHistoryItem(deleteFile: false)
