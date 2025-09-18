@@ -22,6 +22,10 @@ struct ConfigurationSection: View {
     @State private var showSuccessAlert: Bool = false
     @State private var successMessage: String = ""
     @State private var showCopiedMessage: Bool = false
+    @State private var showServerSuccessAlert: Bool = false
+    @State private var showServerErrorAlert: Bool = false
+    @State private var serverErrorMessage: String = ""
+    @State private var isTestingServer: Bool = false
     
     var body: some View {
         VStack(spacing: 16) {
@@ -73,6 +77,16 @@ struct ConfigurationSection: View {
             Button("OK") {}
         } message: {
             Text(successMessage)
+        }
+        .alert("Server Available", isPresented: $showServerSuccessAlert) {
+            Button("OK") {}
+        } message: {
+            Text("The ComfyUI server is reachable and responding.")
+        }
+        .alert("Server Error", isPresented: $showServerErrorAlert) {
+            Button("OK") {}
+        } message: {
+            Text(serverErrorMessage)
         }
     }
     
@@ -167,8 +181,20 @@ struct ConfigurationSection: View {
                         .cornerRadius(8)
                         .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.4), lineWidth: 1))
                         .autocorrectionDisabled()
+                        .frame(width: 250)  // Decreased length to roughly fit http:// with IP and port
                         .help("Server URL, e.g., http://localhost:8188")
                         .accessibilityLabel("ComfyUI server URL")
+                    Button(action: {
+                        testServer()
+                    }) {
+                        Image(systemName: isTestingServer ? "arrow.clockwise.circle" : "checkmark.circle")
+                            .font(.system(size: 16))
+                            .foregroundColor(.blue)
+                    }
+                    .buttonStyle(.borderless)
+                    .disabled(isTestingServer || appState.settings.comfyServerURL.isEmpty)
+                    .help("Check if the ComfyUI server is available")
+                    .accessibilityLabel("Test server connection")
                 }
                 
                 HStack {
@@ -323,6 +349,35 @@ struct ConfigurationSection: View {
             } catch {
                 errorMessage = "Test error: \(error.localizedDescription)"
                 showErrorAlert = true
+            }
+        }
+    }
+    
+    private func testServer() {
+        isTestingServer = true
+        serverErrorMessage = ""
+        
+        Task {
+            defer { isTestingServer = false }
+            
+            let baseURL = appState.settings.comfyServerURL.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !baseURL.isEmpty, let url = URL(string: "\(baseURL)/object_info") else {
+                serverErrorMessage = "Invalid server URL"
+                showServerErrorAlert = true
+                return
+            }
+            
+            do {
+                let (_, response) = try await URLSession.shared.data(from: url)
+                if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 {
+                    showServerSuccessAlert = true
+                } else {
+                    serverErrorMessage = "Server responded with status: \( (response as? HTTPURLResponse)?.statusCode ?? 0 )"
+                    showServerErrorAlert = true
+                }
+            } catch {
+                serverErrorMessage = "Failed to connect: \(error.localizedDescription)"
+                showServerErrorAlert = true
             }
         }
     }
