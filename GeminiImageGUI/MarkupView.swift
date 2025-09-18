@@ -420,10 +420,19 @@ struct MarkupView: View {
                  }
              )
          // Unified: Custom drawing for both platforms
-         strokesOverlay
-         currentPathOverlay
-         // Shared: Text overlays
-         textBoxesOverlay
+         if !addingText && editingTextID == nil {
+             strokesOverlay
+             currentPathOverlay
+             textBoxesOverlay
+         } else {
+             if editingTextID != nil {
+                 ForEach($textBoxes) { $box in
+                     if $box.wrappedValue.id == editingTextID {
+                         textOverlay(for: $box)
+                     }
+                 }
+             }
+         }
          addingTextOverlay
      }
      .frame(width: displaySize.width, height: displaySize.height)
