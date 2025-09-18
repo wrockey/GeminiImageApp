@@ -11,6 +11,7 @@ struct ResponseSection: View {
     
     @State private var finalScale: CGFloat = 1.0
     @State private var showCopiedOverlay: Bool = false
+    @State private var showDeleteAlert: Bool = false
     
     var body: some View {
         VStack(spacing: 16) {  // Changed to VStack for vertical layout
@@ -23,6 +24,18 @@ struct ResponseSection: View {
         .onChange(of: appState.ui.outputImage) { _ in
             finalScale = 1.0
             imageScale = 1.0
+        }
+        .alert("Delete Response", isPresented: $showDeleteAlert) {
+            Button("Delete Text Only") {
+                appState.ui.responseText = ""
+            }
+            Button("Delete Text and Image", role: .destructive) {
+                appState.ui.responseText = ""
+                appState.ui.outputImage = nil
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Do you want to delete just the text or also the image?")
         }
     }
     
@@ -97,8 +110,10 @@ struct ResponseSection: View {
                     )
                 
                 HStack(spacing: 12) {  // HStack for buttons below image
-                    Button("View") {
+                    Button {
                         showFullImage = true
+                    } label: {
+                        Image(systemName: "eye")
                     }
                     .buttonStyle(.borderedProminent)
                     .tint(.blue)
@@ -107,7 +122,7 @@ struct ResponseSection: View {
                     .help("View the full-size image")
                     .accessibilityLabel("View full image")
                     
-                    Button("Copy") {
+                    Button {
                         PlatformPasteboard.clearContents()
                         PlatformPasteboard.writeImage(platformImage)
                         withAnimation {
@@ -118,6 +133,8 @@ struct ResponseSection: View {
                                 showCopiedOverlay = false
                             }
                         }
+                    } label: {
+                        Image(systemName: "doc.on.clipboard")
                     }
                     .buttonStyle(.borderedProminent)
                     .tint(.green)
@@ -126,8 +143,10 @@ struct ResponseSection: View {
                     .help("Copy the image to the clipboard")
                     .accessibilityLabel("Copy image")
                     
-                    Button("Save As...") {
+                    Button {
                         saveImageAs(image: platformImage)
+                    } label: {
+                        Image(systemName: "square.and.arrow.down")
                     }
                     .buttonStyle(.borderedProminent)
                     .tint(.purple)
@@ -135,6 +154,18 @@ struct ResponseSection: View {
                     .shadow(radius: 2)
                     .help("Save the image to a file")
                     .accessibilityLabel("Save image as")
+                    
+                    Button {
+                        showDeleteAlert = true
+                    } label: {
+                        Image(systemName: "trash")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.red)
+                    .cornerRadius(10)
+                    .shadow(radius: 2)
+                    .help("Delete the response")
+                    .accessibilityLabel("Delete response")
                 }
             }
             .frame(maxWidth: .infinity)

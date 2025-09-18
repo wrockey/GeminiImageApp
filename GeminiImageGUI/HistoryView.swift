@@ -484,6 +484,25 @@ struct FullHistoryItemView: View {
                     .scrollTargetBehavior(.paging)
                     .scrollTargetLayout()
                     .scrollPosition(id: $selectedId)
+                    #if os(macOS)
+                    .focusable()
+                    .onKeyPress { press in
+                        if press.phase == .down {
+                            if press.key == .leftArrow {
+                                if let idx = currentIndex, idx > 0 {
+                                    selectedId = history[idx - 1].id
+                                    return .handled
+                                }
+                            } else if press.key == .rightArrow {
+                                if let idx = currentIndex, idx < history.count - 1 {
+                                    selectedId = history[idx + 1].id
+                                    return .handled
+                                }
+                            }
+                        }
+                        return .ignored
+                    }
+                    #endif
                 } else {
                     #if os(iOS)
                     TabView(selection: $selectedId) {
