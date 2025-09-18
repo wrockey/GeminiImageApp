@@ -52,16 +52,17 @@ struct ConfigurationSection: View {
                 Text(outputPath.isEmpty ? "No folder selected" : outputPath)
                     .help("Currently selected output folder")
                 #endif
-                Button("Browse") {
+                Button(action: {
                     print("Showing output folder picker")
                     PlatformFilePicker.presentOpenPanel(allowedTypes: [.folder], allowsMultiple: false, canChooseDirectories: true) { result in
                         onOutputFolderSelected(result)
                     }
+                }) {
+                    Image(systemName: "folder")
+                        .font(.system(size: 16))
+                        .foregroundColor(.blue)
                 }
-                .buttonStyle(.bordered)
-                .tint(.blue.opacity(0.8))
-                .font(.system(.body, design: .rounded, weight: .medium))
-                .shadow(color: .black.opacity(0.1), radius: 1)
+                .buttonStyle(.borderless)
                 .help("Browse to select an output folder")
                 .accessibilityLabel("Browse output folder")
             }
@@ -90,16 +91,17 @@ struct ConfigurationSection: View {
                 Text(apiKeyPath.isEmpty ? "No file selected" : apiKeyPath)
                     .help("Currently selected API key file")
                 #endif
-                Button("Browse") {
+                Button(action: {
                     print("Showing api file picker")
                     PlatformFilePicker.presentOpenPanel(allowedTypes: [.plainText], allowsMultiple: false, canChooseDirectories: false) { result in
                         onApiKeySelected(result)
                     }
+                }) {
+                    Image(systemName: "doc")
+                        .font(.system(size: 16))
+                        .foregroundColor(.blue)
                 }
-                .buttonStyle(.bordered)
-                .tint(.blue.opacity(0.8))
-                .font(.system(.body, design: .rounded, weight: .medium))
-                .shadow(color: .black.opacity(0.1), radius: 1)
+                .buttonStyle(.borderless)
                 .help("Browse to select an API key file")
                 .accessibilityLabel("Browse API key file")
             }
@@ -134,13 +136,14 @@ struct ConfigurationSection: View {
                 .help("Toggle API Key Visibility")
                 .accessibilityLabel("Toggle API key visibility")
                 
-                Button("Test API") {
+                Button(action: {
                     testApiKey()
+                }) {
+                    Image(systemName: "checkmark.circle")
+                        .font(.system(size: 16))
+                        .foregroundColor(.blue)
                 }
-                .buttonStyle(.bordered)
-                .tint(.blue.opacity(0.8))
-                .font(.system(.body, design: .rounded, weight: .medium))
-                .shadow(color: .black.opacity(0.1), radius: 1)
+                .buttonStyle(.borderless)
                 .disabled(appState.settings.apiKey.isEmpty || isTestingApi)
                 .help("Test the entered API key")
                 .accessibilityLabel("Test API key")
@@ -180,15 +183,17 @@ struct ConfigurationSection: View {
                     Text(appState.settings.comfyJSONPath.isEmpty ? "No file selected" : appState.settings.comfyJSONPath)
                         .help("Currently selected workflow file")
                     #endif
-                    Button("Browse") {
+                    Button(action: {
                         print("Showing json file picker")
                         PlatformFilePicker.presentOpenPanel(allowedTypes: [.json, .png], allowsMultiple: false, canChooseDirectories: false) { result in
                             onComfyJSONSelected(result)
                         }
+                    }) {
+                        Image(systemName: "doc")
+                            .font(.system(size: 16))
+                            .foregroundColor(.blue)
                     }
-                    .buttonStyle(.bordered)
-                    .tint(.accentColor)  // Use system accent
-                    .font(.system(size: 15, weight: .medium))
+                    .buttonStyle(.borderless)
                     .help("Browse to select a workflow JSON or PNG file")
                     .accessibilityLabel("Browse workflow file")
                 }
