@@ -59,15 +59,15 @@ struct HistoryView: View {
         }
         .frame(minWidth: 200, maxWidth: .infinity, maxHeight: .infinity) // Added maxWidth: .infinity for better iOS sizing
         .alert("Delete History Item", isPresented: $showDeleteAlert) {
-            Button("Delete Prompt Only") {
+            Button("Delete from History Only") {
                 deleteHistoryItem(deleteFile: false)
             }
-            Button("Delete Prompt and Image File", role: .destructive) {
+            Button("Delete from History and File", role: .destructive) {
                 deleteHistoryItem(deleteFile: true)
             }
             Button("Cancel", role: .cancel) {}
         } message : {
-            Text("Do you want to delete just the prompt or also the associated image file?")
+            Text("Do you want to delete from history only or also delete the file?")
         }
         .alert("Clear History", isPresented: $showClearHistoryAlert) {
             Button("Yes", role: .destructive) {
@@ -691,19 +691,19 @@ struct FullHistoryItemView: View {
         }
         .ignoresSafeArea()
         .alert("Delete History Item", isPresented: $showDeleteAlert) {
-            Button("Delete Prompt Only") {
+            Button("Delete from History Only") {
                 if let item = currentItem {
                     deleteHistoryItem(item: item, deleteFile: false)
                 }
             }
-            Button("Delete Prompt and Image File", role: .destructive) {
+            Button("Delete History and File", role: .destructive) {
                 if let item = currentItem {
                     deleteHistoryItem(item: item, deleteFile: true)
                 }
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Do you want to delete just the prompt or also the associated image file?")
+            Text("Do you want to delete from history only or also delete the file?")
         }
         .overlay {
             if showCopiedMessage {
