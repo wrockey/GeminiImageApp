@@ -333,6 +333,9 @@ struct MarkupView: View {
                  .font(.system(size: 30))
                  .foregroundColor(.gray)
          }
+         .help("Close editor")
+         .accessibilityLabel("Close")
+         .accessibilityHint("Closes the markup editor, discarding changes if any")
          .position(x: geo.size.width - 20 - geo.safeAreaInsets.trailing, y: geo.safeAreaInsets.top + 20)
      }
      .applySafeAreaPadding(.top, geo.safeAreaInsets.top)
@@ -505,6 +508,8 @@ struct MarkupView: View {
              }
          }
      }
+     .accessibilityLabel("Image annotation area")
+     .accessibilityHint("Draw with pen or add text annotations here")
  }
  
  private var strokesOverlay: some View {
@@ -550,6 +555,9 @@ struct MarkupView: View {
          .onTapGesture {} // Consume tap to prevent parent onTap from defocusing
      
      return positionedView
+         .accessibilityLabel("Editable text annotation")
+         .accessibilityValue(box.text.wrappedValue)
+         .accessibilityHint("Edit the text content")
  }
  
  private func draggableTextView(for box: Binding<TextBox>) -> some View {
@@ -586,6 +594,9 @@ struct MarkupView: View {
                  .onTapGesture {} // Consume tap to prevent parent onTap from defocusing
              
              positionedView
+                 .accessibilityLabel("New text annotation")
+                 .accessibilityValue(currentText)
+                 .accessibilityHint("Enter new text to annotate the image")
          }
      }
  }
@@ -732,6 +743,8 @@ struct DraggableText: View {
          .onTapGesture(perform: onTap)
      
      return tappableText
+         .accessibilityLabel("Text annotation: \(box.text)")
+         .accessibilityHint("Double tap to edit, drag to move")
  }
 }
 
@@ -753,6 +766,20 @@ struct ColorPickerButton: View {
  }
  }
  }
+}
+
+private func colorName(for color: Color) -> String {
+    switch color {
+    case .red: return "red"
+    case .green: return "green"
+    case .blue: return "blue"
+    case .yellow: return "yellow"
+    case .purple: return "purple"
+    case .orange: return "orange"
+    case .black: return "black"
+    case .white: return "white"
+    default: return "custom"
+    }
 }
 
 struct FloatingPaletteView: View {
@@ -783,6 +810,9 @@ struct FloatingPaletteView: View {
              }
              .buttonStyle(.bordered)
              .frame(width: 44, height: 44)
+             .help("Toggle text annotation mode")
+             .accessibilityLabel("Text tool")
+             .accessibilityHint("Adds or edits text annotations on the image")
              
              Button {
                  onUndo()
@@ -792,6 +822,9 @@ struct FloatingPaletteView: View {
              .buttonStyle(.bordered)
              .disabled(!canUndo)
              .frame(width: 44, height: 44)
+             .help("Undo last annotation action")
+             .accessibilityLabel("Undo")
+             .accessibilityHint("Reverts the most recent change")
              
              Button {
                  onClear()
@@ -800,6 +833,9 @@ struct FloatingPaletteView: View {
              }
              .buttonStyle(.bordered)
              .frame(width: 44, height: 44)
+             .help("Clear all annotations")
+             .accessibilityLabel("Clear")
+             .accessibilityHint("Removes all drawings and text from the image")
          }
          
          Spacer()
@@ -808,12 +844,16 @@ struct FloatingPaletteView: View {
          HStack(spacing: 4) {
              Text("Pen Color:")
                  .font(.caption)
+                 .accessibilityHidden(true) // Since it's visual label
              
              ForEach(colors, id: \.self) { col in
                  Button(action: { color = col }) {
                      ColorPickerButton(col: col, isSelected: col == $color.wrappedValue)
                  }
                  .buttonStyle(.plain)
+                 .help("Select \(colorName(for: col)) color for pen or text")
+                 .accessibilityLabel("\(colorName(for: col).capitalized) color")
+                 .accessibilityHint("Changes the color of the pen or text to \(colorName(for: col))")
              }
          }
          
@@ -823,9 +863,14 @@ struct FloatingPaletteView: View {
          HStack(spacing: 8) {
              Text("Width:")
                  .font(.caption)
+                 .accessibilityHidden(true) // Visual label
              
              Slider(value: $lineWidth, in: 1...20)
                  .frame(width: 100) // Slightly wider slider for better usability
+                 .help("Adjust the pen line width")
+                 .accessibilityLabel("Line width")
+                 .accessibilityValue("\(Int(lineWidth))")
+                 .accessibilityHint("Slide to change the thickness of the drawing line, from 1 to 20")
          }
          
          Spacer()
@@ -839,6 +884,9 @@ struct FloatingPaletteView: View {
              }
              .buttonStyle(.borderedProminent)
              .frame(width: 44, height: 44)
+             .help("Cancel and close without saving")
+             .accessibilityLabel("Cancel")
+             .accessibilityHint("Closes the editor, discarding any changes")
              
              Button {
                  onSaveFile()
@@ -847,6 +895,9 @@ struct FloatingPaletteView: View {
              }
              .buttonStyle(.borderedProminent)
              .frame(width: 44, height: 44)
+             .help("Save annotated image to a file")
+             .accessibilityLabel("Save to file")
+             .accessibilityHint("Saves the current annotations to a new image file")
              
              Button {
                  onDone()
@@ -855,6 +906,9 @@ struct FloatingPaletteView: View {
              }
              .buttonStyle(.borderedProminent)
              .frame(width: 44, height: 44)
+             .help("Apply changes and close")
+             .accessibilityLabel("Done")
+             .accessibilityHint("Saves the annotations and closes the editor")
          }
      }
      .padding(.horizontal, 8)
