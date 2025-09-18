@@ -263,6 +263,7 @@ struct InputImagesSection: View {
     @EnvironmentObject var appState: AppState
     
     @State private var showCopiedMessage: Bool = false
+    @State private var showClearConfirmation: Bool = false
     
     private var backgroundColor: Color {
         #if os(iOS)
@@ -290,20 +291,27 @@ struct InputImagesSection: View {
                     }
                     .buttonStyle(.plain)  // Cleaner look
                     .shadow(radius: 2)
+                    .help("Add a new image slot") // Tooltip
+                    .accessibilityLabel("Add image slot")
+                    .accessibilityHint("Adds a new slot for uploading or pasting an image.")
 
-                    Button(action: clearImageSlots) {
+                    Button(action: { showClearConfirmation = true }) {
                         Image(systemName: "trash.circle.fill")
                             .font(.system(size: 24))
                             .foregroundColor(.red)
                     }
                     .buttonStyle(.plain)
                     .shadow(radius: 2)
+                    .help("Remove all image slots") // Tooltip
+                    .accessibilityLabel("Clear all images")
+                    .accessibilityHint("Removes all loaded images and slots.")
                 }
                 
                 if imageSlots.isEmpty {
                     Text("Add images for reference (optional)")
                         .foregroundColor(.secondary)
                         .font(.system(size: 14))
+                        .accessibilityLabel("Add images for reference (optional)")
                 } else {
                     ForEach($imageSlots) { $slot in
                         ImageSlotItemView(
@@ -328,7 +336,15 @@ struct InputImagesSection: View {
                     .foregroundColor(.white)
                     .cornerRadius(10)
                     .transition(.opacity)
+                    .accessibilityLabel("Copied to Clipboard")
+                    .accessibilityHint("The prompt text has been copied.")
             }
+        }
+        .alert("Confirm Removal", isPresented: $showClearConfirmation) {
+            Button("Yes", role: .destructive) { clearImageSlots() }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("Are you sure you want to remove all input image slots?")
         }
     }
 
@@ -381,6 +397,8 @@ struct ImageSlotItemView: View {
                             .frame(width: 150, height: 150)  // Larger preview
                             .cornerRadius(16)
                             .shadow(radius: 4)
+                            .accessibilityLabel("Loaded image")
+                            .accessibilityHint("Preview of the selected or pasted image.")
                     } else {
                         if #available(iOS 17.0, *) {
                             Rectangle()
@@ -388,12 +406,16 @@ struct ImageSlotItemView: View {
                                 .frame(width: 150, height: 150)
                                 .cornerRadius(16)
                                 .shadow(radius: 4)
+                                .accessibilityLabel("Empty image slot")
+                                .accessibilityHint("No image loaded yet. Use browse or paste to add one.")
                         } else {
                             Rectangle()
                                 .fill(backgroundColor)
                                 .frame(width: 150, height: 150)
                                 .cornerRadius(16)
                                 .shadow(radius: 4)
+                                .accessibilityLabel("Empty image slot")
+                                .accessibilityHint("No image loaded yet. Use browse or paste to add one.")
                             // Fallback on earlier versions
                         }
                     }
@@ -412,30 +434,48 @@ struct ImageSlotItemView: View {
                 #endif
                 
                 VStack(alignment: .leading, spacing: 12) {  // More spacing
-                    Text(slot.path.isEmpty ? "No image selected" : {
+                    HStack {
+                        Text(slot.path.isEmpty ? "No image selected" : {
 #if os(iOS)
-                        return URL(fileURLWithPath: slot.path).lastPathComponent
+                            return URL(fileURLWithPath: slot.path).lastPathComponent
 #else
-                        return slot.path
+                            return slot.path
 #endif
-                    }())
-                    .font(.system(.body, weight: .medium))
-                    .foregroundColor(.primary)
-                    
-                    HStack(spacing: 8) {  // Group buttons horizontally for compactness
-                        Button("Browse") { showImageOpenPanel() }
-                            .buttonStyle(.borderedProminent)
-                            .tint(.blue)
-                            .cornerRadius(10)
-                            .shadow(radius: 2)
+                        }())
+                        .font(.system(.body, weight: .medium))
+                        .foregroundColor(.primary)
+                        .accessibilityLabel("Image path")
+                        .accessibilityValue(slot.path.isEmpty ? "No image selected" : slot.path)
                         
-                        Button("Paste") { pasteImage() }
-                            .buttonStyle(.borderedProminent)
-                            .tint(.green)
-                            .cornerRadius(10)
-                            .shadow(radius: 2)
+                        Spacer()
                         
-                        Button("Annotate") {
+                        Button {
+                            showImageOpenPanel()
+                        } label: {
+                            Image(systemName: "folder.badge.plus")
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(.blue)
+                        .cornerRadius(10)
+                        .shadow(radius: 2)
+                        .help("Browse for an image file") // Tooltip
+                        .accessibilityLabel("Browse")
+                        .accessibilityHint("Opens file picker to select an image.")
+                        
+                        Button {
+                            pasteImage()
+                        } label: {
+                            Image(systemName: "doc.on.clipboard")
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(.green)
+                        .cornerRadius(10)
+                        .shadow(radius: 2)
+                        .help("Paste image from clipboard") // Tooltip
+                        .accessibilityLabel("Paste")
+                        .accessibilityHint("Pastes an image from the clipboard into this slot.")
+                        
+                        Button {
                             if slot.image != nil {
                                 print("DEBUG: Annotate tapped for slot \(slot.id), image exists: true")
                                 onAnnotate(slot.id)
@@ -444,11 +484,16 @@ struct ImageSlotItemView: View {
                                 errorMessage = "No image loaded to annotate."
                                 showErrorAlert = true
                             }
+                        } label: {
+                            Image(systemName: "square.and.pencil")
                         }
                         .buttonStyle(.borderedProminent)
                         .tint(.purple)
                         .cornerRadius(10)
                         .shadow(radius: 2)
+                        .help("Annotate the loaded image") // Tooltip
+                        .accessibilityLabel("Annotate")
+                        .accessibilityHint("Opens annotation tool for the loaded image.")
                     }
                     
                     if !slot.promptNodes.isEmpty {
@@ -456,6 +501,7 @@ struct ImageSlotItemView: View {
                             Text("Embedded Workflow Prompts")
                                 .font(.caption)
                                 .foregroundColor(.secondary)
+                                .accessibilityLabel("Embedded Workflow Prompts")
                             
                             Picker("Select Prompt", selection: $slot.selectedPromptIndex) {
                                 ForEach(0..<slot.promptNodes.count, id: \.self) { index in
@@ -464,8 +510,11 @@ struct ImageSlotItemView: View {
                                 }
                             }
                             .pickerStyle(.menu)  // Dropdown-style menu on both iOS and macOS
+                            .help("Select a prompt from the embedded workflow") // Tooltip
+                            .accessibilityLabel("Select Prompt")
+                            .accessibilityHint("Choose a prompt node from the list.")
                             
-                            Button("Copy Prompt") {
+                            Button {
                                 let selectedText = slot.promptNodes[slot.selectedPromptIndex].promptText ?? ""
                                 copyToClipboard(selectedText)
                                 withAnimation {
@@ -476,11 +525,16 @@ struct ImageSlotItemView: View {
                                         showCopiedMessage = false
                                     }
                                 }
+                            } label: {
+                                Image(systemName: "doc.on.doc")
                             }
                             .buttonStyle(.bordered)
                             .tint(.green)
                             .cornerRadius(10)
                             .shadow(radius: 2)
+                            .help("Copy selected prompt to clipboard") // Tooltip
+                            .accessibilityLabel("Copy Prompt")
+                            .accessibilityHint("Copies the selected prompt text to the clipboard.")
                         }
                     }
                 }
@@ -494,6 +548,9 @@ struct ImageSlotItemView: View {
                 }
                 .buttonStyle(.plain)
                 .shadow(radius: 2)
+                .help("Remove this image slot") // Tooltip
+                .accessibilityLabel("Remove image slot")
+                .accessibilityHint("Removes this image and its slot.")
             }
             .padding(16)
             //caused thick black line
@@ -501,7 +558,7 @@ struct ImageSlotItemView: View {
             .cornerRadius(16)  // Card style for each slot
             .shadow(color: .black.opacity(0.1), radius: 2)  // Softer shadow
         } else {
-            // Fallback on earlier versions
+            EmptyView()  // Fallback on earlier versions
         }
     }
     
