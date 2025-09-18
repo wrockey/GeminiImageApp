@@ -3,6 +3,11 @@ import Foundation
 
 extension ContentView {
     func submitPrompt() {
+        if outputPath.isEmpty {
+            pendingAction = submitPrompt
+            showSelectFolderAlert = true
+            return
+        }
         isLoading = true
         errorMessage = nil
         appState.ui.responseText = ""

@@ -53,6 +53,17 @@ extension View {
             HelpView(mode: mode)
         }
     }
+
+    func selectFolderAlert(isPresented: Binding<Bool>, selectHandler: @escaping () -> Void) -> some View {
+        alert("Select Output Folder", isPresented: isPresented) {
+            Button("Select Folder") {
+                selectHandler()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Please select an output folder before submitting the prompt.")
+        }
+    }
 }
 
 enum GenerationError: Error {
@@ -96,6 +107,8 @@ struct ContentView: View {
     @State var successMessage: String = ""  // Removed 'private'
     @State var showSuccessAlert: Bool = false  // Removed 'private'
     @State var showHelp: Bool = false  // New: For help sheet
+    @State var showSelectFolderAlert: Bool = false // New: For output folder alert
+    @State var pendingAction: (() -> Void)? = nil // New: For pending submit action
     @AppStorage("hasLaunchedBefore") var hasLaunchedBefore: Bool = false
     @AppStorage("configExpanded") private var configExpanded: Bool = true
     @AppStorage("promptExpanded") private var promptExpanded: Bool = true
@@ -108,18 +121,18 @@ struct ContentView: View {
     @State private var showHistory: Bool = false
     @State private var columnVisibility: NavigationSplitViewVisibility = .detailOnly
 #endif
-
+    
     
     private var topColor: Color {
         colorScheme == .light ? Color(white: 0.98) : Color(white: 0.1)
     }
-
+    
     private var bottomColor: Color {
         colorScheme == .light ? Color(white: 0.95) : Color(white: 0.15)
     }
-
+    
     var body: some View {
-        #if os(iOS)
+#if os(iOS)
         iOSLayout
             .workflowErrorAlert(appState: appState)
             .fullImageSheet(showFullImage: $showFullImage, outputImage: appState.ui.outputImage)
@@ -127,13 +140,23 @@ struct ContentView: View {
             .successAlert(showSuccessAlert: $showSuccessAlert, successMessage: successMessage)
             .onboardingSheet(showOnboarding: $showOnboarding)
             .helpSheet(showHelp: $showHelp, mode: appState.settings.mode)
+            .selectFolderAlert(isPresented: $showSelectFolderAlert) { // New: Attach alert modifier
+                print("Showing output folder picker from alert")
+                PlatformFilePicker.presentOpenPanel(allowedTypes: [.folder], allowsMultiple: false, canChooseDirectories: true) { result in
+                    handleOutputFolderSelection(result)
+                    if !outputPath.isEmpty {
+                        pendingAction?()
+                        pendingAction = nil
+                    }
+                }
+            }
             .onAppear {
                 performOnAppear()
             }
             .onChange(of: appState.ui.outputImage) { _ in
                 imageScale = 1.0
             }
-        #else
+#else
         macOSLayout
             .workflowErrorAlert(appState: appState)
             .fullImageSheet(showFullImage: $showFullImage, outputImage: appState.ui.outputImage)
@@ -141,110 +164,120 @@ struct ContentView: View {
             .successAlert(showSuccessAlert: $showSuccessAlert, successMessage: successMessage)
             .onboardingSheet(showOnboarding: $showOnboarding)
             .helpSheet(showHelp: $showHelp, mode: appState.settings.mode)
+            .selectFolderAlert(isPresented: $showSelectFolderAlert) { // New: Attach alert modifier
+                print("Showing output folder picker from alert")
+                PlatformFilePicker.presentOpenPanel(allowedTypes: [.folder], allowsMultiple: false, canChooseDirectories: true) { result in
+                    handleOutputFolderSelection(result)
+                    if !outputPath.isEmpty {
+                        pendingAction?()
+                        pendingAction = nil
+                    }
+                }
+            }
             .onAppear {
                 performOnAppear()
             }
             .onChange(of: appState.ui.outputImage) { _ in
                 imageScale = 1.0
             }
-        #endif
+#endif
     }
-
-#if os(iOS)
-@ViewBuilder
     
-private var iOSLayout: some View {
-
-    NavigationStack {
+#if os(iOS)
+    @ViewBuilder
+    
+    private var iOSLayout: some View {
         
-        ScrollView {
-            VStack(spacing: 16) {  // Added VStack for better grouping and spacing
-//                Text("Main UI")
-//                    .foregroundColor(.primary)
-//                    .font(.headline)  // Slightly bolder for hierarchy
-                MainFormView(
-                    configExpanded: $configExpanded,
-                    promptExpanded: $promptExpanded,
-                    inputImagesExpanded: $inputImagesExpanded,
-                    responseExpanded: $responseExpanded,
-                    prompt: $appState.prompt,
-                    showApiKey: $showApiKey,
-                    apiKeyPath: $apiKeyPath,
-                    outputPath: $outputPath,
-                    isTestingApi: $isTestingApi,
-                    errorMessage: $errorMessage,
-                    showErrorAlert: $showErrorAlert,
-                    imageScale: $imageScale,
-                    showFullImage: $showFullImage,
-                    isLoading: isLoading,
-                    progress: progress,
-                    isCancelled: $isCancelled,
-                    onSubmit: submitPrompt,
-                    onStop: stopGeneration,
-                    onPopOut: {
-                        appState.showResponseSheet = true
-                    },
-                    onAnnotate: { slotId in
-                        appState.showMarkupSlotId = slotId
-                    },
-                    onApiKeySelected: handleApiKeySelection,
-                    onOutputFolderSelected: handleOutputFolderSelection,
-                    onComfyJSONSelected: handleComfyJSONSelection,
-                    onBatchFileSelected: handleBatchFileSelection,
-                    onBatchSubmit: batchSubmit,
-                    batchFilePath: $batchFilePath,
-                    startPrompt: $startPrompt,
-                    endPrompt: $endPrompt
-                )
-                .environmentObject(appState)
-                .padding(.horizontal, 20)  // Increased horizontal padding for iPad comfort
+        NavigationStack {
+            
+            ScrollView {
+                VStack(spacing: 16) {  // Added VStack for better grouping and spacing
+                    //                Text("Main UI")
+                    //                    .foregroundColor(.primary)
+                    //                    .font(.headline)  // Slightly bolder for hierarchy
+                    MainFormView(
+                        configExpanded: $configExpanded,
+                        promptExpanded: $promptExpanded,
+                        inputImagesExpanded: $inputImagesExpanded,
+                        responseExpanded: $responseExpanded,
+                        prompt: $appState.prompt,
+                        showApiKey: $showApiKey,
+                        apiKeyPath: $apiKeyPath,
+                        outputPath: $outputPath,
+                        isTestingApi: $isTestingApi,
+                        errorMessage: $errorMessage,
+                        showErrorAlert: $showErrorAlert,
+                        imageScale: $imageScale,
+                        showFullImage: $showFullImage,
+                        isLoading: isLoading,
+                        progress: progress,
+                        isCancelled: $isCancelled,
+                        onSubmit: submitPrompt,
+                        onStop: stopGeneration,
+                        onPopOut: {
+                            appState.showResponseSheet = true
+                        },
+                        onAnnotate: { slotId in
+                            appState.showMarkupSlotId = slotId
+                        },
+                        onApiKeySelected: handleApiKeySelection,
+                        onOutputFolderSelected: handleOutputFolderSelection,
+                        onComfyJSONSelected: handleComfyJSONSelection,
+                        onBatchFileSelected: handleBatchFileSelection,
+                        onBatchSubmit: batchSubmit,
+                        batchFilePath: $batchFilePath,
+                        startPrompt: $startPrompt,
+                        endPrompt: $endPrompt
+                    )
+                    .environmentObject(appState)
+                    .padding(.horizontal, 20)  // Increased horizontal padding for iPad comfort
+                }
             }
-        }
-        .background(LinearGradient(gradient: Gradient(colors: [topColor, bottomColor]), startPoint: .top, endPoint: .bottom))
-        .navigationTitle("")
-        .toolbar {
-            ToolbarItemGroup(placement: .navigationBarTrailing) {
-                toolbarContent
+            .background(LinearGradient(gradient: Gradient(colors: [topColor, bottomColor]), startPoint: .top, endPoint: .bottom))
+            .navigationTitle("")
+            .toolbar {
+                ToolbarItemGroup(placement: .navigationBarTrailing) {
+                    toolbarContent
+                }
             }
-        }
-        .fullScreenCover(isPresented: $showHistory) {
-            HistoryView(imageSlots: $appState.ui.imageSlots, columnVisibility: $columnVisibility)
-                .environmentObject(appState)
-        }
-        .sheet(isPresented: Binding(get: { appState.showResponseSheet }, set: { appState.showResponseSheet = $0 })) {
-            PopOutView()
-                .environmentObject(appState)
-        }
-        .sheet(isPresented: Binding(
-            get: { appState.showFullHistoryItem != nil },
-            set: { if !$0 { appState.showFullHistoryItem = nil } }
-        )) {
-            if let id = appState.showFullHistoryItem {
-                FullHistoryItemView(initialId: id)
+            .fullScreenCover(isPresented: $showHistory) {
+                HistoryView(imageSlots: $appState.ui.imageSlots, columnVisibility: $columnVisibility)
                     .environmentObject(appState)
             }
-        }
-        .fullScreenCover(item: $appState.showMarkupSlotId) { slotId in
-            if let index = appState.ui.imageSlots.firstIndex(where: { $0.id == slotId }),
-               let image = appState.ui.imageSlots[index].image {
-                let path = appState.ui.imageSlots[index].path
-                let fileURL = URL(fileURLWithPath: path)
-                let lastComponent = fileURL.lastPathComponent
-                let components = lastComponent.components(separatedBy: ".")
-                let baseFileName = components.count > 1 ? components.dropLast().joined(separator: ".") : (lastComponent.isEmpty ? "image" : lastComponent)
-                let fileExtension = components.count > 1 ? components.last! : "png"
-                MarkupView(image: image, baseFileName: baseFileName, fileExtension: fileExtension) { updatedImage in
-                    appState.ui.imageSlots[index].image = updatedImage
+            .sheet(isPresented: Binding(get: { appState.showResponseSheet }, set: { appState.showResponseSheet = $0 })) {
+                PopOutView()
+                    .environmentObject(appState)
+            }
+            .sheet(isPresented: Binding(
+                get: { appState.showFullHistoryItem != nil },
+                set: { if !$0 { appState.showFullHistoryItem = nil } }
+            )) {
+                if let id = appState.showFullHistoryItem {
+                    FullHistoryItemView(initialId: id)
+                        .environmentObject(appState)
                 }
-                .navigationTitle("Annotate Image")
+            }
+            .fullScreenCover(item: $appState.showMarkupSlotId) { slotId in
+                if let index = appState.ui.imageSlots.firstIndex(where: { $0.id == slotId }),
+                   let image = appState.ui.imageSlots[index].image {
+                    let path = appState.ui.imageSlots[index].path
+                    let fileURL = URL(fileURLWithPath: path)
+                    let lastComponent = fileURL.lastPathComponent
+                    let components = lastComponent.components(separatedBy: ".")
+                    let baseFileName = components.count > 1 ? components.dropLast().joined(separator: ".") : (lastComponent.isEmpty ? "image" : lastComponent)
+                    let fileExtension = components.count > 1 ? components.last! : "png"
+                    MarkupView(image: image, baseFileName: baseFileName, fileExtension: fileExtension) { updatedImage in
+                        appState.ui.imageSlots[index].image = updatedImage
+                    }
+                    .navigationTitle("Annotate Image")
+                }
             }
         }
     }
-}
 #else
     @ViewBuilder
     private var macOSLayout: some View {
-
+        
         NavigationSplitView(columnVisibility: $columnVisibility) {
             HistoryView(imageSlots: $appState.ui.imageSlots, columnVisibility: $columnVisibility)
                 .environmentObject(appState)
@@ -283,14 +316,14 @@ private var iOSLayout: some View {
                     batchFilePath: $batchFilePath,
                     startPrompt: $startPrompt,
                     endPrompt: $endPrompt
-
+                    
                 )
                 .environmentObject(appState)
                 .padding(.horizontal, 20)  // Add padding for better readability and alignment with iOS
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-
+        
         
         .background(LinearGradient(gradient: Gradient(colors: [topColor, bottomColor]), startPoint: .top, endPoint: .bottom))
         .toolbar {
@@ -300,7 +333,7 @@ private var iOSLayout: some View {
         }
     }
 #endif
-
+    
     private var toolbarContent: some View {
         Group {
             Button(action: {
@@ -311,10 +344,10 @@ private var iOSLayout: some View {
             }) {
                 Image(systemName: "key")
                     .symbolRenderingMode(.hierarchical)
-
+                
             }
             .help("Load API Key")
-
+            
             Button(action: {
                 print("Showing output folder picker from toolbar")
                 PlatformFilePicker.presentOpenPanel(allowedTypes: [.folder], allowsMultiple: false, canChooseDirectories: true) { result in
@@ -325,13 +358,13 @@ private var iOSLayout: some View {
                     .symbolRenderingMode(.hierarchical)
             }
             .help("Select Output Folder")
-
+            
             Button(action: resetAppState) {
                 Image(systemName: "arrow.counterclockwise")
                     .symbolRenderingMode(.hierarchical)
             }
             .help("New Session")
-
+            
             Button(action: {
 #if os(iOS)
                 showHistory.toggle()
@@ -345,7 +378,7 @@ private var iOSLayout: some View {
                     .symbolRenderingMode(.hierarchical)
             }
             .help("Toggle History Sidebar")
-
+            
             Button(action: {
                 showHelp = true
             }) {
@@ -353,7 +386,7 @@ private var iOSLayout: some View {
                     .symbolRenderingMode(.hierarchical)
             }
             .help("Help & Guide")
-
+            
             Button(action: {
                 showOnboarding = true
             }) {
@@ -363,6 +396,4 @@ private var iOSLayout: some View {
             .help("Show onboarding guide")
         }
     }
-        
-    
 }

@@ -88,6 +88,12 @@ extension ContentView {
     }
     
     func batchSubmit() {
+        if outputPath.isEmpty {
+            pendingAction = batchSubmit
+            showSelectFolderAlert = true
+            return
+        }
+        
         let start = Int(startPrompt) ?? 1
         let end = Int(endPrompt) ?? appState.batchPrompts.count
         var failures: [(Int, String, String)] = []  // (index, prompt, errorDesc)
