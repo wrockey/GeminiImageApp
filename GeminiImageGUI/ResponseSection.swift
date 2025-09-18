@@ -32,6 +32,33 @@ struct ResponseSection: View {
             Button("Delete Text and Image", role: .destructive) {
                 appState.ui.responseText = ""
                 appState.ui.outputImage = nil
+                if let latestItem = appState.historyState.history.max(by: { $0.date < $1.date }) {
+                    // delete file
+                    if let path = latestItem.imagePath {
+                        let fileURL = URL(fileURLWithPath: path)
+                        let fileManager = FileManager.default
+                        if let dir = appState.settings.outputDirectory {
+                            do {
+                                try withSecureAccess(to: dir) {
+                                    try fileManager.removeItem(at: fileURL)
+                                }
+                            } catch {
+                                // Handle error if needed
+                            }
+                        } else {
+                            do {
+                                try fileManager.removeItem(at: fileURL)
+                            } catch {
+                                // Handle error if needed
+                            }
+                        }
+                    }
+                    // remove from history
+                    if let index = appState.historyState.history.firstIndex(where: { $0.id == latestItem.id }) {
+                        appState.historyState.history.remove(at: index)
+                        appState.historyState.saveHistory()
+                    }
+                }
             }
             Button("Cancel", role: .cancel) {}
         } message: {
