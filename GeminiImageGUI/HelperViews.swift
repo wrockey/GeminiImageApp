@@ -1,4 +1,3 @@
-//HelperViews.swift
 import SwiftUI
 #if os(macOS)
 import AppKit
@@ -268,13 +267,15 @@ struct FullImageView: View {
             }
             
             HStack {
-                Button("Copy to Clipboard") {
+                Button(action: {
                     PlatformPasteboard.clearContents()
                     PlatformPasteboard.writeImage(image)
+                }) {
+                    Image(systemName: "doc.on.doc")
                 }
-                .buttonStyle(.bordered)
+                .help("Copy to Clipboard")
                 
-                Button("Save As...") {
+                Button(action: {
                     #if os(macOS)
                     let panel = NSSavePanel()
                     panel.allowedContentTypes = [.png]
@@ -292,13 +293,17 @@ struct FullImageView: View {
                         }
                     }
                     #endif
+                }) {
+                    Image(systemName: "square.and.arrow.down")
                 }
-                .buttonStyle(.bordered)
+                .help("Save Image")
                 
-                Button("Close") {
+                Button(action: {
                     dismiss()
+                }) {
+                    Image(systemName: "xmark")
                 }
-                .buttonStyle(.bordered)
+                .help("Close")
             }
         }
         .frame(width: image.platformSize.width, height: image.platformSize.height + 50)
