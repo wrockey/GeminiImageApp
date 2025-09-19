@@ -1,6 +1,8 @@
+//InputImagesSection.swift
 import SwiftUI
 import ImageIO  // For PNG metadata extraction
 import UniformTypeIdentifiers  // Added for UTType on macOS
+import PhotosUI  // Added for PHPicker on iOS
 #if os(macOS)
 import AppKit
 #elseif os(iOS)
@@ -385,7 +387,8 @@ struct ImageSlotItemView: View {
     let systemBackgroundColor: Color
     
     @State private var isDropTargeted: Bool = false  // Added for drop highlight
-    
+    @State private var showPicker: Bool = false  // Added for PHPicker
+
     @Environment(\.horizontalSizeClass) private var sizeClass  // Added: Detect compact (iPhone) vs regular (iPad)
     
     var body: some View {
@@ -422,6 +425,13 @@ struct ImageSlotItemView: View {
             .padding(16)
             .cornerRadius(16)  // Card style for each slot
             .shadow(color: .black.opacity(0.1), radius: 2)  // Softer shadow
+            .sheet(isPresented: $showPicker) {
+#if os(iOS)
+                PHPickerWrapper { result in
+                    handlePickerResult(result)
+                }
+#endif
+            }
         } else {
             EmptyView()  // Fallback on earlier versions
         }
@@ -535,6 +545,19 @@ struct ImageSlotItemView: View {
                 .help("Annotate the loaded image") // Tooltip
                 .accessibilityLabel("Annotate")
                 .accessibilityHint("Opens annotation tool for the loaded image.")
+                
+                Button {
+                    showPicker = true
+                } label: {
+                    Image(systemName: "photo.on.rectangle")
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.cyan)
+                .cornerRadius(10)
+                .shadow(radius: 2)
+                .help("Add from Photos") // Tooltip
+                .accessibilityLabel("Add from Photos")
+                .accessibilityHint("Opens photo picker to select an image from your library.")
             }
         }
     }
@@ -605,6 +628,34 @@ struct ImageSlotItemView: View {
             case .failure(let error):
                 errorMessage = "Failed to select image: \(error.localizedDescription)"
                 showErrorAlert = true
+            }
+        }
+    }
+    
+    // Added: Handle PHPicker result on iOS
+    private func handlePickerResult(_ result: PHPickerResult?) {
+        guard let result = result else { return }
+        result.itemProvider.loadObject(ofClass: UIImage.self) { object, error in
+            if let error = error {
+                DispatchQueue.main.async {
+                    self.errorMessage = "Failed to load image: \(error.localizedDescription)"
+                    self.showErrorAlert = true
+                }
+                return
+            }
+            guard let uiImage = object as? UIImage else { return }
+            DispatchQueue.main.async {
+                self.slot.image = uiImage  // Assuming PlatformImage is UIImage on iOS
+                self.slot.path = "Selected from Photos"
+                
+                // Extract prompts if PNG (convert to Data)
+                if let pngData = uiImage.pngData() {
+                    let promptNodes = parsePromptNodes(from: pngData)
+                    if !promptNodes.isEmpty {
+                        self.slot.promptNodes = promptNodes.sorted { $0.id < $1.id }
+                        self.slot.selectedPromptIndex = 0
+                    }
+                }
             }
         }
     }
@@ -740,3 +791,38 @@ struct ImageSlotItemView: View {
         }
     }
 }
+
+// Added: Wrapper for PHPickerViewController
+#if os(iOS)
+struct PHPickerWrapper: UIViewControllerRepresentable {
+    let onCompletion: (PHPickerResult?) -> Void
+    
+    func makeUIViewController(context: Context) -> PHPickerViewController {
+        var config = PHPickerConfiguration()
+        config.filter = .images
+        config.selectionLimit = 1  // Single selection
+        let picker = PHPickerViewController(configuration: config)
+        picker.delegate = context.coordinator
+        return picker
+    }
+    
+    func updateUIViewController(_ uiViewController: PHPickerViewController, context: Context) {}
+    
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+    
+    class Coordinator: PHPickerViewControllerDelegate {
+        let parent: PHPickerWrapper
+        
+        init(_ parent: PHPickerWrapper) {
+            self.parent = parent
+        }
+        
+        func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
+            picker.dismiss(animated: true)
+            parent.onCompletion(results.first)
+        }
+    }
+}
+#endif

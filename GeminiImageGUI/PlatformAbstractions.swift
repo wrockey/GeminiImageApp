@@ -5,6 +5,7 @@ import Foundation
 import SwiftUI
 import UniformTypeIdentifiers
 import CoreGraphics
+import PhotosUI  // Added for PHPicker
 #if os(macOS)
 import AppKit
 #elseif os(iOS)
@@ -19,21 +20,21 @@ typealias PlatformImage = UIImage
 #endif
 
 extension PlatformImage {
-var platformSize: CGSize {
+    var platformSize: CGSize {
 #if os(macOS)
-return size
+        return size
 #elseif os(iOS)
-return size
+        return size
 #endif
-}
+    }
 
-convenience init?(platformData: Data) {
+    convenience init?(platformData: Data) {
 #if os(macOS)
-self.init(data: platformData)
+        self.init(data: platformData)
 #elseif os(iOS)
-self.init(data: platformData)
+        self.init(data: platformData)
 #endif
-}
+    }
 
     convenience init?(contentsOf url: URL) {
         do {
@@ -44,62 +45,62 @@ self.init(data: platformData)
         }
     }
 
-func platformPngData() -> Data? {
+    func platformPngData() -> Data? {
 #if os(macOS)
-guard let tiff = tiffRepresentation,
-let bitmap = NSBitmapImageRep(data: tiff) else { return nil }
-return bitmap.representation(using: .png, properties: [:])
+        guard let tiff = tiffRepresentation,
+              let bitmap = NSBitmapImageRep(data: tiff) else { return nil }
+        return bitmap.representation(using: .png, properties: [:])
 #elseif os(iOS)
-return pngData()
+        return pngData()
 #endif
-}
+    }
 
-func platformTiffRepresentation() -> Data? {
+    func platformTiffRepresentation() -> Data? {
 #if os(macOS)
-return tiffRepresentation
+        return tiffRepresentation
 #elseif os(iOS)
-// iOS equivalent: Convert to TIFF if needed, but rare; stub for compatibility
-return nil // Implement if required for port
+        // iOS equivalent: Convert to TIFF if needed, but rare; stub for compatibility
+        return nil // Implement if required for port
 #endif
-}
+    }
 }
 
 // MARK: - Pasteboard Abstraction
 struct PlatformPasteboard {
-static func clearContents() {
+    static func clearContents() {
 #if os(macOS)
-NSPasteboard.general.clearContents()
+        NSPasteboard.general.clearContents()
 #elseif os(iOS)
-UIPasteboard.general.items = []
+        UIPasteboard.general.items = []
 #endif
-}
+    }
 
-static func writeImage(_ image: PlatformImage) {
+    static func writeImage(_ image: PlatformImage) {
 #if os(macOS)
-NSPasteboard.general.writeObjects([image])
+        NSPasteboard.general.writeObjects([image])
 #elseif os(iOS)
-UIPasteboard.general.image = image
+        UIPasteboard.general.image = image
 #endif
-}
+    }
 
-static func writeString(_ string: String) {
+    static func writeString(_ string: String) {
 #if os(macOS)
-NSPasteboard.general.setString(string, forType: .string)
+        NSPasteboard.general.setString(string, forType: .string)
 #elseif os(iOS)
-UIPasteboard.general.string = string
+        UIPasteboard.general.string = string
 #endif
-}
+    }
 
-static func readImages() -> [PlatformImage]? {
+    static func readImages() -> [PlatformImage]? {
 #if os(macOS)
-return NSPasteboard.general.readObjects(forClasses: [NSImage.self], options: nil) as? [PlatformImage]
+        return NSPasteboard.general.readObjects(forClasses: [NSImage.self], options: nil) as? [PlatformImage]
 #elseif os(iOS)
-if let image = UIPasteboard.general.image {
-return [image]
-}
-return nil
+        if let image = UIPasteboard.general.image {
+            return [image]
+        }
+        return nil
 #endif
-}
+    }
 }
 
 // MARK: - File Picker Abstraction
@@ -304,13 +305,13 @@ struct iOSRenderer: PlatformRenderer {
 #endif
 
 extension Color {
-var platformColor: PlatformColor {
+    var platformColor: PlatformColor {
 #if os(macOS)
-NSColor(self)
+        NSColor(self)
 #elseif os(iOS)
-UIColor(self)
+        UIColor(self)
 #endif
-}
+    }
 }
 
 #if os(macOS)
@@ -321,13 +322,13 @@ typealias PlatformColor = UIColor
 
 // MARK: - SwiftUI Image Extension for PlatformImage
 extension Image {
-init(platformImage: PlatformImage) {
+    init(platformImage: PlatformImage) {
 #if os(macOS)
-self.init(nsImage: platformImage)
+        self.init(nsImage: platformImage)
 #elseif os(iOS)
-self.init(uiImage: platformImage)
+        self.init(uiImage: platformImage)
 #endif
-}
+    }
 }
 
 // MARK: - Secure Access Utility
