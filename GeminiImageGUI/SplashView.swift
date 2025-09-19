@@ -7,6 +7,7 @@ struct SplashView: View {
     @State private var textGlow: CGFloat = 0.0
     @State private var jiggle: CGFloat = 0.0  // New: For Liquid Glass fluidity
     @Environment(\.colorScheme) var colorScheme: ColorScheme
+    @Environment(\.horizontalSizeClass) var sizeClass: UserInterfaceSizeClass?
 
     private var backgroundColor: Color {
         colorScheme == .dark ? Color.black : Color(white: 0.1)
@@ -18,6 +19,10 @@ struct SplashView: View {
 
     private var lightBlueGradient: LinearGradient {
         LinearGradient(gradient: Gradient(colors: [Color.blue.opacity(0.6), Color.cyan.opacity(0.6)]), startPoint: .topLeading, endPoint: .bottomTrailing)
+    }
+
+    private var fontSize: CGFloat {
+        sizeClass == .compact ? 50 : 72
     }
 
     var body: some View {
@@ -42,7 +47,7 @@ struct SplashView: View {
 
             // App name with Liquid Glass effect
             Text("ImagenStation")
-                .font(.system(size: 72, weight: .bold, design: .rounded))
+                .font(.system(size: fontSize, weight: .bold, design: .rounded))
                 .foregroundStyle(.white)
                 .shadow(color: Color.cyan.opacity(0.5), radius: textGlow, x: 0, y: 0)
                 .shadow(color: Color.blue.opacity(0.3), radius: textGlow * 2, x: 0, y: 0)
