@@ -24,13 +24,6 @@
 			);
 			target = A9C676762E63291C0017029B /* GeminiImageGUI */;
 		};
-		A9E2C78F2E7CE0DC00B5AA1A /* Exceptions for "GeminiImageGUI_iOS" folder in "GeminiImageGUI_iOS" target */ = {
-			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
-			membershipExceptions = (
-				"GeminiImageGUI-iOS-Info.plist",
-			);
-			target = A9E2C7822E7CE0BD00B5AA1A /* GeminiImageGUI_iOS */;
-		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -44,9 +37,6 @@
 		};
 		A9E2C7842E7CE0BD00B5AA1A /* GeminiImageGUI_iOS */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-				A9E2C78F2E7CE0DC00B5AA1A /* Exceptions for "GeminiImageGUI_iOS" folder in "GeminiImageGUI_iOS" target */,
-			);
 			path = GeminiImageGUI_iOS;
 			sourceTree = "<group>";
 		};

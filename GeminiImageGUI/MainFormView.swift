@@ -20,6 +20,7 @@ struct MainFormView: View {
     @Binding var showErrorAlert: Bool
     @Binding var imageScale: CGFloat
     @Binding var showFullImage: Bool
+    @State private var isUnsafe: Bool = false  // State for safety feedback
     let isLoading: Bool
     let progress: Double
     @Binding var isCancelled: Bool
@@ -89,7 +90,7 @@ struct MainFormView: View {
                 CustomDivider()
                 
                 DisclosureGroup(isExpanded: $promptExpanded) {
-                    PromptSection(prompt: $prompt)
+                                    PromptSection(prompt: $prompt, isUnsafe: $isUnsafe)  // Pass isUnsafe binding
                 } label: {
                     HStack {
                         Text("Prompt")

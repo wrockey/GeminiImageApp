@@ -1,7 +1,9 @@
+// PromptSection.swift
 import SwiftUI
 
 struct PromptSection: View {
     @Binding var prompt: String
+    @Binding var isUnsafe: Bool  // New: Binding for safety feedback from parent
     
     private var backgroundColor: Color {
         #if os(iOS)
@@ -26,6 +28,12 @@ struct PromptSection: View {
                     }
                 }
                 .font(.system(size: 16, weight: .regular, design: .default))
+            
+            if isUnsafe {  // New: Red warning text based on binding
+                Text("Warning: Prompt may contain inappropriate content.")
+                    .foregroundColor(.red)
+                    .font(.caption)
+            }
         }
     }
 }

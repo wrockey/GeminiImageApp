@@ -8,6 +8,14 @@ extension ContentView {
             showSelectFolderAlert = true
             return
         }
+        
+        // New: Check if prompt is safe
+        if !ContentView.isPromptSafe(appState.prompt) {
+            errorMessage = "Prompt contains inappropriate content. Please revise and try again."
+            showErrorAlert = true
+            return
+        }
+        
         isLoading = true
         errorMessage = nil
         appState.ui.responseText = ""
