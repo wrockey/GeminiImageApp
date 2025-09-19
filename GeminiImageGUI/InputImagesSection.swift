@@ -428,7 +428,7 @@ struct ImageSlotItemView: View {
                     }
                 }
                 #if os(macOS)
-                .onDrop(of: [UTType.fileURL], isTargeted: $isDropTargeted) { providers in
+                .onDrop(of: [UTType.fileURL, UTType.image], isTargeted: $isDropTargeted) { providers in
                     handleDrop(providers: providers)
                 }
                 #endif
@@ -634,29 +634,42 @@ struct ImageSlotItemView: View {
     private func handleDrop(providers: [NSItemProvider]) -> Bool {
         guard let provider = providers.first else { return false }
         
+        // First, try loading as URL (for file drags)
         provider.loadObject(ofClass: URL.self) { reading, error in
-            if let error = error {
+            if let url = reading as? URL, error == nil {
                 DispatchQueue.main.async {
-                    self.errorMessage = "Drop error: \(error.localizedDescription)"
-                    self.showErrorAlert = true
+                    self.loadImageFromURL(url)
                 }
                 return
             }
             
-            guard let url = reading as? URL else { return }
-            
-            // Check if it's an image
-            guard let contentType = try? url.resourceValues(forKeys: [.contentTypeKey]).contentType,
-                  contentType.conforms(to: .image) else {
-                DispatchQueue.main.async {
-                    self.errorMessage = "Dropped file is not an image."
-                    self.showErrorAlert = true
+            // Fallback: Load as image data (for direct image drags, e.g., from Photos or browsers)
+            provider.loadObject(ofClass: NSImage.self) { reading, error in
+                if let error = error {
+                    DispatchQueue.main.async {
+                        self.errorMessage = "Drop error: \(error.localizedDescription)"
+                        self.showErrorAlert = true
+                    }
+                    return
                 }
-                return
-            }
-            
-            DispatchQueue.main.async {
-                self.loadImageFromURL(url)
+                
+                guard let nsImage = reading as? NSImage else { return }
+                
+                DispatchQueue.main.async {
+                    self.slot.image = nsImage
+                    self.slot.path = "Dropped Image"
+                    
+                    // Attempt to extract PNG data for prompts (if applicable)
+                    if let tiffData = nsImage.tiffRepresentation,
+                       let bitmap = NSBitmapImageRep(data: tiffData),
+                       let pngData = bitmap.representation(using: .png, properties: [:]) {
+                        let promptNodes = parsePromptNodes(from: pngData)
+                        if !promptNodes.isEmpty {
+                            self.slot.promptNodes = promptNodes.sorted { $0.id < $1.id }
+                            self.slot.selectedPromptIndex = 0
+                        }
+                    }
+                }
             }
         }
         

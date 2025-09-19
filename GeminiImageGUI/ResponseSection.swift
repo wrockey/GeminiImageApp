@@ -1,4 +1,3 @@
-// ResponseSection.swift
 import SwiftUI
 
 struct ResponseSection: View {
@@ -145,18 +144,6 @@ struct ResponseSection: View {
                     )
                 
                 HStack(spacing: 12) {  // HStack for buttons below image
-                    Button {
-                        showFullImage = true
-                    } label: {
-                        Image(systemName: "eye")
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .tint(.blue)
-                    .cornerRadius(10)
-                    .shadow(radius: 2)
-                    .help("View the full-size image")
-                    .accessibilityLabel("View full image")
-                    
                     Button {
                         PlatformPasteboard.clearContents()
                         PlatformPasteboard.writeImage(platformImage)
