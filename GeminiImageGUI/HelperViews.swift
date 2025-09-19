@@ -35,27 +35,43 @@ struct Resizer: View {
 struct PopOutView: View {
     @EnvironmentObject var appState: AppState
     @Environment(\.colorScheme) var colorScheme
+    @Environment(\.dismiss) private var dismiss  // Add for closing
     
     var body: some View {
-        VStack(spacing: 0) {
-            if let platformImage = appState.ui.outputImage {
-                Image(platformImage: platformImage)
-                    .resizable()
-                    .scaledToFit()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .cornerRadius(12)
-                    .shadow(color: .black.opacity(0.2), radius: 4, x: 0, y: 2)
+        ZStack(alignment: .topTrailing) {  // Use ZStack for overlay positioning
+            VStack(spacing: 0) {
+                if let platformImage = appState.ui.outputImage {
+                    Image(platformImage: platformImage)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .cornerRadius(12)
+                        .shadow(color: .black.opacity(0.2), radius: 4, x: 0, y: 2)
+                }
+                
+                ScrollView {
+                    TextEditor(text: .constant(appState.ui.responseText))
+                        .frame(height: 80)
+                        .background(colorScheme == .dark ? Color.gray.opacity(0.2) : Color.white)
+                        .cornerRadius(12)
+                        .disabled(true)
+                        .foregroundColor(.primary)
+                }
+                .frame(height: 80)
             }
             
-            ScrollView {
-                TextEditor(text: .constant(appState.ui.responseText))
-                    .frame(height: 80)
-                    .background(colorScheme == .dark ? Color.gray.opacity(0.2) : Color.white)
-                    .cornerRadius(12)
-                    .disabled(true)
-                    .foregroundColor(.primary)
+            // Add X close button at upper right
+            Button(action: {
+                dismiss()
+            }) {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: 24))
+                    .foregroundColor(.gray)
+                    .symbolRenderingMode(.hierarchical)
             }
-            .frame(height: 80)
+            .buttonStyle(.plain)
+            .padding()
+            .help("Close")
         }
         .onAppear {
             updateWindowSize()

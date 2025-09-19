@@ -244,7 +244,7 @@ struct ContentView: View {
                 HistoryView(imageSlots: $appState.ui.imageSlots, columnVisibility: $columnVisibility)
                     .environmentObject(appState)
             }
-            .sheet(isPresented: Binding(get: { appState.showResponseSheet }, set: { appState.showResponseSheet = $0 })) {
+            .fullScreenCover(isPresented: Binding(get: { appState.showResponseSheet }, set: { appState.showResponseSheet = $0 })) {
                 PopOutView()
                     .environmentObject(appState)
             }
