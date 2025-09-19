@@ -386,180 +386,214 @@ struct ImageSlotItemView: View {
     
     @State private var isDropTargeted: Bool = false  // Added for drop highlight
     
+    @Environment(\.horizontalSizeClass) private var sizeClass  // Added: Detect compact (iPhone) vs regular (iPad)
+    
     var body: some View {
         if #available(macOS 14.0, *) {
-            HStack(spacing: 16) {
-                ZStack {
-                    if let img = slot.image {
-                        Image(platformImage: img)
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 150, height: 150)  // Larger preview
-                            .cornerRadius(16)
-                            .shadow(radius: 4)
-                            .accessibilityLabel("Loaded image")
-                            .accessibilityHint("Preview of the selected or pasted image.")
-                    } else {
-                        if #available(iOS 17.0, *) {
-                            Rectangle()
-                                .fill(Color(backgroundColor))
-                                .frame(width: 150, height: 150)
-                                .cornerRadius(16)
-                                .shadow(radius: 4)
-                                .accessibilityLabel("Empty image slot")
-                                .accessibilityHint("No image loaded yet. Use browse or paste to add one.")
-                        } else {
-                            Rectangle()
-                                .fill(backgroundColor)
-                                .frame(width: 150, height: 150)
-                                .cornerRadius(16)
-                                .shadow(radius: 4)
-                                .accessibilityLabel("Empty image slot")
-                                .accessibilityHint("No image loaded yet. Use browse or paste to add one.")
-                            // Fallback on earlier versions
+            Group {
+                if sizeClass == .compact {
+                    // Vertical layout for iPhone (compact): Thumbnail above, icons below
+                    VStack(alignment: .leading, spacing: 12) {
+                        thumbnailView
+                        
+                        slotDetailsAndButtons
+                        
+                        if !slot.promptNodes.isEmpty {
+                            promptNodesView
                         }
+                        
+                        removeButton
                     }
-                    
-                    // Highlight border for drop target
-                    if isDropTargeted {
-                        RoundedRectangle(cornerRadius: 16)
-                            .stroke(Color.blue, lineWidth: 2)
-                            .frame(width: 150, height: 150)
+                } else {
+                    // Horizontal layout for iPad (regular): Keep original
+                    HStack(spacing: 16) {
+                        thumbnailView
+                        
+                        slotDetailsAndButtons
+                        
+                        if !slot.promptNodes.isEmpty {
+                            promptNodesView
+                        }
+                        
+                        removeButton
                     }
                 }
-                #if os(macOS)
-                .onDrop(of: [UTType.fileURL, UTType.image], isTargeted: $isDropTargeted) { providers in
-                    handleDrop(providers: providers)
-                }
-                #endif
-                
-                VStack(alignment: .leading, spacing: 12) {  // More spacing
-                    HStack {
-                        Text(slot.path.isEmpty ? "No image selected" : {
-#if os(iOS)
-                            return URL(fileURLWithPath: slot.path).lastPathComponent
-#else
-                            return slot.path
-#endif
-                        }())
-                        .font(.system(.body, weight: .medium))
-                        .foregroundColor(.primary)
-                        .accessibilityLabel("Image path")
-                        .accessibilityValue(slot.path.isEmpty ? "No image selected" : slot.path)
-                        
-                        Spacer()
-                        
-                        Button {
-                            showImageOpenPanel()
-                        } label: {
-                            Image(systemName: "folder.badge.plus")
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .tint(.blue)
-                        .cornerRadius(10)
-                        .shadow(radius: 2)
-                        .help("Browse for an image file") // Tooltip
-                        .accessibilityLabel("Browse")
-                        .accessibilityHint("Opens file picker to select an image.")
-                        
-                        Button {
-                            pasteImage()
-                        } label: {
-                            Image(systemName: "doc.on.clipboard")
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .tint(.green)
-                        .cornerRadius(10)
-                        .shadow(radius: 2)
-                        .help("Paste image from clipboard") // Tooltip
-                        .accessibilityLabel("Paste")
-                        .accessibilityHint("Pastes an image from the clipboard into this slot.")
-                        
-                        Button {
-                            if slot.image != nil {
-                                print("DEBUG: Annotate tapped for slot \(slot.id), image exists: true")
-                                onAnnotate(slot.id)
-                            } else {
-                                print("DEBUG: Annotate tapped but no image in slot \(slot.id)")
-                                errorMessage = "No image loaded to annotate."
-                                showErrorAlert = true
-                            }
-                        } label: {
-                            Image(systemName: "square.and.pencil")
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .tint(.purple)
-                        .cornerRadius(10)
-                        .shadow(radius: 2)
-                        .help("Annotate the loaded image") // Tooltip
-                        .accessibilityLabel("Annotate")
-                        .accessibilityHint("Opens annotation tool for the loaded image.")
-                    }
-                    
-                    if !slot.promptNodes.isEmpty {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Embedded Workflow Prompts")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                                .accessibilityLabel("Embedded Workflow Prompts")
-                            
-                            Picker("Select Prompt", selection: $slot.selectedPromptIndex) {
-                                ForEach(0..<slot.promptNodes.count, id: \.self) { index in
-                                    Text(slot.promptNodes[index].label)
-                                        .tag(index)
-                                }
-                            }
-                            .pickerStyle(.menu)  // Dropdown-style menu on both iOS and macOS
-                            .help("Select a prompt from the embedded workflow") // Tooltip
-                            .accessibilityLabel("Select Prompt")
-                            .accessibilityHint("Choose a prompt node from the list.")
-                            
-                            Button {
-                                let selectedText = slot.promptNodes[slot.selectedPromptIndex].promptText ?? ""
-                                copyToClipboard(selectedText)
-                                withAnimation {
-                                    showCopiedMessage = true
-                                }
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                                    withAnimation {
-                                        showCopiedMessage = false
-                                    }
-                                }
-                            } label: {
-                                Image(systemName: "doc.on.doc")
-                            }
-                            .buttonStyle(.bordered)
-                            .tint(.green)
-                            .cornerRadius(10)
-                            .shadow(radius: 2)
-                            .help("Copy selected prompt to clipboard") // Tooltip
-                            .accessibilityLabel("Copy Prompt")
-                            .accessibilityHint("Copies the selected prompt text to the clipboard.")
-                        }
-                    }
-                }
-                
-                Spacer()
-                
-                Button(action: { onRemove(slot.id) }) {
-                    Image(systemName: "minus.circle.fill")
-                        .font(.system(size: 24))
-                        .foregroundColor(.red)
-                }
-                .buttonStyle(.plain)
-                .shadow(radius: 2)
-                .help("Remove this image slot") // Tooltip
-                .accessibilityLabel("Remove image slot")
-                .accessibilityHint("Removes this image and its slot.")
             }
             .padding(16)
-            //caused thick black line
-            //                        .background(Color(systemBackgroundColor).opacity(0.8))
             .cornerRadius(16)  // Card style for each slot
             .shadow(color: .black.opacity(0.1), radius: 2)  // Softer shadow
         } else {
             EmptyView()  // Fallback on earlier versions
         }
+    }
+    
+    // Extracted: Thumbnail view (smaller on compact)
+    private var thumbnailView: some View {
+        ZStack {
+            if let img = slot.image {
+                Image(platformImage: img)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: sizeClass == .compact ? 100 : 150, height: sizeClass == .compact ? 100 : 150)  // Smaller on iPhone
+                    .cornerRadius(16)
+                    .shadow(radius: 4)
+                    .accessibilityLabel("Loaded image")
+                    .accessibilityHint("Preview of the selected or pasted image.")
+            } else {
+                if #available(iOS 17.0, *) {
+                    Rectangle()
+                        .fill(Color(backgroundColor))
+                        .frame(width: sizeClass == .compact ? 100 : 150, height: sizeClass == .compact ? 100 : 150)
+                        .cornerRadius(16)
+                        .shadow(radius: 4)
+                        .accessibilityLabel("Empty image slot")
+                        .accessibilityHint("No image loaded yet. Use browse or paste to add one.")
+                } else {
+                    Rectangle()
+                        .fill(backgroundColor)
+                        .frame(width: sizeClass == .compact ? 100 : 150, height: sizeClass == .compact ? 100 : 150)
+                        .cornerRadius(16)
+                        .shadow(radius: 4)
+                        .accessibilityLabel("Empty image slot")
+                        .accessibilityHint("No image loaded yet. Use browse or paste to add one.")
+                    // Fallback on earlier versions
+                }
+            }
+            
+            // Highlight border for drop target
+            if isDropTargeted {
+                RoundedRectangle(cornerRadius: 16)
+                    .stroke(Color.blue, lineWidth: 2)
+                    .frame(width: sizeClass == .compact ? 100 : 150, height: sizeClass == .compact ? 100 : 150)
+            }
+        }
+        #if os(macOS)
+        .onDrop(of: [UTType.fileURL, UTType.image], isTargeted: $isDropTargeted) { providers in
+            handleDrop(providers: providers)
+        }
+        #endif
+    }
+    
+    // Extracted: Path text and action buttons (browse, paste, annotate)
+    private var slotDetailsAndButtons: some View {
+        VStack(alignment: .leading, spacing: 12) {  // More spacing
+            Text(slot.path.isEmpty ? "No image selected" : {
+#if os(iOS)
+                return URL(fileURLWithPath: slot.path).lastPathComponent
+#else
+                return slot.path
+#endif
+            }())
+            .font(.system(.body, weight: .medium))
+            .foregroundColor(.primary)
+            .accessibilityLabel("Image path")
+            .accessibilityValue(slot.path.isEmpty ? "No image selected" : slot.path)
+            
+            HStack {
+                Button {
+                    showImageOpenPanel()
+                } label: {
+                    Image(systemName: "folder.badge.plus")
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.blue)
+                .cornerRadius(10)
+                .shadow(radius: 2)
+                .help("Browse for an image file") // Tooltip
+                .accessibilityLabel("Browse")
+                .accessibilityHint("Opens file picker to select an image.")
+                
+                Button {
+                    pasteImage()
+                } label: {
+                    Image(systemName: "doc.on.clipboard")
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.green)
+                .cornerRadius(10)
+                .shadow(radius: 2)
+                .help("Paste image from clipboard") // Tooltip
+                .accessibilityLabel("Paste")
+                .accessibilityHint("Pastes an image from the clipboard into this slot.")
+                
+                Button {
+                    if slot.image != nil {
+                        print("DEBUG: Annotate tapped for slot \(slot.id), image exists: true")
+                        onAnnotate(slot.id)
+                    } else {
+                        print("DEBUG: Annotate tapped but no image in slot \(slot.id)")
+                        errorMessage = "No image loaded to annotate."
+                        showErrorAlert = true
+                    }
+                } label: {
+                    Image(systemName: "square.and.pencil")
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.purple)
+                .cornerRadius(10)
+                .shadow(radius: 2)
+                .help("Annotate the loaded image") // Tooltip
+                .accessibilityLabel("Annotate")
+                .accessibilityHint("Opens annotation tool for the loaded image.")
+            }
+        }
+    }
+    
+    // Extracted: Prompt nodes picker and copy button
+    private var promptNodesView: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Embedded Workflow Prompts")
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .accessibilityLabel("Embedded Workflow Prompts")
+            
+            Picker("Select Prompt", selection: $slot.selectedPromptIndex) {
+                ForEach(0..<slot.promptNodes.count, id: \.self) { index in
+                    Text(slot.promptNodes[index].label)
+                        .tag(index)
+                }
+            }
+            .pickerStyle(.menu)  // Dropdown-style menu on both iOS and macOS
+            .help("Select a prompt from the embedded workflow") // Tooltip
+            .accessibilityLabel("Select Prompt")
+            .accessibilityHint("Choose a prompt node from the list.")
+            
+            Button {
+                let selectedText = slot.promptNodes[slot.selectedPromptIndex].promptText ?? ""
+                copyToClipboard(selectedText)
+                withAnimation {
+                    showCopiedMessage = true
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                    withAnimation {
+                        showCopiedMessage = false
+                    }
+                }
+            } label: {
+                Image(systemName: "doc.on.doc")
+            }
+            .buttonStyle(.bordered)
+            .tint(.green)
+            .cornerRadius(10)
+            .shadow(radius: 2)
+            .help("Copy selected prompt to clipboard") // Tooltip
+            .accessibilityLabel("Copy Prompt")
+            .accessibilityHint("Copies the selected prompt text to the clipboard.")
+        }
+    }
+    
+    // Extracted: Remove button
+    private var removeButton: some View {
+        Button(action: { onRemove(slot.id) }) {
+            Image(systemName: "minus.circle.fill")
+                .font(.system(size: 24))
+                .foregroundColor(.red)
+        }
+        .buttonStyle(.plain)
+        .shadow(radius: 2)
+        .help("Remove this image slot") // Tooltip
+        .accessibilityLabel("Remove image slot")
+        .accessibilityHint("Removes this image and its slot.")
     }
     
     private func showImageOpenPanel() {
