@@ -93,33 +93,7 @@ struct ConfigurationSection: View {
     @ViewBuilder
     private var geminiConfiguration: some View {
         VStack(alignment: .leading, spacing: 16) {  // Align to left
-            HStack {
-                Text("API Key File:")
-                    .font(.system(.subheadline, design: .default, weight: .medium))
-                    .foregroundColor(.secondary)
-                    .help("Select a file containing your API key")
-                #if os(iOS)
-                Text(apiKeyPath.isEmpty ? "No file selected" : URL(fileURLWithPath: apiKeyPath).lastPathComponent)
-                    .help("Currently selected API key file")
-                #else
-                Text(apiKeyPath.isEmpty ? "No file selected" : apiKeyPath)
-                    .help("Currently selected API key file")
-                #endif
-                Button(action: {
-                    print("Showing api file picker")
-                    PlatformFilePicker.presentOpenPanel(allowedTypes: [.plainText], allowsMultiple: false, canChooseDirectories: false) { result in
-                        onApiKeySelected(result)
-                    }
-                }) {
-                    Image(systemName: "doc")
-                        .font(.system(size: 16))
-                        .foregroundColor(.blue)
-                }
-                .buttonStyle(.borderless)
-                .help("Browse to select an API key file")
-                .accessibilityLabel("Browse API key file")
-            }
-            
+             
             HStack {
                 Text("API Key:")
                     .font(.system(.subheadline, design: .default, weight: .medium))
@@ -128,9 +102,15 @@ struct ConfigurationSection: View {
                 Group {
                     if showApiKey {
                         TextField("Enter or paste API key", text: $appState.settings.apiKey)
+                            .onChange(of: appState.settings.apiKey) { newValue in
+                                handleAPIKeyChange(newValue)
+                            }
                             .help("Visible API key input")
                     } else {
                         SecureField("Enter or paste API key", text: $appState.settings.apiKey)
+                            .onChange(of: appState.settings.apiKey) { newValue in
+                                handleAPIKeyChange(newValue)
+                            }
                             .help("Hidden API key input")
                     }
                 }
@@ -391,4 +371,16 @@ struct ConfigurationSection: View {
         pasteboard.setString(text, forType: .string)
         #endif
     }
+    private func handleAPIKeyChange(_ newValue: String) {
+        if newValue.isEmpty {
+            KeychainHelper.deleteAPIKey()
+        } else if KeychainHelper.saveAPIKey(newValue) {
+            // Optional: Show a brief "Saved securely" message using @State var showSavedMessage: Bool = false, similar to showCopiedMessage
+        } else {
+            // Optional: Handle rare save error, e.g., set errorMessage
+            errorMessage = "Failed to securely store API key."
+            showErrorAlert = true
+        }
+    }
 }
+

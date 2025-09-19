@@ -336,7 +336,7 @@ struct ContentView: View {
     
     private var toolbarContent: some View {
         Group {
-            Button(action: {
+/*            Button(action: {
                 print("Showing api file picker from toolbar")
                 PlatformFilePicker.presentOpenPanel(allowedTypes: [.plainText], allowsMultiple: false, canChooseDirectories: false) { result in
                     handleApiKeySelection(result)
@@ -347,7 +347,7 @@ struct ContentView: View {
                 
             }
             .help("Load API Key")
-            
+*/
             Button(action: {
                 print("Showing output folder picker from toolbar")
                 PlatformFilePicker.presentOpenPanel(allowedTypes: [.folder], allowsMultiple: false, canChooseDirectories: true) { result in

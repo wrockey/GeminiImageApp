@@ -20,9 +20,9 @@ struct NodeInfo: Identifiable {
 }
  
 class SettingsState: ObservableObject {
-    @Published var apiKey: String = ""
+    @Published var apiKey: String = KeychainHelper.loadAPIKey() ?? ""  // Load from Keychain
     @Published var outputDirectory: URL? = nil
-    @Published var apiKeyFileURL: URL? = nil
+    // @Published var apiKeyFileURL: URL? = nil  // Optional: Comment out if deprecating file loading
     @Published var mode: GenerationMode = .gemini
     @AppStorage("comfyServerURL") var comfyServerURL: String = "http://localhost:8188"
     @Published var comfyJSONURL: URL? = nil

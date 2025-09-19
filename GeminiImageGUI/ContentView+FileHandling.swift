@@ -61,56 +61,24 @@ extension ContentView {
     func handleApiKeySelection(_ result: Result<[URL], Error>) {
         switch result {
         case .success(let urls):
-            print("Selected URLs: \(urls)")
-            guard let url = urls.first else { errorMessage = "No Api file selected."
-                showErrorAlert = true
-                return }
+            guard let url = urls.first else { return }
             do {
-                #if os(macOS)
-                let bookmarkOptions: URL.BookmarkCreationOptions = [.withSecurityScope]
-                #else
-                let bookmarkOptions: URL.BookmarkCreationOptions = .minimalBookmark
-                #endif
-                var bookmarkData: Data?
-                #if os(iOS)
-                var coordError: NSError?
-                var innerCoordError: Error?
-                NSFileCoordinator().coordinate(readingItemAt: url, options: [], error: &coordError) { coordinatedURL in
-                    if coordinatedURL.startAccessingSecurityScopedResource() {
-                        defer { coordinatedURL.stopAccessingSecurityScopedResource() }
-                        do {
-                            bookmarkData = try coordinatedURL.bookmarkData(options: bookmarkOptions, includingResourceValuesForKeys: nil, relativeTo: nil)
-                        } catch {
-                            innerCoordError = error
-                        }
-                    } else {
-                        innerCoordError = NSError(domain: "AccessError", code: 0, userInfo: [NSLocalizedDescriptionKey: "Failed to start accessing security-scoped resource."])
-                    }
+                let key = try String(contentsOf: url).trimmingCharacters(in: .whitespacesAndNewlines)
+                appState.settings.apiKey = key
+                if KeychainHelper.saveAPIKey(key) {
+                    // Optional: successMessage = "API key loaded and stored securely."
+                    // showSuccessAlert = true
+                } else {
+                    errorMessage = "Failed to store API key securely."
+                    showErrorAlert = true
                 }
-                if let coordError = coordError {
-                    throw coordError
-                }
-                if let innerCoordError = innerCoordError {
-                    throw innerCoordError
-                }
-                guard let bookmarkData = bookmarkData else {
-                    throw NSError(domain: "BookmarkError", code: 0, userInfo: [NSLocalizedDescriptionKey: "Failed to create bookmark"])
-                }
-                #else
-                bookmarkData = try url.bookmarkData(options: bookmarkOptions, includingResourceValuesForKeys: nil, relativeTo: nil)
-                #endif
-                UserDefaults.standard.set(bookmarkData, forKey: "apiKeyFileBookmark")
-                appState.settings.apiKeyFileURL = url
-                apiKeyPath = url.path
-                loadApiKeyFromFile()
+                apiKeyPath = url.path  // Update UI if keeping the display
             } catch {
-                print("Bookmark error: \(error)")
-                errorMessage = "Failed to open API key file: \(error.localizedDescription)"
+                errorMessage = "Failed to read API key file: \(error.localizedDescription)"
                 showErrorAlert = true
             }
         case .failure(let error):
-            print("Selection error: \(error)")
-            errorMessage = "Failed to select API key file: \(error.localizedDescription)"
+            errorMessage = "File selection error: \(error.localizedDescription)"
             showErrorAlert = true
         }
     }
@@ -238,7 +206,7 @@ extension ContentView {
         }
     }
     
-    func loadApiKeyFromFile() {
+/*    func loadApiKeyFromFile() {
         guard let apiFileURL = appState.settings.apiKeyFileURL else { return }
         
         let didStart = apiFileURL.startAccessingSecurityScopedResource()
@@ -251,4 +219,5 @@ extension ContentView {
             showErrorAlert = true
         }
     }
+ */
 }
