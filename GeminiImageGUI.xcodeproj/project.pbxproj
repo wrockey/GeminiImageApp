@@ -13,6 +13,7 @@
 /* Begin PBXFileReference section */
 		A976487A2E76D7E100E1C236 /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = "<group>"; };
 		A9C676772E63291C0017029B /* GeminiImageGUI.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = GeminiImageGUI.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A9E2C7832E7CE0BD00B5AA1A /* GeminiImageGUI_iOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = GeminiImageGUI_iOS.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -22,6 +23,13 @@
 				Info.plist,
 			);
 			target = A9C676762E63291C0017029B /* GeminiImageGUI */;
+		};
+		A9E2C78F2E7CE0DC00B5AA1A /* Exceptions for "GeminiImageGUI_iOS" folder in "GeminiImageGUI_iOS" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				"GeminiImageGUI-iOS-Info.plist",
+			);
+			target = A9E2C7822E7CE0BD00B5AA1A /* GeminiImageGUI_iOS */;
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
@@ -34,10 +42,25 @@
 			path = GeminiImageGUI;
 			sourceTree = "<group>";
 		};
+		A9E2C7842E7CE0BD00B5AA1A /* GeminiImageGUI_iOS */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				A9E2C78F2E7CE0DC00B5AA1A /* Exceptions for "GeminiImageGUI_iOS" folder in "GeminiImageGUI_iOS" target */,
+			);
+			path = GeminiImageGUI_iOS;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		A9C676742E63291C0017029B /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A9E2C7802E7CE0BD00B5AA1A /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -52,6 +75,7 @@
 			children = (
 				A976487A2E76D7E100E1C236 /* LaunchScreen.storyboard */,
 				A9C676792E63291C0017029B /* GeminiImageGUI */,
+				A9E2C7842E7CE0BD00B5AA1A /* GeminiImageGUI_iOS */,
 				A9C676782E63291C0017029B /* Products */,
 			);
 			sourceTree = "<group>";
@@ -60,6 +84,7 @@
 			isa = PBXGroup;
 			children = (
 				A9C676772E63291C0017029B /* GeminiImageGUI.app */,
+				A9E2C7832E7CE0BD00B5AA1A /* GeminiImageGUI_iOS.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -89,6 +114,28 @@
 			productReference = A9C676772E63291C0017029B /* GeminiImageGUI.app */;
 			productType = "com.apple.product-type.application";
 		};
+		A9E2C7822E7CE0BD00B5AA1A /* GeminiImageGUI_iOS */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A9E2C78B2E7CE0BF00B5AA1A /* Build configuration list for PBXNativeTarget "GeminiImageGUI_iOS" */;
+			buildPhases = (
+				A9E2C77F2E7CE0BD00B5AA1A /* Sources */,
+				A9E2C7802E7CE0BD00B5AA1A /* Frameworks */,
+				A9E2C7812E7CE0BD00B5AA1A /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				A9E2C7842E7CE0BD00B5AA1A /* GeminiImageGUI_iOS */,
+			);
+			name = GeminiImageGUI_iOS;
+			packageProductDependencies = (
+			);
+			productName = GeminiImageGUI_iOS;
+			productReference = A9E2C7832E7CE0BD00B5AA1A /* GeminiImageGUI_iOS.app */;
+			productType = "com.apple.product-type.application";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -100,6 +147,9 @@
 				LastUpgradeCheck = 1640;
 				TargetAttributes = {
 					A9C676762E63291C0017029B = {
+						CreatedOnToolsVersion = 16.4;
+					};
+					A9E2C7822E7CE0BD00B5AA1A = {
 						CreatedOnToolsVersion = 16.4;
 					};
 				};
@@ -119,6 +169,7 @@
 			projectRoot = "";
 			targets = (
 				A9C676762E63291C0017029B /* GeminiImageGUI */,
+				A9E2C7822E7CE0BD00B5AA1A /* GeminiImageGUI_iOS */,
 			);
 		};
 /* End PBXProject section */
@@ -132,10 +183,24 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A9E2C7812E7CE0BD00B5AA1A /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		A9C676732E63291C0017029B /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A9E2C77F2E7CE0BD00B5AA1A /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -329,6 +394,67 @@
 			};
 			name = Release;
 		};
+		A9E2C78C2E7CE0BF00B5AA1A /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = Q32PBDC5UJ;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "GeminiImageGUI-iOS-Info.plist";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 18.5;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.bill.GeminiImageGUI-iOS";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		A9E2C78D2E7CE0BF00B5AA1A /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = Q32PBDC5UJ;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "GeminiImageGUI-iOS-Info.plist";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 18.5;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.bill.GeminiImageGUI-iOS";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -346,6 +472,15 @@
 			buildConfigurations = (
 				A9C676842E63291D0017029B /* Debug */,
 				A9C676852E63291D0017029B /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A9E2C78B2E7CE0BF00B5AA1A /* Build configuration list for PBXNativeTarget "GeminiImageGUI_iOS" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A9E2C78C2E7CE0BF00B5AA1A /* Debug */,
+				A9E2C78D2E7CE0BF00B5AA1A /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

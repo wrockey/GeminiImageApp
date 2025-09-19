@@ -1,4 +1,3 @@
-//GeminiImageApp.swift
 import SwiftUI
 import Combine
 #if os(macOS)
@@ -421,6 +420,7 @@ struct NewGenerateContentResponse: Codable {
 @main
 struct GeminiImageApp: App {
     let appState = AppState()
+    @State private var showSplash = true
     
     var body: some Scene {
         #if os(macOS)
@@ -451,25 +451,36 @@ struct GeminiImageApp: App {
         .defaultSize(width: 800, height: 600)
         #else
         WindowGroup {
-            SplashView()
-//            ContentView()
-                .environmentObject(appState)
-            #if os(iOS)
-            .sheet(isPresented: Binding(get: { appState.showResponseSheet }, set: { appState.showResponseSheet = $0 })) {
-                PopOutView()
+            if showSplash {
+                SplashView()
+                    .transition(.opacity)
+                    .onAppear {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+                            withAnimation(.easeOut(duration: 0.5)) {
+                                showSplash = false
+                            }
+                        }
+                    }
+            } else {
+                ContentView()
                     .environmentObject(appState)
+                    .sheet(isPresented: Binding(get: { appState.showResponseSheet }, set: { appState.showResponseSheet = $0 })) {
+                        PopOutView()
+                            .environmentObject(appState)
+                    }
+                    .sheet(isPresented: Binding(
+                        get: { appState.showFullHistoryItem != nil },
+                        set: { if !$0 { appState.showFullHistoryItem = nil } }
+                    )) {
+                        if let id = appState.showFullHistoryItem {
+                            FullHistoryItemView(initialId: id)
+                                .environmentObject(appState)
+                        }
+                    }
             }
-            .sheet(isPresented: Binding(
-                get: { appState.showFullHistoryItem != nil },
-                set: { if !$0 { appState.showFullHistoryItem = nil } }
-            )) {
-                if let id = appState.showFullHistoryItem {
-                    FullHistoryItemView(initialId: id)
-                        .environmentObject(appState)
-                }
-            }
-            #endif
         }
+
+
         #endif
     }
 }
