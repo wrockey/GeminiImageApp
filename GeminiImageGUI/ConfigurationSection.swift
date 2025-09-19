@@ -5,7 +5,7 @@ import AppKit
 #elseif os(iOS)
 import UIKit
 #endif
-
+ 
 struct ConfigurationSection: View {
     @Binding var showApiKey: Bool
     @Binding var apiKeyPath: String
@@ -93,7 +93,6 @@ struct ConfigurationSection: View {
     @ViewBuilder
     private var geminiConfiguration: some View {
         VStack(alignment: .leading, spacing: 16) {  // Align to left
-             
             HStack {
                 Text("API Key:")
                     .font(.system(.subheadline, design: .default, weight: .medium))
@@ -129,6 +128,17 @@ struct ConfigurationSection: View {
                 .toggleStyle(.button)
                 .help("Toggle API Key Visibility")
                 .accessibilityLabel("Toggle API key visibility")
+                
+                Button(action: {
+                    pasteToApiKey()
+                }) {
+                    Image(systemName: "doc.on.clipboard")
+                        .font(.system(size: 16))
+                        .foregroundColor(.blue)
+                }
+                .buttonStyle(.borderless)
+                .help("Paste API key from clipboard")
+                .accessibilityLabel("Paste API key")
                 
                 Button(action: {
                     testApiKey()
@@ -371,16 +381,29 @@ struct ConfigurationSection: View {
         pasteboard.setString(text, forType: .string)
         #endif
     }
+    
     private func handleAPIKeyChange(_ newValue: String) {
         if newValue.isEmpty {
             KeychainHelper.deleteAPIKey()
         } else if KeychainHelper.saveAPIKey(newValue) {
-            // Optional: Show a brief "Saved securely" message using @State var showSavedMessage: Bool = false, similar to showCopiedMessage
+            // Optional: Add a saved message if desired
         } else {
-            // Optional: Handle rare save error, e.g., set errorMessage
             errorMessage = "Failed to securely store API key."
             showErrorAlert = true
         }
     }
+    
+    private func pasteToApiKey() {
+        var pastedText: String? = nil
+        #if os(macOS)
+        let pasteboard = NSPasteboard.general
+        pastedText = pasteboard.string(forType: .string)
+        #elseif os(iOS)
+        pastedText = UIPasteboard.general.string
+        #endif
+        
+        if let text = pastedText {
+            appState.settings.apiKey = text
+        }
+    }
 }
-
