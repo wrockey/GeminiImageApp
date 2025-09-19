@@ -1,4 +1,3 @@
-//InputImagesSection.swift
 import SwiftUI
 import ImageIO  // For PNG metadata extraction
 import UniformTypeIdentifiers  // Added for UTType on macOS
@@ -392,48 +391,44 @@ struct ImageSlotItemView: View {
     @Environment(\.horizontalSizeClass) private var sizeClass  // Added: Detect compact (iPhone) vs regular (iPad)
     
     var body: some View {
-        if #available(macOS 14.0, *) {
-            Group {
-                if sizeClass == .compact {
-                    // Vertical layout for iPhone (compact): Thumbnail above, icons below
-                    VStack(alignment: .leading, spacing: 12) {
-                        thumbnailView
-                        
-                        slotDetailsAndButtons
-                        
-                        if !slot.promptNodes.isEmpty {
-                            promptNodesView
-                        }
-                        
-                        removeButton
+        Group {
+            if sizeClass == .compact {
+                // Vertical layout for iPhone (compact): Thumbnail above, icons below
+                VStack(alignment: .leading, spacing: 12) {
+                    thumbnailView
+                    
+                    slotDetailsAndButtons
+                    
+                    if !slot.promptNodes.isEmpty {
+                        promptNodesView
                     }
-                } else {
-                    // Horizontal layout for iPad (regular): Keep original
-                    HStack(spacing: 16) {
-                        thumbnailView
-                        
-                        slotDetailsAndButtons
-                        
-                        if !slot.promptNodes.isEmpty {
-                            promptNodesView
-                        }
-                        
-                        removeButton
+                    
+                    removeButton
+                }
+            } else {
+                // Horizontal layout for iPad (regular): Keep original
+                HStack(spacing: 16) {
+                    thumbnailView
+                    
+                    slotDetailsAndButtons
+                    
+                    if !slot.promptNodes.isEmpty {
+                        promptNodesView
                     }
+                    
+                    removeButton
                 }
             }
-            .padding(16)
-            .cornerRadius(16)  // Card style for each slot
-            .shadow(color: .black.opacity(0.1), radius: 2)  // Softer shadow
-            .sheet(isPresented: $showPicker) {
+        }
+        .padding(16)
+        .cornerRadius(16)  // Card style for each slot
+        .shadow(color: .black.opacity(0.1), radius: 2)  // Softer shadow
+        .sheet(isPresented: $showPicker) {
 #if os(iOS)
-                PHPickerWrapper { result in
-                    handlePickerResult(result)
-                }
-#endif
+            PHPickerWrapper { result in
+                handlePickerResult(result)
             }
-        } else {
-            EmptyView()  // Fallback on earlier versions
+#endif
         }
     }
     
@@ -450,24 +445,13 @@ struct ImageSlotItemView: View {
                     .accessibilityLabel("Loaded image")
                     .accessibilityHint("Preview of the selected or pasted image.")
             } else {
-                if #available(iOS 17.0, *) {
-                    Rectangle()
-                        .fill(Color(backgroundColor))
-                        .frame(width: sizeClass == .compact ? 100 : 150, height: sizeClass == .compact ? 100 : 150)
-                        .cornerRadius(16)
-                        .shadow(radius: 4)
-                        .accessibilityLabel("Empty image slot")
-                        .accessibilityHint("No image loaded yet. Use browse or paste to add one.")
-                } else {
-                    Rectangle()
-                        .fill(backgroundColor)
-                        .frame(width: sizeClass == .compact ? 100 : 150, height: sizeClass == .compact ? 100 : 150)
-                        .cornerRadius(16)
-                        .shadow(radius: 4)
-                        .accessibilityLabel("Empty image slot")
-                        .accessibilityHint("No image loaded yet. Use browse or paste to add one.")
-                    // Fallback on earlier versions
-                }
+                Rectangle()
+                    .fill(backgroundColor)
+                    .frame(width: sizeClass == .compact ? 100 : 150, height: sizeClass == .compact ? 100 : 150)
+                    .cornerRadius(16)
+                    .shadow(radius: 4)
+                    .accessibilityLabel("Empty image slot")
+                    .accessibilityHint("No image loaded yet. Use browse or paste to add one.")
             }
             
             // Highlight border for drop target
@@ -546,6 +530,7 @@ struct ImageSlotItemView: View {
                 .accessibilityLabel("Annotate")
                 .accessibilityHint("Opens annotation tool for the loaded image.")
                 
+#if os(iOS)
                 Button {
                     showPicker = true
                 } label: {
@@ -558,6 +543,9 @@ struct ImageSlotItemView: View {
                 .help("Add from Photos") // Tooltip
                 .accessibilityLabel("Add from Photos")
                 .accessibilityHint("Opens photo picker to select an image from your library.")
+#endif
+
+
             }
         }
     }
@@ -635,7 +623,7 @@ struct ImageSlotItemView: View {
     // Added: Handle PHPicker result on iOS
     private func handlePickerResult(_ result: PHPickerResult?) {
         guard let result = result else { return }
-        result.itemProvider.loadObject(ofClass: UIImage.self) { object, error in
+        result.itemProvider.loadObject(ofClass: PlatformImage.self) { object, error in
             if let error = error {
                 DispatchQueue.main.async {
                     self.errorMessage = "Failed to load image: \(error.localizedDescription)"
@@ -643,13 +631,13 @@ struct ImageSlotItemView: View {
                 }
                 return
             }
-            guard let uiImage = object as? UIImage else { return }
+            guard let platformImage = object as? PlatformImage else { return }
             DispatchQueue.main.async {
-                self.slot.image = uiImage  // Assuming PlatformImage is UIImage on iOS
+                self.slot.image = platformImage
                 self.slot.path = "Selected from Photos"
                 
                 // Extract prompts if PNG (convert to Data)
-                if let pngData = uiImage.pngData() {
+                if let pngData = platformImage.platformPngData() {
                     let promptNodes = parsePromptNodes(from: pngData)
                     if !promptNodes.isEmpty {
                         self.slot.promptNodes = promptNodes.sorted { $0.id < $1.id }
