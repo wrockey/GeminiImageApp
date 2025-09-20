@@ -1,4 +1,4 @@
-// ContentView.swift
+//ContentView.swift
 import SwiftUI
 #if os(macOS)
 import AppKit
@@ -394,6 +394,20 @@ struct ContentView: View {
                     .symbolRenderingMode(.hierarchical)
             }
             .help("Show onboarding guide")
+
+            if appState.settings.mode == .gemini {
+                Button(action: openBillingConsole) {
+                    Image(systemName: "dollarsign.circle")
+                        .symbolRenderingMode(.hierarchical)
+                }
+                .help("Open Gemini Billing Console")
+            }
+        }
+    }
+
+    private func openBillingConsole() {
+        if let url = URL(string: "https://console.cloud.google.com/billing") {
+            PlatformBrowser.open(url: url)
         }
     }
 }
