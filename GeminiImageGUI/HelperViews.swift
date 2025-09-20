@@ -110,6 +110,10 @@ struct OnboardingView: View {
                     .multilineTextAlignment(.center)
                     .foregroundColor(.secondary)
                 
+                Text("Generated images are AI-created; user responsible for usage. No copyright claims.")
+                    .bold()
+                    .multilineTextAlignment(.center)
+                
                 VStack(alignment: .leading, spacing: 12) {
                     Text("Quick Start Guide:")
                         .font(.headline)

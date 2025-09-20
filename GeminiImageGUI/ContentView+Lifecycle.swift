@@ -2,6 +2,11 @@ import Foundation
 
 extension ContentView {
     func performOnAppear() {
+        // Force reset for testing (comment out in production)
+//        UserDefaults.standard.removeObject(forKey: "hasLaunchedBefore")
+//        UserDefaults.standard.removeObject(forKey: "hasShownGeminiConsent")  // If testing Gemini consent too
+
+    
         // Quick synchronous stuff
         if !hasLaunchedBefore {
             showOnboarding = true
