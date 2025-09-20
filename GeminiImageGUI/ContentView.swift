@@ -1,4 +1,3 @@
-//ContentView.swift
 import SwiftUI
 #if os(macOS)
 import AppKit
@@ -16,6 +15,7 @@ extension View {
         } message: {
             Text(appState.generation.workflowError ?? "Unknown error")
         }
+        .accessibilityLabel("Workflow Error Alert")
     }
 
     func fullImageSheet(showFullImage: Binding<Bool>, outputImage: PlatformImage?) -> some View {
@@ -24,6 +24,7 @@ extension View {
                 FullImageView(image: outputImage)
             }
         }
+        .accessibilityLabel("Full Image View Sheet")
     }
 
     func errorAlert(showErrorAlert: Binding<Bool>, errorMessage: String?) -> some View {
@@ -32,6 +33,7 @@ extension View {
         } message: {
             Text(errorMessage ?? "Unknown error")
         }
+        .accessibilityLabel("Error Alert")
     }
 
     func successAlert(showSuccessAlert: Binding<Bool>, successMessage: String) -> some View {
@@ -40,18 +42,21 @@ extension View {
         } message: {
             Text(successMessage)
         }
+        .accessibilityLabel("Success Alert")
     }
 
     func onboardingSheet(showOnboarding: Binding<Bool>) -> some View {
         sheet(isPresented: showOnboarding) {
             OnboardingView()
         }
+        .accessibilityLabel("Onboarding Sheet")
     }
 
     func helpSheet(showHelp: Binding<Bool>, mode: GenerationMode) -> some View {
         sheet(isPresented: showHelp) {
             HelpView(mode: mode)
         }
+        .accessibilityLabel("Help Sheet")
     }
 
     func selectFolderAlert(isPresented: Binding<Bool>, selectHandler: @escaping () -> Void) -> some View {
@@ -63,6 +68,7 @@ extension View {
         } message: {
             Text("Please select an output folder before submitting the prompt.")
         }
+        .accessibilityLabel("Select Output Folder Alert")
     }
 }
 
@@ -358,12 +364,16 @@ struct ContentView: View {
                     .symbolRenderingMode(.hierarchical)
             }
             .help("Select Output Folder")
+            .accessibilityLabel("Select Output Folder")
+            .accessibilityHint("Opens a folder picker to choose where generated images are saved.")
             
             Button(action: resetAppState) {
                 Image(systemName: "arrow.counterclockwise")
                     .symbolRenderingMode(.hierarchical)
             }
             .help("New Session")
+            .accessibilityLabel("New Session")
+            .accessibilityHint("Resets the current session, clearing prompt and images.")
             
             Button(action: {
 #if os(iOS)
@@ -378,6 +388,8 @@ struct ContentView: View {
                     .symbolRenderingMode(.hierarchical)
             }
             .help("Toggle History Sidebar")
+            .accessibilityLabel("Toggle History")
+            .accessibilityHint("Shows or hides the history sidebar.")
             
             Button(action: {
                 showHelp = true
@@ -386,6 +398,8 @@ struct ContentView: View {
                     .symbolRenderingMode(.hierarchical)
             }
             .help("Help & Guide")
+            .accessibilityLabel("Help")
+            .accessibilityHint("Opens the help and guide sheet.")
             
             Button(action: {
                 showOnboarding = true
@@ -394,6 +408,8 @@ struct ContentView: View {
                     .symbolRenderingMode(.hierarchical)
             }
             .help("Show onboarding guide")
+            .accessibilityLabel("Onboarding")
+            .accessibilityHint("Opens the onboarding guide.")
 
             if appState.settings.mode == .gemini {
                 Button(action: openBillingConsole) {
@@ -401,6 +417,8 @@ struct ContentView: View {
                         .symbolRenderingMode(.hierarchical)
                 }
                 .help("Open Gemini Billing Console")
+                .accessibilityLabel("Billing")
+                .accessibilityHint("Opens the Gemini billing console in a browser.")
             }
         }
     }
