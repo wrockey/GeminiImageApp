@@ -5,10 +5,14 @@ import SwiftUI
 extension ContentView {
     // New: Prompt safety check (client-side keyword filter)
     static func isPromptSafe(_ prompt: String) -> Bool {
-        let forbiddenTerms = ["nsfw", "explicit", "nude", "porn", "sex", "violence", "gore", "hate", "illegal", "drugs", "weapon"]  // Expand as needed; case-insensitive
+        let forbiddenPatterns = [
+            "(?:nsfw|explicit|nude|porn|sex|violence|gore|hate|illegal|drugs|weapon)s?",  // Handles plurals
+            "\\b(p[o0]rn|seks|violenc[ea])\\b"  // Misspellings
+        ]  // Expand as needed
+        
         let lowerPrompt = prompt.lowercased()
-        for term in forbiddenTerms {
-            if lowerPrompt.contains(term) {
+        for pattern in forbiddenPatterns {
+            if lowerPrompt.range(of: pattern, options: .regularExpression) != nil {
                 return false
             }
         }
