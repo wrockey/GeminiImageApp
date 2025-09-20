@@ -1,5 +1,7 @@
-// ContentView+Generation.swift
+//ContentView+Generation.swift
 import Foundation
+import CoreGraphics
+import ImageIO
 
 extension ContentView {
     func submitPrompt() {
@@ -40,7 +42,8 @@ extension ContentView {
             
             for slot in appState.ui.imageSlots {
                 if let image = slot.image, let pngData = image.platformPngData() {
-                    let base64 = pngData.base64EncodedString()
+                    let safeData = stripExif(from: pngData) ?? pngData  // Strip EXIF before sending
+                    let base64 = safeData.base64EncodedString()
                     let inline = InlineData(mimeType: "image/png", data: base64)
                     parts.append(Part(text: nil, inlineData: inline))
                 }
@@ -177,6 +180,7 @@ extension ContentView {
             var uploadedFilename: String? = nil
             if !appState.generation.comfyImageNodeID.isEmpty && !appState.ui.imageSlots.isEmpty,
                let image = appState.ui.imageSlots.first?.image, let pngData = image.platformPngData() {
+                let safeData = stripExif(from: pngData) ?? pngData  // Strip EXIF before uploading
                 var uploadRequest = URLRequest(url: serverURL.appendingPathComponent("upload/image"))
                 uploadRequest.httpMethod = "POST"
                 
@@ -187,7 +191,7 @@ extension ContentView {
                 body.append("--\(boundary)\r\n".data(using: .utf8)!)
                 body.append("Content-Disposition: form-data; name=\"image\"; filename=\"input.png\"\r\n".data(using: .utf8)!)
                 body.append("Content-Type: image/png\r\n\r\n".data(using: .utf8)!)
-                body.append(pngData)
+                body.append(safeData)
                 body.append("\r\n".data(using: .utf8)!)
                 body.append("--\(boundary)\r\n".data(using: .utf8)!)
                 body.append("Content-Disposition: form-data; name=\"type\"\r\n\r\ninput\r\n".data(using: .utf8)!)
@@ -327,5 +331,16 @@ extension ContentView {
                 }
             }
         }.resume()
+    }
+    
+    private func stripExif(from imageData: Data) -> Data? {
+        guard let source = CGImageSourceCreateWithData(imageData as CFData, nil),
+              let type = CGImageSourceGetType(source),
+              let destination = CGImageDestinationCreateWithData(NSMutableData() as CFMutableData, type, 1, nil) else {
+            return nil
+        }
+        CGImageDestinationAddImageFromSource(destination, source, 0, nil)  // Copies without metadata
+        guard CGImageDestinationFinalize(destination) else { return nil }
+        return (destination as? NSMutableData) as Data?
     }
 }
