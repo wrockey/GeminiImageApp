@@ -22,7 +22,7 @@ struct SplashView: View {
     }
 
     private var fontSize: CGFloat {
-        sizeClass == .compact ? 50 : 72
+        sizeClass == .compact ? 35 : 72
     }
 
     var body: some View {
