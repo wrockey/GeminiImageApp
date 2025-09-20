@@ -170,7 +170,6 @@ struct MainFormView: View {
                             onSubmit()
                         }
                         .buttonStyle(.borderedProminent)
-//                        .tint(.blue)  // System blue for accent
                         .tint(isSubmitDisabled ? .gray : .blue)
                         .foregroundColor(isSubmitDisabled ? .gray : .white)
                         .controlSize(.large)
@@ -203,7 +202,6 @@ struct MainFormView: View {
                                     Text(batchFilePath.isEmpty ? "No file selected" : batchFilePath)
                                         .help("Currently selected batch file path")
                                     #endif
-                                    Spacer()
                                     Button(action: {
                                         PlatformFilePicker.presentOpenPanel(allowedTypes: [.plainText], allowsMultiple: false, canChooseDirectories: false) { result in
                                             onBatchFileSelected(result)
@@ -215,6 +213,7 @@ struct MainFormView: View {
                                     }
                                     .buttonStyle(.borderless)
                                     .help("Choose a .txt file with multiple prompts for batch generation")
+                                    Spacer()
                                 }
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -231,7 +230,6 @@ struct MainFormView: View {
                                 Text(batchFilePath.isEmpty ? "No file selected" : batchFilePath)
                                     .help("Currently selected batch file path")
                                 #endif
-                                Spacer()
                                 Button(action: {
                                     PlatformFilePicker.presentOpenPanel(allowedTypes: [.plainText], allowsMultiple: false, canChooseDirectories: false) { result in
                                         onBatchFileSelected(result)
@@ -243,6 +241,7 @@ struct MainFormView: View {
                                 }
                                 .buttonStyle(.borderless)
                                 .help("Choose a .txt file with multiple prompts for batch generation")
+                                Spacer()
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
                         }
@@ -251,23 +250,23 @@ struct MainFormView: View {
                             Text("Starting Prompt:")
                                 .font(.system(.subheadline, design: .default, weight: .medium))
                                 .foregroundColor(.secondary)
-                                .frame(width: 60, alignment: .leading) // Align labels
+                                .frame(width: 80, alignment: .leading) // Align labels
                                 .help("Specify the starting prompt number in the batch file")
                             TextField("1", text: $startPrompt)
                                 .textFieldStyle(.roundedBorder)
-                                .frame(maxWidth: 100)
+                                .frame(width: 50)
                                 .help("Enter the 1-based index of the first prompt to process (default: 1)")
                             
-                            Spacer().frame(width: 50)  // Add 50px space between boxes
+                            Spacer().frame(width: 20)  // Add 50px space between boxes
                             
                             Text("Ending Prompt:")
                                 .font(.system(.subheadline, design: .default, weight: .medium))
                                 .foregroundColor(.secondary)
-                                .frame(width: 60, alignment: .leading) // Align labels
+                                .frame(width: 80, alignment: .leading) // Align labels
                                 .help("Specify the ending prompt number in the batch file")
                             TextField("", text: $endPrompt)
                                 .textFieldStyle(.roundedBorder)
-                                .frame(maxWidth: 100)
+                                .frame(width: 50)
                                 .help("Enter the 1-based index of the last prompt to process (default: last prompt)")
                             Spacer()
                         }
@@ -290,7 +289,6 @@ struct MainFormView: View {
                             .buttonStyle(.borderedProminent)
                             .tint((isBatchSubmitDisabled || isLoading) ? .gray : .blue)
                             .foregroundColor((isBatchSubmitDisabled || isLoading) ? .gray : .white)
-//                            .tint(.blue)
                             .controlSize(.large)
                             .disabled(isBatchSubmitDisabled || isLoading)
                             .frame(maxWidth: .infinity, minHeight: 44)
