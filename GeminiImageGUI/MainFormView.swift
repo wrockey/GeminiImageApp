@@ -63,7 +63,13 @@ struct MainFormView: View {
         appState.generation.promptNodes.first(where: { $0.id == appState.generation.comfyPromptNodeID })?.promptText ?? ""
     }
     
-    private var isBatchSubmitDisabled: Bool {  // New: Disable if no prompts or invalid range
+    private var isBatchSubmitDisabled: Bool {  // Updated: Disable if no prompts or invalid range or invalid config
+        if appState.settings.mode == .gemini && appState.settings.apiKey.isEmpty {
+            return true
+        }
+        if appState.settings.mode == .comfyUI && (appState.generation.comfyWorkflow == nil || appState.generation.comfyPromptNodeID.isEmpty || appState.generation.comfyOutputNodeID.isEmpty || appState.settings.comfyServerURL.isEmpty) {
+            return true
+        }
         guard !appState.batchPrompts.isEmpty else { return true }
         let start = Int(startPrompt) ?? 1
         let end = Int(endPrompt) ?? appState.batchPrompts.count
@@ -164,7 +170,9 @@ struct MainFormView: View {
                             onSubmit()
                         }
                         .buttonStyle(.borderedProminent)
-                        .tint(.blue)  // System blue for accent
+//                        .tint(.blue)  // System blue for accent
+                        .tint(isSubmitDisabled ? .gray : .blue)
+                        .foregroundColor(isSubmitDisabled ? .gray : .white)
                         .controlSize(.large)
                         .disabled(isSubmitDisabled)
                         .frame(maxWidth: .infinity, minHeight: 44)  // Standard iOS button height
@@ -265,7 +273,7 @@ struct MainFormView: View {
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                         if appState.batchPrompts.isEmpty {
-                            Text("Select a text file with one prompt per line.")
+                            Text("Select a .txt file with one prompt per line.")
                                 .foregroundColor(.secondary)
                                 .font(.system(size: 14))
                                 .padding(.top, 4)
@@ -280,7 +288,9 @@ struct MainFormView: View {
                                 onBatchSubmit()
                             }
                             .buttonStyle(.borderedProminent)
-                            .tint(.blue)
+                            .tint((isBatchSubmitDisabled || isLoading) ? .gray : .blue)
+                            .foregroundColor((isBatchSubmitDisabled || isLoading) ? .gray : .white)
+//                            .tint(.blue)
                             .controlSize(.large)
                             .disabled(isBatchSubmitDisabled || isLoading)
                             .frame(maxWidth: .infinity, minHeight: 44)
