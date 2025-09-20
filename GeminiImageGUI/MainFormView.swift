@@ -43,6 +43,12 @@ struct MainFormView: View {
     @Binding var startPrompt: String  // Changed to @Binding
     @Binding var endPrompt: String  // Changed to @Binding
     @AppStorage("batchExpanded") private var batchExpanded: Bool = true  // New: Expansion state
+    
+    @Environment(\.horizontalSizeClass) private var sizeClass
+    
+    private var isCompact: Bool {
+        sizeClass == .compact
+    }
 
     var isSubmitDisabled: Bool {
         if appState.settings.mode == .gemini {
@@ -175,32 +181,63 @@ struct MainFormView: View {
                 // New: Batch Mode section
                 DisclosureGroup(isExpanded: $batchExpanded) {
                     VStack(alignment: .leading, spacing: 16) {
-                        HStack(alignment: .center) {
-                            Text("Batch File:")
-                                .font(.system(.subheadline, design: .default, weight: .medium))
-                                .foregroundColor(.secondary)
-                                .help("Select a text file containing one prompt per line for batch processing")
-                            #if os(iOS)
-                            Text(batchFilePath.isEmpty ? "No file selected" : URL(fileURLWithPath: batchFilePath).lastPathComponent)
-                                .help("Currently selected batch file path")
-                            #else
-                            Text(batchFilePath.isEmpty ? "No file selected" : batchFilePath)
-                                .help("Currently selected batch file path")
-                            #endif
-                            Spacer().frame(width:30)
-                            
-                            Button("Select File") {
-                                PlatformFilePicker.presentOpenPanel(allowedTypes: [.plainText], allowsMultiple: false, canChooseDirectories: false) { result in
-                                    onBatchFileSelected(result)
+                        if isCompact {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Batch File:")
+                                    .font(.system(.subheadline, design: .default, weight: .medium))
+                                    .foregroundColor(.secondary)
+                                    .help("Select a text file containing one prompt per line for batch processing")
+                                HStack {
+                                    #if os(iOS)
+                                    Text(batchFilePath.isEmpty ? "No file selected" : URL(fileURLWithPath: batchFilePath).lastPathComponent)
+                                        .help("Currently selected batch file path")
+                                    #else
+                                    Text(batchFilePath.isEmpty ? "No file selected" : batchFilePath)
+                                        .help("Currently selected batch file path")
+                                    #endif
+                                    Spacer()
+                                    Button(action: {
+                                        PlatformFilePicker.presentOpenPanel(allowedTypes: [.plainText], allowsMultiple: false, canChooseDirectories: false) { result in
+                                            onBatchFileSelected(result)
+                                        }
+                                    }) {
+                                        Image(systemName: "doc")
+                                            .font(.system(size: 16))
+                                            .foregroundColor(.blue)
+                                    }
+                                    .buttonStyle(.borderless)
+                                    .help("Choose a .txt file with multiple prompts for batch generation")
                                 }
                             }
-                            .buttonStyle(.bordered)
-                            .tint(.blue.opacity(0.8))
-                            .font(.system(.body, design: .rounded, weight: .medium))
-                            .shadow(color: .black.opacity(0.1), radius: 1)
-                            .help("Choose a .txt file with multiple prompts for batch generation")
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        } else {
+                            HStack(alignment: .center) {
+                                Text("Batch File:")
+                                    .font(.system(.subheadline, design: .default, weight: .medium))
+                                    .foregroundColor(.secondary)
+                                    .help("Select a text file containing one prompt per line for batch processing")
+                                #if os(iOS)
+                                Text(batchFilePath.isEmpty ? "No file selected" : URL(fileURLWithPath: batchFilePath).lastPathComponent)
+                                    .help("Currently selected batch file path")
+                                #else
+                                Text(batchFilePath.isEmpty ? "No file selected" : batchFilePath)
+                                    .help("Currently selected batch file path")
+                                #endif
+                                Spacer()
+                                Button(action: {
+                                    PlatformFilePicker.presentOpenPanel(allowedTypes: [.plainText], allowsMultiple: false, canChooseDirectories: false) { result in
+                                        onBatchFileSelected(result)
+                                    }
+                                }) {
+                                    Image(systemName: "doc")
+                                        .font(.system(size: 16))
+                                        .foregroundColor(.blue)
+                                }
+                                .buttonStyle(.borderless)
+                                .help("Choose a .txt file with multiple prompts for batch generation")
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
                         }
-                        .frame(maxWidth: .infinity, alignment: .leading)
                         
                         HStack {
                             Text("Starting Prompt:")
@@ -228,10 +265,12 @@ struct MainFormView: View {
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                         if appState.batchPrompts.isEmpty {
-                            Text("Select a .txt file with one prompt per line.")
+                            Text("Select a text file with one prompt per line.")
                                 .foregroundColor(.secondary)
                                 .font(.system(size: 14))
                                 .padding(.top, 4)
+                                .frame(maxWidth: .infinity)
+                                .multilineTextAlignment(.center)
                                 .help("The batch file should contain one prompt per line for sequential processing")
                         }
                         
