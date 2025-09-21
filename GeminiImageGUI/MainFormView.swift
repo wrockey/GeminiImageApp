@@ -51,11 +51,14 @@ struct MainFormView: View {
     }
  
     var isSubmitDisabled: Bool {
-        if appState.settings.mode == .gemini {
+        switch appState.settings.mode {
+        case .gemini:
             return appState.settings.apiKey.isEmpty || prompt.isEmpty
-        } else {
+        case .comfyUI:
             let effectivePromptEmpty = prompt.isEmpty && selectedPromptText.isEmpty
             return appState.generation.comfyWorkflow == nil || appState.generation.comfyPromptNodeID.isEmpty || appState.generation.comfyOutputNodeID.isEmpty || appState.settings.comfyServerURL.isEmpty || effectivePromptEmpty
+        case .grok:  // Added
+            return appState.settings.grokApiKey.isEmpty || prompt.isEmpty
         }
     }
     
@@ -64,11 +67,19 @@ struct MainFormView: View {
     }
     
     private var isBatchSubmitDisabled: Bool {  // Updated: Disable if no prompts or invalid range or invalid config
-        if appState.settings.mode == .gemini && appState.settings.apiKey.isEmpty {
-            return true
-        }
-        if appState.settings.mode == .comfyUI && (appState.generation.comfyWorkflow == nil || appState.generation.comfyPromptNodeID.isEmpty || appState.generation.comfyOutputNodeID.isEmpty || appState.settings.comfyServerURL.isEmpty) {
-            return true
+        switch appState.settings.mode {
+        case .gemini:
+            if appState.settings.apiKey.isEmpty {
+                return true
+            }
+        case .comfyUI:
+            if appState.generation.comfyWorkflow == nil || appState.generation.comfyPromptNodeID.isEmpty || appState.generation.comfyOutputNodeID.isEmpty || appState.settings.comfyServerURL.isEmpty {
+                return true
+            }
+        case .grok:  // Added
+            if appState.settings.grokApiKey.isEmpty {
+                return true
+            }
         }
         guard !appState.batchPrompts.isEmpty else { return true }
         let start = batchStartIndex
@@ -442,8 +453,6 @@ struct MainFormView: View {
                                 .foregroundColor(.secondary)
                                 .font(.system(size: 14))
                                 .padding(.top, 4)
-                                .frame(maxWidth: .infinity)
-                                .multilineTextAlignment(.center)
                                 .help("The batch file should contain one prompt per line for sequential processing")
                         }
                         
@@ -455,7 +464,6 @@ struct MainFormView: View {
                             .buttonStyle(.borderedProminent)
                             .tint((isBatchSubmitDisabled || isLoading) ? .gray : .blue)
                             .foregroundColor((isBatchSubmitDisabled || isLoading) ? .gray : .white)
-//                            .tint(.blue)
                             .controlSize(.large)
                             .disabled(isBatchSubmitDisabled || isLoading)
                             .frame(maxWidth: .infinity, minHeight: 44)
@@ -556,5 +564,3 @@ struct MainFormView: View {
         }
     }
 }
-
-

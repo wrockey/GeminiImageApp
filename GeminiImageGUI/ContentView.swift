@@ -1,11 +1,11 @@
-// contentview.swift
+// ContentView.swift
 import SwiftUI
 #if os(macOS)
 import AppKit
 #elseif os(iOS)
 import UIKit
 #endif
- 
+
 extension View {
     func workflowErrorAlert(appState: AppState) -> some View {
         alert("Workflow Error", isPresented: Binding<Bool>(
@@ -18,7 +18,7 @@ extension View {
         }
         .accessibilityLabel("Workflow Error Alert")
     }
- 
+
     func fullImageSheet(showFullImage: Binding<Bool>, outputImage: PlatformImage?) -> some View {
         sheet(isPresented: showFullImage) {
             if let outputImage = outputImage {
@@ -27,7 +27,7 @@ extension View {
         }
         .accessibilityLabel("Full Image View Sheet")
     }
- 
+
     func errorAlert(showErrorAlert: Binding<Bool>, errorMessage: String?) -> some View {
         alert("Error", isPresented: showErrorAlert) {
             Button("OK") {}
@@ -36,7 +36,7 @@ extension View {
         }
         .accessibilityLabel("Error Alert")
     }
- 
+
     func successAlert(showSuccessAlert: Binding<Bool>, successMessage: String) -> some View {
         alert("Success", isPresented: showSuccessAlert) {
             Button("OK") {}
@@ -45,21 +45,21 @@ extension View {
         }
         .accessibilityLabel("Success Alert")
     }
- 
+
     func onboardingSheet(showOnboarding: Binding<Bool>) -> some View {
         sheet(isPresented: showOnboarding) {
             OnboardingView()
         }
         .accessibilityLabel("Onboarding Sheet")
     }
- 
+
     func helpSheet(showHelp: Binding<Bool>, mode: GenerationMode) -> some View {
         sheet(isPresented: showHelp) {
             HelpView(mode: mode)
         }
         .accessibilityLabel("Help Sheet")
     }
- 
+
     func selectFolderAlert(isPresented: Binding<Bool>, selectHandler: @escaping () -> Void) -> some View {
         alert("Select Output Folder", isPresented: isPresented) {
             Button("Select Folder") {
@@ -72,7 +72,7 @@ extension View {
         .accessibilityLabel("Select Output Folder Alert")
     }
 }
- 
+
 enum GenerationError: Error {
     case invalidURL
     case encodingFailed(String)
@@ -89,7 +89,7 @@ enum GenerationError: Error {
     case invalidViewURL
     case invalidImageNode
 }
- 
+
 struct ContentView: View {
     @EnvironmentObject var appState: AppState
     @Environment(\.colorScheme) var colorScheme
@@ -410,7 +410,7 @@ struct ContentView: View {
             .help("Show onboarding guide")
             .accessibilityLabel("Onboarding")
             .accessibilityHint("Opens the onboarding guide.")
- 
+
             if appState.settings.mode == .gemini {
                 Button(action: openBillingConsole) {
                     Image(systemName: "dollarsign.circle")
@@ -419,14 +419,27 @@ struct ContentView: View {
                 .help("Open Gemini Billing Console")
                 .accessibilityLabel("Billing")
                 .accessibilityHint("Opens the Gemini billing console in a browser.")
+            } else if appState.settings.mode == .grok {
+                Button(action: openGrokBillingConsole) {
+                    Image(systemName: "dollarsign.circle")
+                        .symbolRenderingMode(.hierarchical)
+                }
+                .help("Open Grok Billing Console")
+                .accessibilityLabel("Billing")
+                .accessibilityHint("Opens the Grok billing console in a browser.")
             }
         }
     }
- 
+
     private func openBillingConsole() {
         if let url = URL(string: "https://console.cloud.google.com/billing") {
             PlatformBrowser.open(url: url)
         }
     }
+
+    private func openGrokBillingConsole() {
+        if let url = URL(string: "https://console.x.ai/billing") {
+            PlatformBrowser.open(url: url)
+        }
+    }
 }
- 

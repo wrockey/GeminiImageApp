@@ -1,3 +1,4 @@
+//HelperViews.swift
 import SwiftUI
 #if os(macOS)
 import AppKit
@@ -168,15 +169,18 @@ struct HelpView: View {
         NavigationView {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
-                    if mode == .gemini {
+                    switch mode {
+                    case .gemini:
                         geminiHelpContent
-                    } else {
+                    case .comfyUI:
                         comfyUIHelpContent
+                    case .grok:
+                        grokHelpContent  // Added: Help for Grok mode
                     }
                 }
                 .padding()
             }
-            .navigationTitle(mode == .gemini ? "Gemini Help" : "ComfyUI Help")
+            .navigationTitle(mode == .gemini ? "Gemini Help" : (mode == .comfyUI ? "ComfyUI Help" : "Grok Help"))
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -188,16 +192,19 @@ struct HelpView: View {
         }
 #else
         VStack(spacing: 0) {
-            Text(mode == .gemini ? "Gemini Help" : "ComfyUI Help")
+            Text(mode == .gemini ? "Gemini Help" : (mode == .comfyUI ? "ComfyUI Help" : "Grok Help"))
                 .font(.title)
                 .padding()
             
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
-                    if mode == .gemini {
+                    switch mode {
+                    case .gemini:
                         geminiHelpContent
-                    } else {
+                    case .comfyUI:
                         comfyUIHelpContent
+                    case .grok:
+                        grokHelpContent  // Added: Help for Grok mode
                     }
                 }
                 .padding()
@@ -265,6 +272,39 @@ struct HelpView: View {
                 Text("5. **Troubleshooting**")
                     .font(.headline)
                 Text("- Connection failed? Check server is running and URL is correct.\n- No nodes detected? Ensure workflow is valid ComfyUI format.\n- Slow generation? Monitor server console for errors.")
+            }
+            .padding()
+            .background(Color.gray.opacity(0.1))
+            .cornerRadius(12)
+        }
+    }
+    
+    // Added: Help content for Grok mode
+    private var grokHelpContent: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Grok Mode Guide")
+                .font(.title.bold())
+            
+            VStack(alignment: .leading, spacing: 12) {
+                Text("1. **API Key Setup**")
+                    .font(.headline)
+                Text("Obtain your API key from console.x.ai. Paste it into the Grok API Key field. Use the 'Test API' button to verify.")
+                
+                Text("2. **Model Selection**")
+                    .font(.headline)
+                Text("Choose between available models like 'grok-2-image-1212' (default, based on Flux.1) or 'aurora' for advanced photorealism and text rendering.")
+                
+                Text("3. **Prompting Tips**")
+                    .font(.headline)
+                Text("- Be descriptive: Include style, mood, composition (e.g., 'A futuristic cityscape at dusk, cyberpunk style, highly detailed').\n- Use modifiers: Add 'in the style of [artist]' or 'photorealistic'.\n- Experiment with inputs: Grok supports optional image inputs for variations or editing.")
+                
+                Text("4. **Input Images (Optional)**")
+                    .font(.headline)
+                Text("Upload an image for image-to-image generation or variations. Annotate with Markup tools if needed.")
+                
+                Text("5. **Output & History**")
+                    .font(.headline)
+                Text("- Save or copy generated images directly.\n- View past generations in History for reuse.")
             }
             .padding()
             .background(Color.gray.opacity(0.1))

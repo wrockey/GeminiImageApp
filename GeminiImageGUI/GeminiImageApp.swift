@@ -1,3 +1,4 @@
+//GeminiImageApp.swift
 import SwiftUI
 import Combine
 #if os(macOS)
@@ -10,6 +11,7 @@ import PencilKit
 enum GenerationMode: String, Codable {
     case gemini
     case comfyUI
+    case grok  // Added for Grok API
 }
  
 // Updated NodeInfo struct (make promptText optional to accommodate non-prompt nodes)
@@ -27,6 +29,8 @@ class SettingsState: ObservableObject {
     @AppStorage("comfyServerURL") var comfyServerURL: String = "http://localhost:8188"
     @Published var comfyJSONURL: URL? = nil
     @Published var comfyJSONPath: String = ""
+    @Published var grokApiKey: String = KeychainHelper.loadGrokAPIKey() ?? ""  // Added: Grok API key from Keychain
+    @Published var selectedGrokModel: String = "grok-2-image-1212"  // Added: Default model, options: ["grok-2-image-1212", "aurora"]
 }
  
 class GenerationState: ObservableObject {

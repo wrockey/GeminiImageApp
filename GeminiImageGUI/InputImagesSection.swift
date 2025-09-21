@@ -21,7 +21,7 @@ func parsePromptNodes(from data: Data) -> [NodeInfo] {
         let lengthData = data.subdata(in: lengthRange)
         let lengthBytes = [UInt8](lengthData)
         let length = (UInt32(lengthBytes[0]) << 24) | (UInt32(lengthBytes[1]) << 16) |
-                     (UInt32(lengthBytes[2]) << 8) | UInt32(lengthBytes[3])
+                    (UInt32(lengthBytes[2]) << 8) | UInt32(lengthBytes[3])
         
         let fullChunkSize = 12 + Int(length)
         let fullChunkEnd = offset + fullChunkSize
@@ -282,70 +282,79 @@ struct InputImagesSection: View {
     }
     
     var body: some View {
-        ZStack {
-            VStack(spacing: 20) {
-                HStack(spacing: 16) {
-                    Button(action: addImageSlot) {
-                        Image(systemName: "plus.circle.fill")
-                            .font(.system(size: 24))  // Larger for touch
-                            .foregroundColor(.green)
+        if appState.settings.mode == .grok {
+            Text("Input images not supported in Grok mode.")
+                .foregroundColor(.secondary)
+                .font(.system(size: 14))
+                .padding()
+                .frame(maxWidth: .infinity, alignment: .center)
+                .accessibilityLabel("Input images not supported in Grok mode")
+        } else {
+            ZStack {
+                VStack(spacing: 20) {
+                    HStack(spacing: 16) {
+                        Button(action: addImageSlot) {
+                            Image(systemName: "plus.circle.fill")
+                                .font(.system(size: 24))  // Larger for touch
+                                .foregroundColor(.green)
+                        }
+                        .buttonStyle(.plain)  // Cleaner look
+                        .shadow(radius: 2)
+                        .help("Add a new image slot") // Tooltip
+                        .accessibilityLabel("Add image slot")
+                        .accessibilityHint("Adds a new slot for uploading or pasting an image.")
+    
+                        Button(action: { showClearConfirmation = true }) {
+                            Image(systemName: "trash.circle.fill")
+                                .font(.system(size: 24))
+                                .foregroundColor(.red)
+                        }
+                        .buttonStyle(.plain)
+                        .shadow(radius: 2)
+                        .help("Remove all image slots") // Tooltip
+                        .accessibilityLabel("Clear all images")
+                        .accessibilityHint("Removes all loaded images and slots.")
                     }
-                    .buttonStyle(.plain)  // Cleaner look
-                    .shadow(radius: 2)
-                    .help("Add a new image slot") // Tooltip
-                    .accessibilityLabel("Add image slot")
-                    .accessibilityHint("Adds a new slot for uploading or pasting an image.")
-
-                    Button(action: { showClearConfirmation = true }) {
-                        Image(systemName: "trash.circle.fill")
-                            .font(.system(size: 24))
-                            .foregroundColor(.red)
+                    
+                    if imageSlots.isEmpty {
+                        Text("Add images for reference (optional)")
+                            .foregroundColor(.secondary)
+                            .font(.system(size: 14))
+                            .accessibilityLabel("Add images for reference (optional)")
+                    } else {
+                        ForEach($imageSlots) { $slot in
+                            ImageSlotItemView(
+                                slot: $slot,
+                                errorMessage: $errorMessage,
+                                showErrorAlert: $showErrorAlert,
+                                onAnnotate: onAnnotate,
+                                onRemove: removeImageSlot,
+                                showCopiedMessage: $showCopiedMessage,
+                                backgroundColor: backgroundColor,
+                                systemBackgroundColor: systemBackgroundColor
+                            )
+                        }
                     }
-                    .buttonStyle(.plain)
-                    .shadow(radius: 2)
-                    .help("Remove all image slots") // Tooltip
-                    .accessibilityLabel("Clear all images")
-                    .accessibilityHint("Removes all loaded images and slots.")
                 }
                 
-                if imageSlots.isEmpty {
-                    Text("Add images for reference (optional)")
-                        .foregroundColor(.secondary)
-                        .font(.system(size: 14))
-                        .accessibilityLabel("Add images for reference (optional)")
-                } else {
-                    ForEach($imageSlots) { $slot in
-                        ImageSlotItemView(
-                            slot: $slot,
-                            errorMessage: $errorMessage,
-                            showErrorAlert: $showErrorAlert,
-                            onAnnotate: onAnnotate,
-                            onRemove: removeImageSlot,
-                            showCopiedMessage: $showCopiedMessage,
-                            backgroundColor: backgroundColor,
-                            systemBackgroundColor: systemBackgroundColor
-                        )
-                    }
+                if showCopiedMessage {
+                    Text("Copied to Clipboard")
+                        .font(.headline)
+                        .padding()
+                        .background(Color.black.opacity(0.7))
+                        .foregroundColor(.white)
+                        .cornerRadius(10)
+                        .transition(.opacity)
+                        .accessibilityLabel("Copied to Clipboard")
+                        .accessibilityHint("The prompt text has been copied.")
                 }
             }
-            
-            if showCopiedMessage {
-                Text("Copied to Clipboard")
-                    .font(.headline)
-                    .padding()
-                    .background(Color.black.opacity(0.7))
-                    .foregroundColor(.white)
-                    .cornerRadius(10)
-                    .transition(.opacity)
-                    .accessibilityLabel("Copied to Clipboard")
-                    .accessibilityHint("The prompt text has been copied.")
+            .alert("Confirm Removal", isPresented: $showClearConfirmation) {
+                Button("Yes", role: .destructive) { clearImageSlots() }
+                Button("Cancel", role: .cancel) { }
+            } message: {
+                Text("Are you sure you want to remove all input image slots?")
             }
-        }
-        .alert("Confirm Removal", isPresented: $showClearConfirmation) {
-            Button("Yes", role: .destructive) { clearImageSlots() }
-            Button("Cancel", role: .cancel) { }
-        } message: {
-            Text("Are you sure you want to remove all input image slots?")
         }
     }
 

@@ -5,9 +5,18 @@ import UIKit
 #if os(macOS)
 import AppKit
 #endif
-import ImageIO  // Required for CGImageSource/Destination APIs in stripExif
+import ImageIO // Required for CGImageSource/Destination APIs in stripExif
 
+struct GrokImageResponse: Codable {
+    let created: Int
+    let data: [GrokImageData]
+}
 
+struct GrokImageData: Codable {
+    let b64_json: String?
+    let url: String?
+    let revised_prompt: String?
+}
 
 extension ContentView {
     func submitPrompt() {
@@ -57,7 +66,7 @@ extension ContentView {
             
             for slot in appState.ui.imageSlots {
                 if let image = slot.image, let pngData = image.platformPngData() {
-                    let safeData = stripExif(from: pngData) ?? pngData  // Strip EXIF before sending
+                    let safeData = stripExif(from: pngData) ?? pngData // Strip EXIF before sending
                     let base64 = safeData.base64EncodedString()
                     let inline = InlineData(mimeType: "image/png", data: base64)
                     parts.append(Part(text: nil, inlineData: inline))
@@ -133,7 +142,6 @@ extension ContentView {
             isCancelled = false
             
             // Listen for messages in a loop
-
             Task {
                 var isComplete = false
                 while let task = webSocketTask, !isCancelled {
@@ -157,9 +165,9 @@ extension ContentView {
                                     print("Executing node: \(node)")
                                 } else if type == "executing",
                                           let value = json["data"] as? [String: Any],
-                                          value["node"] == nil {  // Completion indicator: node is null
+                                          value["node"] == nil { // Completion indicator: node is null
                                     isComplete = true
-                                } else if type == "execution_success" {  // Alternative completion indicator
+                                } else if type == "execution_success" { // Alternative completion indicator
                                     isComplete = true
                                 }
                             }
@@ -195,7 +203,7 @@ extension ContentView {
             var uploadedFilename: String? = nil
             if !appState.generation.comfyImageNodeID.isEmpty && !appState.ui.imageSlots.isEmpty,
                let image = appState.ui.imageSlots.first?.image, let pngData = image.platformPngData() {
-                let safeData = stripExif(from: pngData) ?? pngData  // Strip EXIF before uploading
+                let safeData = stripExif(from: pngData) ?? pngData // Strip EXIF before uploading
                 var uploadRequest = URLRequest(url: serverURL.appendingPathComponent("upload/image"))
                 uploadRequest.httpMethod = "POST"
                 
@@ -322,6 +330,61 @@ extension ContentView {
             webSocketTask?.cancel(with: .goingAway, reason: nil)
             webSocketTask = nil
             progress = 0.0
+        case .grok:
+            guard let url = URL(string: "https://api.x.ai/v1/images/generations") else {
+                throw GenerationError.invalidURL
+            }
+            
+            var bodyDict: [String: Any] = [
+                "model": appState.settings.selectedGrokModel,
+                "prompt": appState.prompt,
+                "n": 1,
+                "response_format": "b64_json"
+            ]
+            
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+            request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.addValue("Bearer \(appState.settings.grokApiKey)", forHTTPHeaderField: "Authorization")
+            
+            do {
+                request.httpBody = try JSONSerialization.data(withJSONObject: bodyDict)
+            } catch {
+                throw GenerationError.encodingFailed(error.localizedDescription)
+            }
+            
+            let (data, _) = try await URLSession.shared.data(for: request)
+            print(String(data: data, encoding: .utf8) ?? "No data")
+            let response = try JSONDecoder().decode(GrokImageResponse.self, from: data)
+            
+            var textOutput = ""
+            var savedImage: PlatformImage? = nil
+            var savedPath: String? = nil
+            
+            if let item = response.data.first {
+                if let revised = item.revised_prompt {
+                    textOutput += "Revised prompt: \(revised)\n"
+                }
+                
+                if let b64 = item.b64_json, let imgData = Data(base64Encoded: b64) {
+                    savedImage = PlatformImage(platformData: imgData)
+                    savedPath = saveGeneratedImage(data: imgData)
+                    if let saved = savedPath {
+                        textOutput += "Image saved to \(saved)\n"
+                    }
+                }
+            }
+            
+            appState.ui.responseText = textOutput.isEmpty ? "No text output." : textOutput
+            appState.ui.outputImage = savedImage
+            
+            if savedImage == nil {
+                appState.ui.responseText += "No image generated."
+            }
+            
+            let newItem = HistoryItem(prompt: appState.prompt, responseText: appState.ui.responseText, imagePath: savedPath, date: Date(), mode: appState.settings.mode, workflowName: nil)
+            appState.historyState.history.append(newItem)
+            appState.historyState.saveHistory()
         }
     }
     
@@ -354,7 +417,7 @@ extension ContentView {
               let destination = CGImageDestinationCreateWithData(NSMutableData() as CFMutableData, type, 1, nil) else {
             return nil
         }
-        CGImageDestinationAddImageFromSource(destination, source, 0, nil)  // Copies without metadata
+        CGImageDestinationAddImageFromSource(destination, source, 0, nil) // Copies without metadata
         guard CGImageDestinationFinalize(destination) else { return nil }
         return (destination as? NSMutableData) as Data?
     }
@@ -374,7 +437,7 @@ extension ContentView {
                 if let url = URL(string: "https://policies.google.com/privacy") {
                     UIApplication.shared.open(url)
                 }
-                continuation.resume(returning: false)  // Don't proceed automatically after viewing
+                continuation.resume(returning: false) // Don't proceed automatically after viewing
             })
             
             alert.addAction(UIAlertAction(title: "Continue", style: .default) { _ in
@@ -401,14 +464,14 @@ extension ContentView {
             
             let response = alert.runModal()
             switch response {
-            case .alertFirstButtonReturn:  // View Privacy Policy
+            case .alertFirstButtonReturn: // View Privacy Policy
                 if let url = URL(string: "https://policies.google.com/privacy") {
                     NSWorkspace.shared.open(url)
                 }
                 continuation.resume(returning: false)
-            case .alertSecondButtonReturn:  // Continue
+            case .alertSecondButtonReturn: // Continue
                 continuation.resume(returning: true)
-            default:  // Cancel
+            default: // Cancel
                 continuation.resume(returning: false)
             }
             #endif
