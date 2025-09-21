@@ -116,6 +116,7 @@ struct ContentView: View {
     @State var showHelp: Bool = false  // New: For help sheet
     @State var showSelectFolderAlert: Bool = false // New: For output folder alert
     @State var pendingAction: (() -> Void)? = nil // New: For pending submit action
+    @State var generationTask: Task<Void, Error>? = nil
     @AppStorage("hasLaunchedBefore") var hasLaunchedBefore: Bool = false
     @AppStorage("configExpanded") private var configExpanded: Bool = true
     @AppStorage("promptExpanded") private var promptExpanded: Bool = true

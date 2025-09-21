@@ -1,7 +1,7 @@
 // ContentView+Batch.swift
 import SwiftUI
 import Foundation  // Add other imports as needed
- 
+
 extension ContentView {
     func handleBatchFileSelection(_ result: Result<[URL], Error>) {
         switch result {
@@ -114,27 +114,40 @@ extension ContentView {
         
         isLoading = true
         
-        Task {
+        generationTask = Task {
+            defer {
+                DispatchQueue.main.async {
+                    isLoading = false
+                }
+            }
+            
             for i in start...end {
+                try Task.checkCancellation()
+                
                 guard i-1 < appState.batchPrompts.count else { break }
                 appState.prompt = appState.batchPrompts[i-1]
                 
                 do {
                     try await asyncGenerate()
-                } catch let err {
-                    failures.append((i, appState.prompt, err.localizedDescription))
+                    // Add a small delay or check for cancellation between generations
+                    try await Task.sleep(for: .milliseconds(100))
+                } catch is CancellationError {
+                    // Handle cancellation gracefully
+                    break
+                } catch {
+                    failures.append((i, appState.prompt, error.localizedDescription))
                 }
             }
             
-            isLoading = false
-            
-            if failures.isEmpty {
-                successMessage = "Batch Job Successfully Completed"
-                showSuccessAlert = true
-            } else {
-                let failedText = failures.map { "\($0.0): \($0.1) - \($0.2)" }.joined(separator: "\n")
-                errorMessage = "Failed to generate the following prompts:\n\(failedText)"
-                showErrorAlert = true
+            DispatchQueue.main.async {
+                if failures.isEmpty {
+                    successMessage = "Batch Job Successfully Completed"
+                    showSuccessAlert = true
+                } else {
+                    let failedText = failures.map { "\($0.0): \($0.1) - \($0.2)" }.joined(separator: "\n")
+                    errorMessage = "Failed to generate the following prompts:\n\(failedText)"
+                    showErrorAlert = true
+                }
             }
         }
     }

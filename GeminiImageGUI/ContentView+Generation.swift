@@ -38,19 +38,29 @@ extension ContentView {
         appState.ui.responseText = ""
         appState.ui.outputImage = nil
         
-        Task {
-            defer { isLoading = false }
+        generationTask = Task {
+            defer {
+                DispatchQueue.main.async {
+                    isLoading = false
+                }
+            }
             
             do {
                 try await asyncGenerate()
+            } catch is CancellationError {
+                // Handle cancellation
             } catch {
-                errorMessage = "API error: \(error.localizedDescription)"
-                showErrorAlert = true
+                DispatchQueue.main.async {
+                    errorMessage = "API error: \(error.localizedDescription)"
+                    showErrorAlert = true
+                }
             }
         }
     }
     
     func asyncGenerate() async throws {
+        try Task.checkCancellation()
+        
         switch appState.settings.mode {
         case .gemini:
             // New: Show consent alert on first Gemini use
@@ -145,6 +155,8 @@ extension ContentView {
             Task {
                 var isComplete = false
                 while let task = webSocketTask, !isCancelled {
+                    try Task.checkCancellation()
+                    
                     do {
                         let message = try await task.receive()
                         switch message {
@@ -173,6 +185,8 @@ extension ContentView {
                             }
                         default: break
                         }
+                    } catch is CancellationError {
+                        break
                     } catch {
                         await MainActor.run {
                             let nsError = error as NSError
@@ -223,6 +237,7 @@ extension ContentView {
                 uploadRequest.httpBody = body
                 
                 do {
+                    try Task.checkCancellation()
                     let (data, _) = try await URLSession.shared.data(for: uploadRequest)
                     if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                        let name = json["name"] as? String {
@@ -230,6 +245,8 @@ extension ContentView {
                     } else {
                         throw GenerationError.uploadFailed
                     }
+                } catch is CancellationError {
+                    throw CancellationError()
                 } catch {
                     throw GenerationError.uploadFailed
                 }
@@ -257,6 +274,7 @@ extension ContentView {
             
             var promptId: String?
             do {
+                try Task.checkCancellation()
                 let (promptData, _) = try await URLSession.shared.data(for: promptRequest)
                 if let json = try? JSONSerialization.jsonObject(with: promptData) as? [String: Any],
                    let id = json["prompt_id"] as? String {
@@ -264,6 +282,8 @@ extension ContentView {
                 } else {
                     throw GenerationError.queueFailed
                 }
+            } catch is CancellationError {
+                throw CancellationError()
             } catch {
                 throw GenerationError.queueFailed
             }
@@ -272,10 +292,12 @@ extension ContentView {
             
             var history: [String: Any]? = nil
             while history == nil {
-                try? await Task.sleep(nanoseconds: 2_000_000_000)
+                try Task.checkCancellation()
+                try await Task.sleep(nanoseconds: 2_000_000_000)
                 let historyURL = serverURL.appendingPathComponent("history/\(promptId)")
                 var historyRequest = URLRequest(url: historyURL)
                 do {
+                    try Task.checkCancellation()
                     let (historyData, _) = try await URLSession.shared.data(for: historyRequest)
                     if let json = try? JSONSerialization.jsonObject(with: historyData) as? [String: Any],
                        let entry = json[promptId] as? [String: Any],
@@ -283,6 +305,8 @@ extension ContentView {
                        let completed = status["completed"] as? Bool, completed {
                         history = entry
                     }
+                } catch is CancellationError {
+                    throw CancellationError()
                 } catch {}
             }
             
@@ -309,6 +333,7 @@ extension ContentView {
             
             var viewRequest = URLRequest(url: viewURL)
             do {
+                try Task.checkCancellation()
                 let (viewData, _) = try await URLSession.shared.data(for: viewRequest)
                 if let platformImage = PlatformImage(platformData: viewData) {
                     appState.ui.outputImage = platformImage
@@ -322,6 +347,8 @@ extension ContentView {
                 } else {
                     throw GenerationError.decodeFailed
                 }
+            } catch is CancellationError {
+                throw CancellationError()
             } catch {
                 throw GenerationError.fetchFailed(error.localizedDescription)
             }
@@ -353,6 +380,7 @@ extension ContentView {
                 throw GenerationError.encodingFailed(error.localizedDescription)
             }
             
+            try Task.checkCancellation()
             let (data, _) = try await URLSession.shared.data(for: request)
             print(String(data: data, encoding: .utf8) ?? "No data")
             let response = try JSONDecoder().decode(GrokImageResponse.self, from: data)
@@ -390,9 +418,13 @@ extension ContentView {
     
     func stopGeneration() {
         isCancelled = true
+        generationTask?.cancel()
         webSocketTask?.cancel(with: .goingAway, reason: nil)
         webSocketTask = nil
         progress = 0.0
+        DispatchQueue.main.async {
+            self.isLoading = false
+        }
         
         guard let serverURL = URL(string: appState.settings.comfyServerURL) else { return }
         var request = URLRequest(url: serverURL.appendingPathComponent("interrupt"))
