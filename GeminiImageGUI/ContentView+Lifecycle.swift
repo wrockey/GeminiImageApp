@@ -380,7 +380,7 @@ extension ContentView {
         apiKeyPath = ""
         outputPath = ""
         batchFilePath = ""
-        startPrompt = "1"
-        endPrompt = ""
+//        startPrompt = "1"
+//        endPrompt = ""
     }
 }

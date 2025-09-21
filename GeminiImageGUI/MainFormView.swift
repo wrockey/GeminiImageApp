@@ -5,7 +5,7 @@ import AppKit
 #elseif os(iOS)
 import UIKit
 #endif
-
+ 
 struct MainFormView: View {
     @Binding var configExpanded: Bool
     @Binding var promptExpanded: Bool
@@ -33,15 +33,15 @@ struct MainFormView: View {
     let onComfyJSONSelected: (Result<[URL], Error>) -> Void
     let onBatchFileSelected: (Result<[URL], Error>) -> Void  // New: Handler for batch file selection
     let onBatchSubmit: () -> Void  // New: Handler for batch submission (implement in ContentView to loop over prompts)
-
+ 
     @EnvironmentObject var appState: AppState
     
     @Environment(\.undoManager) private var undoManager
     
     @State private var showCopiedMessage: Bool = false
     @Binding var batchFilePath: String  // New: Path to selected batch file
-    @Binding var startPrompt: String  // Changed to @Binding
-    @Binding var endPrompt: String  // Changed to @Binding
+    @Binding var batchStartIndex: Int
+    @Binding var batchEndIndex: Int
     @AppStorage("batchExpanded") private var batchExpanded: Bool = true  // New: Expansion state
     
     @Environment(\.horizontalSizeClass) private var sizeClass
@@ -49,7 +49,7 @@ struct MainFormView: View {
     private var isCompact: Bool {
         sizeClass == .compact
     }
-
+ 
     var isSubmitDisabled: Bool {
         if appState.settings.mode == .gemini {
             return appState.settings.apiKey.isEmpty || prompt.isEmpty
@@ -71,8 +71,8 @@ struct MainFormView: View {
             return true
         }
         guard !appState.batchPrompts.isEmpty else { return true }
-        let start = Int(startPrompt) ?? 1
-        let end = Int(endPrompt) ?? appState.batchPrompts.count
+        let start = batchStartIndex
+        let end = batchEndIndex
         return start < 1 || end > appState.batchPrompts.count || start > end
     }
     
@@ -170,6 +170,7 @@ struct MainFormView: View {
                             onSubmit()
                         }
                         .buttonStyle(.borderedProminent)
+//                        .tint(.blue)  // System blue for accent
                         .tint(isSubmitDisabled ? .gray : .blue)
                         .foregroundColor(isSubmitDisabled ? .gray : .white)
                         .controlSize(.large)
@@ -246,31 +247,196 @@ struct MainFormView: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                         }
                         
-                        HStack {
-                            Text("Starting Prompt:")
-                                .font(.system(.subheadline, design: .default, weight: .medium))
-                                .foregroundColor(.secondary)
-                                .frame(width: 80, alignment: .leading) // Align labels
-                                .help("Specify the starting prompt number in the batch file")
-                            TextField("1", text: $startPrompt)
-                                .textFieldStyle(.roundedBorder)
-                                .frame(width: 50)
-                                .help("Enter the 1-based index of the first prompt to process (default: 1)")
-                            
-                            Spacer().frame(width: 20)  // Add 50px space between boxes
-                            
-                            Text("Ending Prompt:")
-                                .font(.system(.subheadline, design: .default, weight: .medium))
-                                .foregroundColor(.secondary)
-                                .frame(width: 80, alignment: .leading) // Align labels
-                                .help("Specify the ending prompt number in the batch file")
-                            TextField("", text: $endPrompt)
-                                .textFieldStyle(.roundedBorder)
-                                .frame(width: 50)
-                                .help("Enter the 1-based index of the last prompt to process (default: last prompt)")
-                            Spacer()
+                        if isCompact {
+                            HStack {
+                                VStack(alignment: .center) {
+                                    Text("Starting Prompt:")
+                                        .font(.system(.subheadline, design: .default, weight: .medium))
+                                        .foregroundColor(.secondary)
+                                        .help("Specify the starting prompt number in the batch file")
+                                    if appState.batchPrompts.count >= 1 {
+                                        #if os(iOS)
+                                        Picker("", selection: $batchStartIndex) {
+                                            ForEach(1...appState.batchPrompts.count, id: \.self) { num in
+                                                Text("\(num)").tag(num)
+                                            }
+                                        }
+                                        .pickerStyle(.wheel)
+                                        .frame(width: 80, height: 100)
+                                        .clipped()
+                                        .disabled(appState.batchPrompts.isEmpty)
+                                        .help("Select the 1-based index of the first prompt to process (default: 1)")
+                                        #else
+                                        HStack(spacing: 0) {
+                                            Button("-") {
+                                                if batchStartIndex > 1 {
+                                                    batchStartIndex -= 1
+                                                }
+                                            }
+                                            .disabled(batchStartIndex <= 1 || appState.batchPrompts.isEmpty)
+                                            
+                                            TextField("", value: $batchStartIndex, formatter: NumberFormatter())
+                                                .textFieldStyle(.roundedBorder)
+                                                .frame(width: 60)
+                                                .disabled(appState.batchPrompts.isEmpty)
+                                            
+                                            Button("+") {
+                                                if batchStartIndex < appState.batchPrompts.count {
+                                                    batchStartIndex += 1
+                                                }
+                                            }
+                                            .disabled(batchStartIndex >= appState.batchPrompts.count || appState.batchPrompts.isEmpty)
+                                        }
+                                        .help("Select the 1-based index of the first prompt to process (default: 1)")
+                                        #endif
+                                    } else {
+                                        Text("N/A")
+                                            .foregroundColor(.gray)
+                                    }
+                                }
+                                Spacer()
+                                VStack(alignment: .center) {
+                                    Text("Ending Prompt:")
+                                        .font(.system(.subheadline, design: .default, weight: .medium))
+                                        .foregroundColor(.secondary)
+                                        .help("Specify the ending prompt number in the batch file")
+                                    if appState.batchPrompts.count >= 1 {
+                                        #if os(iOS)
+                                        Picker("", selection: $batchEndIndex) {
+                                            ForEach(1...appState.batchPrompts.count, id: \.self) { num in
+                                                Text("\(num)").tag(num)
+                                            }
+                                        }
+                                        .pickerStyle(.wheel)
+                                        .frame(width: 80, height: 100)
+                                        .clipped()
+                                        .disabled(appState.batchPrompts.isEmpty)
+                                        .help("Select the 1-based index of the last prompt to process (default: last prompt)")
+                                        #else
+                                        HStack(spacing: 0) {
+                                            Button("-") {
+                                                if batchEndIndex > 1 {
+                                                    batchEndIndex -= 1
+                                                }
+                                            }
+                                            .disabled(batchEndIndex <= 1 || appState.batchPrompts.isEmpty)
+                                            
+                                            TextField("", value: $batchEndIndex, formatter: NumberFormatter())
+                                                .textFieldStyle(.roundedBorder)
+                                                .frame(width: 60)
+                                                .disabled(appState.batchPrompts.isEmpty)
+                                            
+                                            Button("+") {
+                                                if batchEndIndex < appState.batchPrompts.count {
+                                                    batchEndIndex += 1
+                                                }
+                                            }
+                                            .disabled(batchEndIndex >= appState.batchPrompts.count || appState.batchPrompts.isEmpty)
+                                        }
+                                        .help("Select the 1-based index of the last prompt to process (default: last prompt)")
+                                        #endif
+                                    } else {
+                                        Text("N/A")
+                                            .foregroundColor(.gray)
+                                    }
+                                }
+                            }
+                            .frame(maxWidth: .infinity)
+                        } else {
+                            HStack {
+                                Text("Starting Prompt:")
+                                    .font(.system(.subheadline, design: .default, weight: .medium))
+                                    .foregroundColor(.secondary)
+                                    .help("Specify the starting prompt number in the batch file")
+                                if appState.batchPrompts.count >= 1 {
+                                    #if os(iOS)
+                                    Picker("", selection: $batchStartIndex) {
+                                        ForEach(1...appState.batchPrompts.count, id: \.self) { num in
+                                            Text("\(num)").tag(num)
+                                        }
+                                    }
+                                    .pickerStyle(.wheel)
+                                    .frame(width: 80, height: 100)
+                                    .clipped()
+                                    .disabled(appState.batchPrompts.isEmpty)
+                                    .help("Select the 1-based index of the first prompt to process (default: 1)")
+                                    #else
+                                    HStack(spacing: 0) {
+                                        Button("-") {
+                                            if batchStartIndex > 1 {
+                                                batchStartIndex -= 1
+                                            }
+                                        }
+                                        .disabled(batchStartIndex <= 1 || appState.batchPrompts.isEmpty)
+                                        
+                                        TextField("", value: $batchStartIndex, formatter: NumberFormatter())
+                                            .textFieldStyle(.roundedBorder)
+                                            .frame(width: 60)
+                                            .disabled(appState.batchPrompts.isEmpty)
+                                        
+                                        Button("+") {
+                                            if batchStartIndex < appState.batchPrompts.count {
+                                                batchStartIndex += 1
+                                            }
+                                        }
+                                        .disabled(batchStartIndex >= appState.batchPrompts.count || appState.batchPrompts.isEmpty)
+                                    }
+                                    .help("Select the 1-based index of the first prompt to process (default: 1)")
+                                    #endif
+                                } else {
+                                    Text("N/A")
+                                        .foregroundColor(.gray)
+                                }
+ 
+                                Spacer().frame(width: 20)
+ 
+                                Text("Ending Prompt:")
+                                    .font(.system(.subheadline, design: .default, weight: .medium))
+                                    .foregroundColor(.secondary)
+                                    .help("Specify the ending prompt number in the batch file")
+                                if appState.batchPrompts.count >= 1 {
+                                    #if os(iOS)
+                                    Picker("", selection: $batchEndIndex) {
+                                        ForEach(1...appState.batchPrompts.count, id: \.self) { num in
+                                            Text("\(num)").tag(num)
+                                        }
+                                    }
+                                    .pickerStyle(.wheel)
+                                    .frame(width: 80, height: 100)
+                                    .clipped()
+                                    .disabled(appState.batchPrompts.isEmpty)
+                                    .help("Select the 1-based index of the last prompt to process (default: last prompt)")
+                                    #else
+                                    HStack(spacing: 0) {
+                                        Button("-") {
+                                            if batchEndIndex > 1 {
+                                                batchEndIndex -= 1
+                                            }
+                                        }
+                                        .disabled(batchEndIndex <= 1 || appState.batchPrompts.isEmpty)
+                                        
+                                        TextField("", value: $batchEndIndex, formatter: NumberFormatter())
+                                            .textFieldStyle(.roundedBorder)
+                                            .frame(width: 60)
+                                            .disabled(appState.batchPrompts.isEmpty)
+                                        
+                                        Button("+") {
+                                            if batchEndIndex < appState.batchPrompts.count {
+                                                batchEndIndex += 1
+                                            }
+                                        }
+                                        .disabled(batchEndIndex >= appState.batchPrompts.count || appState.batchPrompts.isEmpty)
+                                    }
+                                    .help("Select the 1-based index of the last prompt to process (default: last prompt)")
+                                    #endif
+                                } else {
+                                    Text("N/A")
+                                        .foregroundColor(.gray)
+                                }
+                                Spacer()
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
                         }
-                        .frame(maxWidth: .infinity, alignment: .leading)
                         if appState.batchPrompts.isEmpty {
                             Text("Select a .txt file with one prompt per line.")
                                 .foregroundColor(.secondary)
@@ -289,6 +455,7 @@ struct MainFormView: View {
                             .buttonStyle(.borderedProminent)
                             .tint((isBatchSubmitDisabled || isLoading) ? .gray : .blue)
                             .foregroundColor((isBatchSubmitDisabled || isLoading) ? .gray : .white)
+//                            .tint(.blue)
                             .controlSize(.large)
                             .disabled(isBatchSubmitDisabled || isLoading)
                             .frame(maxWidth: .infinity, minHeight: 44)
@@ -346,11 +513,11 @@ struct MainFormView: View {
         }
         .onChange(of: appState.batchPrompts) { newPrompts in  // New: Update start/end on batch load
             if !newPrompts.isEmpty {
-                startPrompt = "1"
-                endPrompt = "\(newPrompts.count)"
+                batchStartIndex = 1
+                batchEndIndex = newPrompts.count
             } else {
-                startPrompt = "1"
-                endPrompt = ""
+                batchStartIndex = 1
+                batchEndIndex = 1
             }
         }
     }
@@ -389,3 +556,5 @@ struct MainFormView: View {
         }
     }
 }
+
+

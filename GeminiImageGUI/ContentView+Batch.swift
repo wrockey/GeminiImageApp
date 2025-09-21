@@ -1,7 +1,7 @@
 // ContentView+Batch.swift
 import SwiftUI
 import Foundation  // Add other imports as needed
-
+ 
 extension ContentView {
     func handleBatchFileSelection(_ result: Result<[URL], Error>) {
         switch result {
@@ -103,8 +103,13 @@ extension ContentView {
             }
         }
         
-        let start = Int(startPrompt) ?? 1
-        let end = Int(endPrompt) ?? appState.batchPrompts.count
+        let start = batchStartIndex
+        let end = batchEndIndex
+        guard start <= end else {
+            errorMessage = "Starting prompt must be less than or equal to ending prompt."
+            showErrorAlert = true
+            return
+        }
         var failures: [(Int, String, String)] = []  // (index, prompt, errorDesc)
         
         isLoading = true

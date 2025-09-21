@@ -1,10 +1,11 @@
+// contentview.swift
 import SwiftUI
 #if os(macOS)
 import AppKit
 #elseif os(iOS)
 import UIKit
 #endif
-
+ 
 extension View {
     func workflowErrorAlert(appState: AppState) -> some View {
         alert("Workflow Error", isPresented: Binding<Bool>(
@@ -17,7 +18,7 @@ extension View {
         }
         .accessibilityLabel("Workflow Error Alert")
     }
-
+ 
     func fullImageSheet(showFullImage: Binding<Bool>, outputImage: PlatformImage?) -> some View {
         sheet(isPresented: showFullImage) {
             if let outputImage = outputImage {
@@ -26,7 +27,7 @@ extension View {
         }
         .accessibilityLabel("Full Image View Sheet")
     }
-
+ 
     func errorAlert(showErrorAlert: Binding<Bool>, errorMessage: String?) -> some View {
         alert("Error", isPresented: showErrorAlert) {
             Button("OK") {}
@@ -35,7 +36,7 @@ extension View {
         }
         .accessibilityLabel("Error Alert")
     }
-
+ 
     func successAlert(showSuccessAlert: Binding<Bool>, successMessage: String) -> some View {
         alert("Success", isPresented: showSuccessAlert) {
             Button("OK") {}
@@ -44,21 +45,21 @@ extension View {
         }
         .accessibilityLabel("Success Alert")
     }
-
+ 
     func onboardingSheet(showOnboarding: Binding<Bool>) -> some View {
         sheet(isPresented: showOnboarding) {
             OnboardingView()
         }
         .accessibilityLabel("Onboarding Sheet")
     }
-
+ 
     func helpSheet(showHelp: Binding<Bool>, mode: GenerationMode) -> some View {
         sheet(isPresented: showHelp) {
             HelpView(mode: mode)
         }
         .accessibilityLabel("Help Sheet")
     }
-
+ 
     func selectFolderAlert(isPresented: Binding<Bool>, selectHandler: @escaping () -> Void) -> some View {
         alert("Select Output Folder", isPresented: isPresented) {
             Button("Select Folder") {
@@ -71,7 +72,7 @@ extension View {
         .accessibilityLabel("Select Output Folder Alert")
     }
 }
-
+ 
 enum GenerationError: Error {
     case invalidURL
     case encodingFailed(String)
@@ -88,7 +89,7 @@ enum GenerationError: Error {
     case invalidViewURL
     case invalidImageNode
 }
-
+ 
 struct ContentView: View {
     @EnvironmentObject var appState: AppState
     @Environment(\.colorScheme) var colorScheme
@@ -108,8 +109,8 @@ struct ContentView: View {
     @State var showAnnotationSheet: Bool = false  // Removed 'private'
     @State var selectedSlotId: UUID?  // Removed 'private'
     @State var batchFilePath: String = ""  // Removed 'private'
-    @State var startPrompt: String = "1"  // Removed 'private'
-    @State var endPrompt: String = ""  // Removed 'private'
+    @State var batchStartIndex: Int = 1
+    @State var batchEndIndex: Int = 1
     @State var successMessage: String = ""  // Removed 'private'
     @State var showSuccessAlert: Bool = false  // Removed 'private'
     @State var showHelp: Bool = false  // New: For help sheet
@@ -232,8 +233,8 @@ struct ContentView: View {
                         onBatchFileSelected: handleBatchFileSelection,
                         onBatchSubmit: batchSubmit,
                         batchFilePath: $batchFilePath,
-                        startPrompt: $startPrompt,
-                        endPrompt: $endPrompt
+                        batchStartIndex: $batchStartIndex,
+                        batchEndIndex: $batchEndIndex
                     )
                     .environmentObject(appState)
                     .padding(.horizontal, 20)  // Increased horizontal padding for iPad comfort
@@ -320,9 +321,8 @@ struct ContentView: View {
                     onBatchFileSelected: handleBatchFileSelection,
                     onBatchSubmit: batchSubmit,
                     batchFilePath: $batchFilePath,
-                    startPrompt: $startPrompt,
-                    endPrompt: $endPrompt
-                    
+                    batchStartIndex: $batchStartIndex,
+                    batchEndIndex: $batchEndIndex
                 )
                 .environmentObject(appState)
                 .padding(.horizontal, 20)  // Add padding for better readability and alignment with iOS
@@ -410,7 +410,7 @@ struct ContentView: View {
             .help("Show onboarding guide")
             .accessibilityLabel("Onboarding")
             .accessibilityHint("Opens the onboarding guide.")
-
+ 
             if appState.settings.mode == .gemini {
                 Button(action: openBillingConsole) {
                     Image(systemName: "dollarsign.circle")
@@ -422,10 +422,11 @@ struct ContentView: View {
             }
         }
     }
-
+ 
     private func openBillingConsole() {
         if let url = URL(string: "https://console.cloud.google.com/billing") {
             PlatformBrowser.open(url: url)
         }
     }
 }
+ 
