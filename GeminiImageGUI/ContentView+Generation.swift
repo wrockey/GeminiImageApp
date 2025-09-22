@@ -8,7 +8,7 @@ import AppKit
 import ImageIO // Required for CGImageSource/Destination APIs in stripExif
 
 struct GrokImageResponse: Codable {
-    let created: Int
+    let created: Int?
     let data: [GrokImageData]
 }
 
