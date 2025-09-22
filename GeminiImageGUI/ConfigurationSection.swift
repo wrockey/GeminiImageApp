@@ -340,7 +340,6 @@ struct ConfigurationSection: View {
                 .help("Select the Grok model")
             Picker("", selection: $appState.settings.selectedGrokModel) {
                 Text("grok-2-image-1212").tag("grok-2-image-1212")
-                Text("aurora").tag("aurora")
             }
             .pickerStyle(.menu)
             .help("Choose the Grok model for generation")
