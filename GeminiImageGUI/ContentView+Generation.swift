@@ -382,8 +382,10 @@ extension ContentView {
             
             try Task.checkCancellation()
             let (data, _) = try await URLSession.shared.data(for: request)
-            print(String(data: data, encoding: .utf8) ?? "No data")
             let response = try JSONDecoder().decode(GrokImageResponse.self, from: data)
+            if let revised = response.data.first?.revised_prompt {
+                print("Revised prompt from Grok: \(revised)")
+            }
             
             var textOutput = ""
             var savedImage: PlatformImage? = nil
