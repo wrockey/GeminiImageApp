@@ -1,20 +1,20 @@
 //TextEditorView.swift
 import SwiftUI
-
+ 
 #if os(macOS)
 typealias Representable = NSViewRepresentable
 #elseif os(iOS)
 typealias Representable = UIViewRepresentable
 #endif
-
+ 
 struct CustomTextEditor: Representable {
     @Binding var text: String
     @Binding var platformTextView: PlatformTextView?
-
+ 
     func makeCoordinator() -> Coordinator {
         Coordinator(parent: self)
     }
-
+ 
     #if os(macOS)
     func makeNSView(context: Context) -> NSScrollView {
         let scrollView = NSScrollView()
@@ -28,7 +28,7 @@ struct CustomTextEditor: Representable {
         platformTextView = textView
         return scrollView
     }
-
+ 
     func updateNSView(_ nsView: NSScrollView, context: Context) {
         if let textView = nsView.documentView as? NSTextView {
             if textView.string != text {
@@ -44,21 +44,21 @@ struct CustomTextEditor: Representable {
         platformTextView = textView
         return textView
     }
-
+ 
     func updateUIView(_ uiView: UITextView, context: Context) {
         if uiView.text != text {
             uiView.text = text
         }
     }
     #endif
-
+ 
     class Coordinator: NSObject, PlatformTextDelegate {
         var parent: CustomTextEditor
-
+ 
         init(parent: CustomTextEditor) {
             self.parent = parent
         }
-
+ 
         #if os(macOS)
         func textDidChange(_ notification: Notification) {
             if let textView = notification.object as? NSTextView {
@@ -72,19 +72,20 @@ struct CustomTextEditor: Representable {
         #endif
     }
 }
-
+ 
 extension Notification.Name {
     static let batchFileUpdated = Notification.Name("batchFileUpdated")
 }
-
+ 
 struct TextEditorView: View {
     let fileURL: URL
     @State private var text: String = ""
     @State private var error: String? = nil
     @State private var platformTextView: PlatformTextView? = nil
     @Environment(\.dismiss) var dismiss
-
+ 
     var body: some View {
+#if os(iOS)
         NavigationStack {
             if let error = error {
                 Text(error)
@@ -130,8 +131,54 @@ struct TextEditorView: View {
         .onAppear {
             loadText()
         }
+#else
+        Group {
+            if let error = error {
+                Text(error)
+                    .foregroundColor(.red)
+            } else {
+                CustomTextEditor(text: $text, platformTextView: $platformTextView)
+            }
+        }
+        .navigationTitle(fileURL.lastPathComponent)
+        .toolbar {
+            ToolbarItem(placement: .automatic) {
+                Button {
+                    dismiss()
+                } label: {
+                    Image(systemName: "xmark")
+                }
+            }
+            ToolbarItemGroup(placement: .automatic) {
+                Button {
+                    platformTextView?.paste()
+                } label: {
+                    Image(systemName: "doc.on.clipboard")
+                }
+                Button {
+                    platformTextView?.copySelectedOrAll()
+                } label: {
+                    Image(systemName: "doc.on.doc")
+                }
+                Button {
+                    platformTextView?.clear()
+                    text = ""
+                } label: {
+                    Image(systemName: "trash")
+                }
+                Button {
+                    saveAndDismiss()
+                } label: {
+                    Image(systemName: "checkmark")
+                }
+            }
+        }
+        .onAppear {
+            loadText()
+        }
+#endif
     }
-
+ 
     private func loadText() {
         do {
             let accessing = fileURL.startAccessingSecurityScopedResource()
@@ -145,7 +192,7 @@ struct TextEditorView: View {
             self.error = error.localizedDescription
         }
     }
-
+ 
     private func saveAndDismiss() {
         do {
             let accessing = fileURL.startAccessingSecurityScopedResource()

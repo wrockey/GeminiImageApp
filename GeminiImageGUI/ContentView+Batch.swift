@@ -13,12 +13,11 @@ extension ContentView {
             }
             do {
                 #if os(macOS)
-                let bookmarkOptions: URL.BookmarkCreationOptions = [.withSecurityScope]
+                let bookmarkOptions: URL.BookmarkCreationOptions = [.withSecurityScope, .securityScopeAllowOnlyReadAccess]
+                let bookmarkData = try url.bookmarkData(options: bookmarkOptions, includingResourceValuesForKeys: nil, relativeTo: nil)
                 #else
                 let bookmarkOptions: URL.BookmarkCreationOptions = .minimalBookmark
-                #endif
                 var bookmarkData: Data?
-                #if os(iOS)
                 var coordError: NSError?
                 var innerCoordError: Error?
                 NSFileCoordinator().coordinate(readingItemAt: url, options: [], error: &coordError) { coordinatedURL in
@@ -42,8 +41,6 @@ extension ContentView {
                 guard let bookmarkData = bookmarkData else {
                     throw NSError(domain: "BookmarkError", code: 0, userInfo: [NSLocalizedDescriptionKey: "Failed to create bookmark"])
                 }
-                #else
-                bookmarkData = try url.bookmarkData(options: bookmarkOptions, includingResourceValuesForKeys: nil, relativeTo: nil)
                 #endif
                 UserDefaults.standard.set(bookmarkData, forKey: "batchFileBookmark")
             } catch {
@@ -86,7 +83,27 @@ extension ContentView {
             showErrorAlert = true
         }
     }
-    
+    func loadBatchPrompts() {
+            guard let bookmarkData = UserDefaults.standard.data(forKey: "batchFileBookmark") else { return }
+            do {
+                var isStale = false
+                #if os(macOS)
+                let options: URL.BookmarkResolutionOptions = .withSecurityScope
+                #else
+                let options: URL.BookmarkResolutionOptions = []
+                #endif
+                let resolvedURL = try URL(resolvingBookmarkData: bookmarkData, options: options, relativeTo: nil, bookmarkDataIsStale: &isStale)
+                let accessing = resolvedURL.startAccessingSecurityScopedResource()
+                defer { if accessing { resolvedURL.stopAccessingSecurityScopedResource() } }
+                let content = try String(contentsOf: resolvedURL, encoding: .utf8)
+                appState.batchPrompts = content.components(separatedBy: .newlines).filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+                appState.batchFileURL = resolvedURL
+                batchFilePath = resolvedURL.path
+            } catch {
+                errorMessage = "Failed to load batch file: \(error.localizedDescription)"
+                showErrorAlert = true
+            }
+        }
     func batchSubmit() {
         if outputPath.isEmpty {
             pendingAction = batchSubmit

@@ -1,11 +1,16 @@
-//ContentView.swift
+// ContentView.swift
 import SwiftUI
 #if os(macOS)
 import AppKit
 #elseif os(iOS)
 import UIKit
 #endif
- 
+
+struct IdentifiableData: Identifiable {
+    let id = UUID()
+    let data: Data
+}
+
 extension View {
     func workflowErrorAlert(appState: AppState) -> some View {
         alert("Workflow Error", isPresented: Binding<Bool>(
@@ -18,7 +23,7 @@ extension View {
         }
         .accessibilityLabel("Workflow Error Alert")
     }
- 
+
     func fullImageSheet(showFullImage: Binding<Bool>, outputImage: PlatformImage?) -> some View {
         sheet(isPresented: showFullImage) {
             if let outputImage = outputImage {
@@ -27,7 +32,7 @@ extension View {
         }
         .accessibilityLabel("Full Image View Sheet")
     }
- 
+
     func errorAlert(showErrorAlert: Binding<Bool>, errorMessage: String?) -> some View {
         alert("Error", isPresented: showErrorAlert) {
             Button("OK") {}
@@ -36,7 +41,7 @@ extension View {
         }
         .accessibilityLabel("Error Alert")
     }
- 
+
     func successAlert(showSuccessAlert: Binding<Bool>, successMessage: String) -> some View {
         alert("Success", isPresented: showSuccessAlert) {
             Button("OK") {}
@@ -45,21 +50,21 @@ extension View {
         }
         .accessibilityLabel("Success Alert")
     }
- 
+
     func onboardingSheet(showOnboarding: Binding<Bool>) -> some View {
         sheet(isPresented: showOnboarding) {
             OnboardingView()
         }
         .accessibilityLabel("Onboarding Sheet")
     }
- 
+
     func helpSheet(showHelp: Binding<Bool>, mode: GenerationMode) -> some View {
         sheet(isPresented: showHelp) {
             HelpView(mode: mode)
         }
         .accessibilityLabel("Help Sheet")
     }
- 
+
     func selectFolderAlert(isPresented: Binding<Bool>, selectHandler: @escaping () -> Void) -> some View {
         alert("Select Output Folder", isPresented: isPresented) {
             Button("Select Folder") {
@@ -72,7 +77,7 @@ extension View {
         .accessibilityLabel("Select Output Folder Alert")
     }
 }
- 
+
 enum GenerationError: Error {
     case invalidURL
     case encodingFailed(String)
@@ -88,11 +93,6 @@ enum GenerationError: Error {
     case fetchFailed(String)
     case invalidViewURL
     case invalidImageNode
-}
- 
-struct IdentifiableString: Identifiable {
-    let value: String
-    var id: String { value }
 }
 
 struct ContentView: View {
@@ -127,7 +127,7 @@ struct ContentView: View {
     @AppStorage("promptExpanded") private var promptExpanded: Bool = true
     @AppStorage("inputImagesExpanded") private var inputImagesExpanded: Bool = true
     @AppStorage("responseExpanded") private var responseExpanded: Bool = true
-    @State private var showTextEditorPath: IdentifiableString? = nil // New for iOS text editor
+    @State private var showTextEditorBookmark: IdentifiableData? = nil // Updated for text editor with bookmark
 #if os(macOS)
     @Environment(\.openWindow) private var openWindow
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
@@ -164,13 +164,13 @@ struct ContentView: View {
                     }
                 }
             }
-            .sheet(item: $showTextEditorPath) { identifiablePath in
-            TextEditorView(fileURL: URL(fileURLWithPath: identifiablePath.value))
+            .sheet(item: $showTextEditorBookmark) { identifiable in
+                TextEditorView(bookmarkData: identifiable.data)
+                    .presentationDetents([.large])
+                    .presentationDragIndicator(.visible)
             }
             .onReceive(NotificationCenter.default.publisher(for: .batchFileUpdated)) { _ in
-                if !batchFilePath.isEmpty {
-                    handleBatchFileSelection(.success([URL(fileURLWithPath: batchFilePath)]))
-                }
+                loadBatchPrompts()
             }
             .onAppear {
                 performOnAppear()
@@ -197,9 +197,7 @@ struct ContentView: View {
                 }
             }
             .onReceive(NotificationCenter.default.publisher(for: .batchFileUpdated)) { _ in
-                if !batchFilePath.isEmpty {
-                    handleBatchFileSelection(.success([URL(fileURLWithPath: batchFilePath)]))
-                }
+                loadBatchPrompts()
             }
             .onAppear {
                 performOnAppear()
@@ -253,7 +251,12 @@ struct ContentView: View {
                         onBatchFileSelected: handleBatchFileSelection,
                         onBatchSubmit: batchSubmit,
                         onEditBatchFile: {
-                            showTextEditorPath = IdentifiableString(value: batchFilePath)
+                            if let bookmarkData = UserDefaults.standard.data(forKey: "batchFileBookmark") {
+                                showTextEditorBookmark = IdentifiableData(data: bookmarkData)
+                            } else {
+                                errorMessage = "Failed to access batch file."
+                                showErrorAlert = true
+                            }
                         },
                         batchFilePath: $batchFilePath,
                         batchStartIndex: $batchStartIndex,
@@ -291,7 +294,7 @@ struct ContentView: View {
                 if let index = appState.ui.imageSlots.firstIndex(where: { $0.id == slotId }),
                    let image = appState.ui.imageSlots[index].image {
                     let path = appState.ui.imageSlots[index].path
-                    let fileURL = URL(fileURLWithPath: path)
+                    let fileURL = URL(filePath: path)
                     let lastComponent = fileURL.lastPathComponent
                     let components = lastComponent.components(separatedBy: ".")
                     let baseFileName = components.count > 1 ? components.dropLast().joined(separator: ".") : (lastComponent.isEmpty ? "image" : lastComponent)
@@ -344,7 +347,12 @@ struct ContentView: View {
                     onBatchFileSelected: handleBatchFileSelection,
                     onBatchSubmit: batchSubmit,
                     onEditBatchFile: {
-                        openWindow(value: batchFilePath)
+                        if let bookmarkData = UserDefaults.standard.data(forKey: "batchFileBookmark") {
+                            openWindow(id: "text-editor", value: bookmarkData)
+                        } else {
+                            errorMessage = "Failed to access batch file."
+                            showErrorAlert = true
+                        }
                     },
                     batchFilePath: $batchFilePath,
                     batchStartIndex: $batchStartIndex,
@@ -368,18 +376,6 @@ struct ContentView: View {
     
     private var toolbarContent: some View {
         Group {
-/*            Button(action: {
-                print("Showing api file picker from toolbar")
-                PlatformFilePicker.presentOpenPanel(allowedTypes: [.plainText], allowsMultiple: false, canChooseDirectories: false) { result in
-                    handleApiKeySelection(result)
-                }
-            }) {
-                Image(systemName: "key")
-                    .symbolRenderingMode(.hierarchical)
-                
-            }
-            .help("Load API Key")
-*/
             Button(action: {
                 print("Showing output folder picker from toolbar")
                 PlatformFilePicker.presentOpenPanel(allowedTypes: [.folder], allowsMultiple: false, canChooseDirectories: true) { result in
@@ -468,4 +464,6 @@ struct ContentView: View {
             PlatformBrowser.open(url: url)
         }
     }
+
+    // Other functions like performOnAppear, submitPrompt, stopGeneration, handleApiKeySelection, handleOutputFolderSelection, handleComfyJSONSelection, resetAppState, etc., should be here as per your original code...
 }
