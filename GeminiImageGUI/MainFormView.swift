@@ -33,6 +33,7 @@ struct MainFormView: View {
     let onComfyJSONSelected: (Result<[URL], Error>) -> Void
     let onBatchFileSelected: (Result<[URL], Error>) -> Void  // New: Handler for batch file selection
     let onBatchSubmit: () -> Void  // New: Handler for batch submission (implement in ContentView to loop over prompts)
+    let onEditBatchFile: () -> Void  // New: Handler for editing batch file
  
     @EnvironmentObject var appState: AppState
     
@@ -225,6 +226,18 @@ struct MainFormView: View {
                                     }
                                     .buttonStyle(.borderless)
                                     .help("Choose a .txt file with multiple prompts for batch generation")
+                                    
+                                    Button(action: {
+                                        onEditBatchFile()
+                                    }) {
+                                        Image(systemName: "pencil")
+                                            .font(.system(size: 16))
+                                            .foregroundColor(.blue)
+                                    }
+                                    .buttonStyle(.borderless)
+                                    .disabled(batchFilePath.isEmpty)
+                                    .help("Edit the selected batch file")
+                                    
                                     Spacer()
                                 }
                             }
@@ -253,6 +266,18 @@ struct MainFormView: View {
                                 }
                                 .buttonStyle(.borderless)
                                 .help("Choose a .txt file with multiple prompts for batch generation")
+                                
+                                Button(action: {
+                                    onEditBatchFile()
+                                }) {
+                                    Image(systemName: "pencil")
+                                        .font(.system(size: 16))
+                                        .foregroundColor(.blue)
+                                }
+                                .buttonStyle(.borderless)
+                                .disabled(batchFilePath.isEmpty)
+                                .help("Edit the selected batch file")
+                                
                                 Spacer()
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -398,9 +423,9 @@ struct MainFormView: View {
                                     Text("N/A")
                                         .foregroundColor(.gray)
                                 }
- 
+
                                 Spacer().frame(width: 20)
- 
+
                                 Text("Ending Prompt:")
                                     .font(.system(.subheadline, design: .default, weight: .medium))
                                     .foregroundColor(.secondary)

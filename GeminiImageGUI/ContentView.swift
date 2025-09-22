@@ -1,11 +1,11 @@
-// ContentView.swift
+//ContentView.swift
 import SwiftUI
 #if os(macOS)
 import AppKit
 #elseif os(iOS)
 import UIKit
 #endif
-
+ 
 extension View {
     func workflowErrorAlert(appState: AppState) -> some View {
         alert("Workflow Error", isPresented: Binding<Bool>(
@@ -18,7 +18,7 @@ extension View {
         }
         .accessibilityLabel("Workflow Error Alert")
     }
-
+ 
     func fullImageSheet(showFullImage: Binding<Bool>, outputImage: PlatformImage?) -> some View {
         sheet(isPresented: showFullImage) {
             if let outputImage = outputImage {
@@ -27,7 +27,7 @@ extension View {
         }
         .accessibilityLabel("Full Image View Sheet")
     }
-
+ 
     func errorAlert(showErrorAlert: Binding<Bool>, errorMessage: String?) -> some View {
         alert("Error", isPresented: showErrorAlert) {
             Button("OK") {}
@@ -36,7 +36,7 @@ extension View {
         }
         .accessibilityLabel("Error Alert")
     }
-
+ 
     func successAlert(showSuccessAlert: Binding<Bool>, successMessage: String) -> some View {
         alert("Success", isPresented: showSuccessAlert) {
             Button("OK") {}
@@ -45,21 +45,21 @@ extension View {
         }
         .accessibilityLabel("Success Alert")
     }
-
+ 
     func onboardingSheet(showOnboarding: Binding<Bool>) -> some View {
         sheet(isPresented: showOnboarding) {
             OnboardingView()
         }
         .accessibilityLabel("Onboarding Sheet")
     }
-
+ 
     func helpSheet(showHelp: Binding<Bool>, mode: GenerationMode) -> some View {
         sheet(isPresented: showHelp) {
             HelpView(mode: mode)
         }
         .accessibilityLabel("Help Sheet")
     }
-
+ 
     func selectFolderAlert(isPresented: Binding<Bool>, selectHandler: @escaping () -> Void) -> some View {
         alert("Select Output Folder", isPresented: isPresented) {
             Button("Select Folder") {
@@ -72,7 +72,7 @@ extension View {
         .accessibilityLabel("Select Output Folder Alert")
     }
 }
-
+ 
 enum GenerationError: Error {
     case invalidURL
     case encodingFailed(String)
@@ -88,6 +88,11 @@ enum GenerationError: Error {
     case fetchFailed(String)
     case invalidViewURL
     case invalidImageNode
+}
+ 
+struct IdentifiableString: Identifiable {
+    let value: String
+    var id: String { value }
 }
 
 struct ContentView: View {
@@ -122,6 +127,7 @@ struct ContentView: View {
     @AppStorage("promptExpanded") private var promptExpanded: Bool = true
     @AppStorage("inputImagesExpanded") private var inputImagesExpanded: Bool = true
     @AppStorage("responseExpanded") private var responseExpanded: Bool = true
+    @State private var showTextEditorPath: IdentifiableString? = nil // New for iOS text editor
 #if os(macOS)
     @Environment(\.openWindow) private var openWindow
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
@@ -138,7 +144,7 @@ struct ContentView: View {
     private var bottomColor: Color {
         colorScheme == .light ? Color(white: 0.95) : Color(white: 0.15)
     }
-    
+
     var body: some View {
 #if os(iOS)
         iOSLayout
@@ -156,6 +162,14 @@ struct ContentView: View {
                         pendingAction?()
                         pendingAction = nil
                     }
+                }
+            }
+            .sheet(item: $showTextEditorPath) { identifiablePath in
+            TextEditorView(fileURL: URL(fileURLWithPath: identifiablePath.value))
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .batchFileUpdated)) { _ in
+                if !batchFilePath.isEmpty {
+                    handleBatchFileSelection(.success([URL(fileURLWithPath: batchFilePath)]))
                 }
             }
             .onAppear {
@@ -180,6 +194,11 @@ struct ContentView: View {
                         pendingAction?()
                         pendingAction = nil
                     }
+                }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .batchFileUpdated)) { _ in
+                if !batchFilePath.isEmpty {
+                    handleBatchFileSelection(.success([URL(fileURLWithPath: batchFilePath)]))
                 }
             }
             .onAppear {
@@ -233,6 +252,9 @@ struct ContentView: View {
                         onComfyJSONSelected: handleComfyJSONSelection,
                         onBatchFileSelected: handleBatchFileSelection,
                         onBatchSubmit: batchSubmit,
+                        onEditBatchFile: {
+                            showTextEditorPath = IdentifiableString(value: batchFilePath)
+                        },
                         batchFilePath: $batchFilePath,
                         batchStartIndex: $batchStartIndex,
                         batchEndIndex: $batchEndIndex
@@ -321,6 +343,9 @@ struct ContentView: View {
                     onComfyJSONSelected: handleComfyJSONSelection,
                     onBatchFileSelected: handleBatchFileSelection,
                     onBatchSubmit: batchSubmit,
+                    onEditBatchFile: {
+                        openWindow(value: batchFilePath)
+                    },
                     batchFilePath: $batchFilePath,
                     batchStartIndex: $batchStartIndex,
                     batchEndIndex: $batchEndIndex

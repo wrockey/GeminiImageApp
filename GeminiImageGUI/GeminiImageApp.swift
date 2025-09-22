@@ -432,6 +432,12 @@ struct GeminiImageApp: App {
             ContentView()
                 .environmentObject(appState)
         }
+        WindowGroup(id: "text-editor", for: String.self) { $path in
+                if let path = path {
+                    TextEditorView(fileURL: URL(fileURLWithPath: path))
+                        .frame(minWidth: 400, minHeight: 300)  // Optional: Set minimum size
+                }
+            }
         
         WindowGroup(for: UUID.self) { $slotId in
             if let slotId {

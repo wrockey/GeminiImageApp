@@ -381,3 +381,72 @@ extension PlatformImage {
         return nil
     }
 }
+
+protocol PlatformTextView {
+    var string: String { get set }
+    var selectedText: String { get }
+    func copySelectedOrAll()
+    func paste()
+    func clear()
+}
+
+#if os(macOS)
+extension NSTextView: PlatformTextView {
+    var selectedText: String {
+        return (string as NSString).substring(with: selectedRange()) as String
+    }
+
+    func copySelectedOrAll() {
+        if selectedRange().length > 0 {
+            copy(nil)
+        } else {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(string, forType: .string)
+        }
+    }
+
+    func paste() {
+        paste(nil)
+    }
+
+    func clear() {
+        string = ""
+    }
+}
+#elseif os(iOS)
+extension UITextView: PlatformTextView {
+    var string: String {
+        get { text ?? "" }
+        set { text = newValue }
+    }
+
+    var selectedText: String {
+        if let range = selectedTextRange {
+            return text(in: range) ?? ""
+        }
+        return ""
+    }
+
+    func copySelectedOrAll() {
+        if !selectedText.isEmpty {
+            copy(nil)
+        } else {
+            UIPasteboard.general.string = string
+        }
+    }
+
+    func paste() {
+        paste(nil)
+    }
+
+    func clear() {
+        text = ""
+    }
+}
+#endif
+
+#if os(macOS)
+typealias PlatformTextDelegate = NSTextViewDelegate
+#elseif os(iOS)
+typealias PlatformTextDelegate = UITextViewDelegate
+#endif
