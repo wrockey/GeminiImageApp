@@ -13,9 +13,8 @@ extension ContentView {
             }
             do {
                 #if os(macOS)
-                let bookmarkOptions: URL.BookmarkCreationOptions = [.withSecurityScope, .securityScopeAllowOnlyReadAccess]
-                let bookmarkData = try url.bookmarkData(options: bookmarkOptions, includingResourceValuesForKeys: nil, relativeTo: nil)
-                #else
+                let bookmarkOptions: URL.BookmarkCreationOptions = [.withSecurityScope]  // Allows read/write
+                let bookmarkData = try url.bookmarkData(options: bookmarkOptions, includingResourceValuesForKeys: nil, relativeTo: nil)                #else
                 let bookmarkOptions: URL.BookmarkCreationOptions = .minimalBookmark
                 var bookmarkData: Data?
                 var coordError: NSError?

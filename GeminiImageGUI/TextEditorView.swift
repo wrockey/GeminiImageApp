@@ -18,38 +18,72 @@ struct CustomTextEditor: Representable {
     #if os(macOS)
     func makeNSView(context: Context) -> NSScrollView {
         let scrollView = NSScrollView()
-        let textView = NSTextView()
+        let contentSize = scrollView.contentSize
+        
+        let textStorage = NSTextStorage()
+        let layoutManager = NSLayoutManager()
+        textStorage.addLayoutManager(layoutManager)
+        
+        let textContainer = NSTextContainer(containerSize: NSSize(width: contentSize.width, height: CGFloat.greatestFiniteMagnitude))
+        textContainer.widthTracksTextView = true
+        layoutManager.addTextContainer(textContainer)
+        
+        let textView = NSTextView(frame: NSRect(x: 0, y: 0, width: contentSize.width, height: contentSize.height), textContainer: textContainer)
         textView.font = NSFont.monospacedSystemFont(ofSize: 14, weight: .regular)
+        textView.textColor = .textColor  // Adaptive system text color (white in dark mode, black in light)
+        textView.backgroundColor = .textBackgroundColor  // Optional: Adaptive background (light grey in light, dark grey in dark)
+        textView.isEditable = true
+        textView.isSelectable = true
+        textView.allowsUndo = true
         textView.delegate = context.coordinator
+        textView.autoresizingMask = [.width]
+        
         scrollView.documentView = textView
         scrollView.hasVerticalScroller = true
         scrollView.hasHorizontalScroller = true
         scrollView.autohidesScrollers = true
+        
         platformTextView = textView
         return scrollView
     }
  
     func updateNSView(_ nsView: NSScrollView, context: Context) {
-        if let textView = nsView.documentView as? NSTextView {
-            if textView.string != text {
-                textView.string = text
+            if let textView = nsView.documentView as? NSTextView {
+                if textView.string != text {
+                    textView.string = text  // <-- CHANGED: Respects textColor and font
+                }
+                DispatchQueue.main.async {
+                    if let window = nsView.window, window.firstResponder != textView {
+                        window.makeFirstResponder(textView)  // <-- ADDED: Makes editable/focused
+                    }
+                }
             }
         }
-    }
     #elseif os(iOS)
     func makeUIView(context: Context) -> UITextView {
         let textView = UITextView()
         textView.font = UIFont.monospacedSystemFont(ofSize: 14, weight: .regular)
         textView.delegate = context.coordinator
+        textView.textColor = .label  // Adaptive text color (black in light mode, white in dark)
+        textView.backgroundColor = .systemBackground  // Adaptive background
+        textView.isEditable = true
+        textView.isSelectable = true
+        textView.textContainerInset = UIEdgeInsets(top: 20, left: 10, bottom: 20, right: 10)  // Padding for better usability
+        textView.contentInsetAdjustmentBehavior = .automatic  // Respects safe areas and keyboard
         platformTextView = textView
         return textView
     }
  
     func updateUIView(_ uiView: UITextView, context: Context) {
-        if uiView.text != text {
-            uiView.text = text
+            if uiView.text != text {
+                uiView.text = text
+            }
+            DispatchQueue.main.async {
+                if !uiView.isFirstResponder {
+                    uiView.becomeFirstResponder()  // <-- ADDED: Shows keyboard, makes editable
+                }
+            }
         }
-    }
     #endif
  
     class Coordinator: NSObject, PlatformTextDelegate {
@@ -78,134 +112,185 @@ extension Notification.Name {
 }
  
 struct TextEditorView: View {
-    let fileURL: URL
+    let bookmarkData: Data
+    @State private var fileURL: URL? = nil
     @State private var text: String = ""
     @State private var error: String? = nil
     @State private var platformTextView: PlatformTextView? = nil
     @Environment(\.dismiss) var dismiss
- 
+
     var body: some View {
 #if os(iOS)
         NavigationStack {
-            if let error = error {
-                Text(error)
-                    .foregroundColor(.red)
-            } else {
-                CustomTextEditor(text: $text, platformTextView: $platformTextView)
-            }
+            content
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {  // Leading: Cancel (xmark)
+                        Button {
+                            dismiss()
+                        } label: {
+                            Image(systemName: "xmark")
+                        }
+                    }
+                    ToolbarItem(placement: .destructiveAction) {  // Trailing: Clear (trash)
+                        Button {
+                            platformTextView?.clear()
+                            text = ""
+                        } label: {
+                            Image(systemName: "trash")
+                        }
+                    }
+                    ToolbarItem(placement: .confirmationAction) {  // Trailing: Save (checkmark)
+                        Button {
+                            saveAndDismiss()
+                        } label: {
+                            Image(systemName: "checkmark")
+                        }
+                    }
+                    ToolbarItem(placement: .navigationBarTrailing) {  // Additional trailing: Paste and Copy
+                        Button {
+                            platformTextView?.paste()
+                        } label: {
+                            Image(systemName: "doc.on.clipboard")
+                        }
+                    }
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        Button {
+                            platformTextView?.copySelectedOrAll()
+                        } label: {
+                            Image(systemName: "doc.on.doc")
+                        }
+                    }
+                }
         }
-        .navigationTitle(fileURL.lastPathComponent)
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .navigationBarLeading) {
-                Button {
-                    dismiss()
-                } label: {
-                    Image(systemName: "xmark")
-                }
-            }
-            ToolbarItemGroup(placement: .navigationBarTrailing) {
-                Button {
-                    platformTextView?.paste()
-                } label: {
-                    Image(systemName: "doc.on.clipboard")
-                }
-                Button {
-                    platformTextView?.copySelectedOrAll()
-                } label: {
-                    Image(systemName: "doc.on.doc")
-                }
-                Button {
-                    platformTextView?.clear()
-                    text = ""
-                } label: {
-                    Image(systemName: "trash")
-                }
-                Button {
-                    saveAndDismiss()
-                } label: {
-                    Image(systemName: "checkmark")
-                }
-            }
-        }
-        .onAppear {
-            loadText()
-        }
+        .navigationTitle(fileURL?.lastPathComponent ?? "Batch Editor")
+                .navigationBarTitleDisplayMode(.inline)
+                .onAppear(perform: onAppearAction)  // <-- ADD THIS: Loads the text on iOS
 #else
         Group {
-            if let error = error {
-                Text(error)
-                    .foregroundColor(.red)
-            } else {
-                CustomTextEditor(text: $text, platformTextView: $platformTextView)
-            }
+            content
         }
-        .navigationTitle(fileURL.lastPathComponent)
+        .navigationTitle(fileURL?.lastPathComponent ?? "Batch Editor")
         .toolbar {
             ToolbarItem(placement: .automatic) {
-                Button {
-                    dismiss()
-                } label: {
+                Button(action: { dismiss() }) {
                     Image(systemName: "xmark")
                 }
             }
             ToolbarItemGroup(placement: .automatic) {
-                Button {
-                    platformTextView?.paste()
-                } label: {
-                    Image(systemName: "doc.on.clipboard")
-                }
-                Button {
-                    platformTextView?.copySelectedOrAll()
-                } label: {
-                    Image(systemName: "doc.on.doc")
-                }
-                Button {
-                    platformTextView?.clear()
-                    text = ""
-                } label: {
-                    Image(systemName: "trash")
-                }
-                Button {
-                    saveAndDismiss()
-                } label: {
-                    Image(systemName: "checkmark")
-                }
+                toolbarButtons
             }
         }
-        .onAppear {
-            loadText()
-        }
+        .onAppear(perform: onAppearAction)
 #endif
+
     }
- 
-    private func loadText() {
-        do {
-            let accessing = fileURL.startAccessingSecurityScopedResource()
-            defer {
-                if accessing {
-                    fileURL.stopAccessingSecurityScopedResource()
-                }
-            }
-            text = try String(contentsOf: fileURL, encoding: .utf8)
-        } catch {
-            self.error = error.localizedDescription
+
+    @ViewBuilder
+    private var content: some View {
+        if let error = error {
+            Text(error).foregroundColor(.red).padding()
+        } else {
+            CustomTextEditor(text: $text, platformTextView: $platformTextView)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)  // Ensures it fills the available space below the nav bar
+//                .background(Color(UIColor.systemBackground))  // Adaptive background for visibility
         }
     }
- 
-    private func saveAndDismiss() {
+
+    private var toolbarButtons: some View {
+        Group {
+            Button(action: { platformTextView?.paste() }) {
+                Image(systemName: "doc.on.clipboard")
+            }
+            Button(action: { platformTextView?.copySelectedOrAll() }) {
+                Image(systemName: "doc.on.doc")
+            }
+            Button(action: { platformTextView?.clear(); text = "" }) {
+                Image(systemName: "trash")
+            }
+            Button(action: saveAndDismiss) {
+                Image(systemName: "checkmark")
+            }
+        }
+    }
+
+    private func onAppearAction() {
+        resolveURL()
+        if let url = fileURL {
+            loadText(from: url)
+        }
+    }
+
+    private func resolveURL() {
         do {
-            let accessing = fileURL.startAccessingSecurityScopedResource()
-            defer {
-                if accessing {
-                    fileURL.stopAccessingSecurityScopedResource()
+            var isStale = false
+    #if os(macOS)
+            let options: URL.BookmarkResolutionOptions = [.withSecurityScope]
+            let bookmarkOptions: URL.BookmarkCreationOptions = [.withSecurityScope]
+    #else
+            let options: URL.BookmarkResolutionOptions = []
+            let bookmarkOptions: URL.BookmarkCreationOptions = [.minimalBookmark]
+    #endif
+            let resolvedURL = try URL(resolvingBookmarkData: bookmarkData, options: options, bookmarkDataIsStale: &isStale)
+            
+            // Start access (works on both platforms if scoped)
+            if resolvedURL.startAccessingSecurityScopedResource() {
+                fileURL = resolvedURL
+            } else {
+                self.error = "Failed to start accessing security-scoped resource."
+                return
+            }
+            
+            if isStale {
+                if let newBookmark = try? resolvedURL.bookmarkData(options: bookmarkOptions) {
+                    UserDefaults.standard.set(newBookmark, forKey: "batchFileBookmark")
                 }
             }
-            try text.write(to: fileURL, atomically: true, encoding: .utf8)
-            NotificationCenter.default.post(name: .batchFileUpdated, object: nil)
-            dismiss()
         } catch {
-            self.error = error.localizedDescription
+            self.error = "Failed to resolve file: \(error.localizedDescription)"
+        }
+    }
+    private func loadText(from url: URL) {
+        var coordError: NSError?
+        NSFileCoordinator().coordinate(readingItemAt: url, options: [], error: &coordError) { coordinatedURL in
+            if coordinatedURL.startAccessingSecurityScopedResource() {
+                defer { coordinatedURL.stopAccessingSecurityScopedResource() }
+                do {
+                    text = try String(contentsOf: coordinatedURL, encoding: .utf8)
+                } catch {
+                    self.error = error.localizedDescription
+                }
+            } else {
+                self.error = "Failed to access file."
+            }
+        }
+        if let coordError = coordError {
+            self.error = coordError.localizedDescription
+        }
+    }
+
+    private func saveAndDismiss() {
+        guard let url = fileURL else {
+            self.error = "No file URL."
+            return
+        }
+        var coordError: NSError?
+        NSFileCoordinator().coordinate(writingItemAt: url, options: [], error: &coordError) { coordinatedURL in
+            if coordinatedURL.startAccessingSecurityScopedResource() {
+                defer { coordinatedURL.stopAccessingSecurityScopedResource() }
+                do {
+                    try text.write(to: coordinatedURL, atomically: true, encoding: .utf8)
+                    NotificationCenter.default.post(name: .batchFileUpdated, object: nil)
+                    dismiss()
+                } catch {
+                    self.error = error.localizedDescription
+                }
+            } else {
+                self.error = "Failed to access file for writing."
+            }
+        }
+        if let coordError = coordError {
+            self.error = coordError.localizedDescription
         }
     }
 }
+
