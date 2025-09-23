@@ -1,11 +1,8 @@
-//
-// PlatformAbstractions.swift
-//
 import Foundation
 import SwiftUI
 import UniformTypeIdentifiers
 import CoreGraphics
-import PhotosUI // Added for PHPicker
+import PhotosUI
 #if os(macOS)
 import AppKit
 #elseif os(iOS)
@@ -59,7 +56,6 @@ extension PlatformImage {
         #if os(macOS)
         return tiffRepresentation
         #elseif os(iOS)
-        // iOS equivalent: Convert to TIFF if needed, but rare; stub for compatibility
         return nil // Implement if required for port
         #endif
     }
@@ -104,14 +100,14 @@ struct PlatformPasteboard {
 }
 
 // MARK: - File Picker Abstraction
-// Callback-based for handling selection results
 typealias FilePickerCallback = (Result<[URL], Error>) -> Void
+typealias FileSaveCallback = (Result<URL, Error>) -> Void
 
 #if os(iOS)
 class FilePickerManager {
     static let shared = FilePickerManager()
     private init() {}
-    var activeDelegates: [FilePickerDelegate] = []
+    var activeDelegates: [any UIDocumentPickerDelegate] = []
 }
 #endif
 
@@ -130,12 +126,12 @@ struct PlatformFilePicker {
         panel.allowedContentTypes = allowedTypes
         panel.allowsMultipleSelection = allowsMultiple
         panel.canChooseDirectories = canChooseDirectories
-        panel.canChooseFiles = !canChooseDirectories // For folders, disable file selection
+        panel.canChooseFiles = !canChooseDirectories
         if let message = message {
             panel.message = message
         }
         panel.prompt = prompt
-        panel.directoryURL = directoryURL ?? FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first // Asynchronous presentation
+        panel.directoryURL = directoryURL ?? FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
         panel.begin { response in
             if response == .OK {
                 callback(.success(panel.urls))
@@ -144,15 +140,14 @@ struct PlatformFilePicker {
             }
         }
         #elseif os(iOS)
-        let asCopy = false // Use false for all to get scoped access without copy
+        let asCopy = false
         let picker = UIDocumentPickerViewController(forOpeningContentTypes: allowedTypes, asCopy: asCopy)
         picker.allowsMultipleSelection = allowsMultiple
         picker.directoryURL = directoryURL ?? FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
         picker.shouldShowFileExtensions = true
         let delegate = FilePickerDelegate(callback: callback)
-        FilePickerManager.shared.activeDelegates.append(delegate) // Retain delegate
+        FilePickerManager.shared.activeDelegates.append(delegate)
         picker.delegate = delegate
-        // Present from top VC to avoid dismissal bugs
         var topVC = UIApplication.shared.windows.first(where: { $0.isKeyWindow })?.rootViewController
         while let presentedVC = topVC?.presentedViewController {
             topVC = presentedVC
@@ -163,6 +158,100 @@ struct PlatformFilePicker {
         } else {
             print("No top VC found")
             callback(.failure(NSError(domain: "FilePicker", code: 1, userInfo: [NSLocalizedDescriptionKey: "No root view controller"])))
+        }
+        #endif
+    }
+}
+
+// MARK: - File Saver Abstraction
+#if os(iOS)
+class FilePickerDelegate: NSObject, UIDocumentPickerDelegate {
+    let callback: FilePickerCallback
+    
+    init(callback: @escaping FilePickerCallback) {
+        self.callback = callback
+    }
+    
+    func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
+        print("Picked URLs in delegate: \(urls)")
+        callback(.success(urls))
+        controller.dismiss(animated: true)
+        FilePickerManager.shared.activeDelegates.removeAll { $0 === self }
+    }
+    
+    func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
+        print("Picker cancelled in delegate")
+        callback(.failure(NSError(domain: "FilePicker", code: 0, userInfo: [NSLocalizedDescriptionKey: "User cancelled"])))
+        controller.dismiss(animated: true)
+        FilePickerManager.shared.activeDelegates.removeAll { $0 === self }
+    }
+}
+#endif
+
+struct PlatformFileSaver {
+    static func presentSavePanel(
+        suggestedName: String,
+        allowedTypes: [UTType],
+        message: String? = nil,
+        prompt: String? = "Save",
+        directoryURL: URL? = nil,
+        callback: @escaping FileSaveCallback
+    ) {
+        #if os(macOS)
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = allowedTypes
+        panel.nameFieldStringValue = suggestedName
+        panel.canCreateDirectories = true
+        if let message = message {
+            panel.message = message
+        }
+        panel.prompt = prompt
+        panel.directoryURL = directoryURL ?? FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
+        panel.begin { response in
+            if response == .OK, let url = panel.url {
+                callback(.success(url))
+            } else {
+                callback(.failure(NSError(domain: "FileSaver", code: 0, userInfo: [NSLocalizedDescriptionKey: "User cancelled"])))
+            }
+        }
+        #elseif os(iOS)
+        // Create a temporary file with the suggested name
+        guard let tempURL = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first?.appendingPathComponent(suggestedName) else {
+            callback(.failure(NSError(domain: "FileSaver", code: 1, userInfo: [NSLocalizedDescriptionKey: "Failed to create temporary file URL"])))
+            return
+        }
+        do {
+            try "".write(to: tempURL, atomically: true, encoding: .utf8) // Create empty file
+            let picker = UIDocumentPickerViewController(forExporting: [tempURL], asCopy: true)
+            picker.directoryURL = directoryURL ?? FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
+            picker.shouldShowFileExtensions = true
+            let delegate = FilePickerDelegate(callback: { result in
+                switch result {
+                case .success(let urls):
+                    if let url = urls.first {
+                        callback(.success(url))
+                    } else {
+                        callback(.failure(NSError(domain: "FileSaver", code: 2, userInfo: [NSLocalizedDescriptionKey: "No URL selected"])))
+                    }
+                case .failure(let error):
+                    callback(.failure(error))
+                }
+            })
+            FilePickerManager.shared.activeDelegates.append(delegate)
+            picker.delegate = delegate
+            var topVC = UIApplication.shared.windows.first(where: { $0.isKeyWindow })?.rootViewController
+            while let presentedVC = topVC?.presentedViewController {
+                topVC = presentedVC
+            }
+            if let topVC = topVC {
+                print("Presenting save picker from top VC: \(topVC)")
+                topVC.present(picker, animated: true)
+            } else {
+                print("No top VC found")
+                callback(.failure(NSError(domain: "FileSaver", code: 1, userInfo: [NSLocalizedDescriptionKey: "No root view controller"])))
+            }
+        } catch {
+            callback(.failure(error))
         }
         #endif
     }
@@ -199,11 +288,9 @@ struct MacOSRenderer: PlatformRenderer {
     func render(image: PlatformImage, strokes: [Stroke], textBoxes: [TextBox], annotationScale: CGFloat, offset: CGPoint) -> PlatformImage? {
         let size = image.platformSize
         let newImage = NSImage(size: size, flipped: true) { _ in
-            // Draw base image (in flipped y-down context)
             image.draw(in: NSRect(origin: .zero, size: size))
             guard let context = NSGraphicsContext.current?.cgContext else { return false }
             
-            // Draw strokes (no manual flip needed)
             for stroke in strokes {
                 context.setLineCap(.round)
                 context.setLineJoin(.round)
@@ -211,7 +298,6 @@ struct MacOSRenderer: PlatformRenderer {
                 stroke.color.platformColor.setStroke()
                 
                 var path = stroke.path
-                // Transform: scale points first, then translate (maps view coords to image in y-down)
                 let transform = CGAffineTransform(scaleX: annotationScale, y: annotationScale)
                     .translatedBy(x: -offset.x, y: -offset.y)
                 path = path.applying(transform)
@@ -219,7 +305,6 @@ struct MacOSRenderer: PlatformRenderer {
                 context.strokePath()
             }
             
-            // Draw text boxes (upright, centered in y-down context)
             for box in textBoxes {
                 let scaledX = (box.position.x - offset.x) * annotationScale
                 let scaledY = (box.position.y - offset.y) * annotationScale
@@ -232,7 +317,6 @@ struct MacOSRenderer: PlatformRenderer {
                 let attributedString = NSAttributedString(string: box.text, attributes: attributes)
                 let stringSize = attributedString.size()
                 
-                // Center the text bounding box around the scaled position
                 let textRect = NSRect(
                     x: scaledX - stringSize.width / 2,
                     y: scaledY - stringSize.height / 2,
@@ -254,10 +338,8 @@ struct iOSRenderer: PlatformRenderer {
     func render(image: PlatformImage, strokes: [Stroke], textBoxes: [TextBox], annotationScale: CGFloat, offset: CGPoint) -> PlatformImage? {
         let renderer = UIGraphicsImageRenderer(size: image.size)
         return renderer.image { ctx in
-            // Draw base image (in flipped y-down context provided by renderer)
             image.draw(in: CGRect(origin: .zero, size: image.size))
             let context = ctx.cgContext
-            // Draw strokes (no manual flip needed)
             for stroke in strokes {
                 context.setLineCap(.round)
                 context.setLineJoin(.round)
@@ -265,7 +347,6 @@ struct iOSRenderer: PlatformRenderer {
                 stroke.color.platformColor.setStroke()
                 
                 var path = stroke.path
-                // Transform: scale points first, then translate (maps view coords to image in y-down)
                 let transform = CGAffineTransform(scaleX: annotationScale, y: annotationScale)
                     .translatedBy(x: -offset.x, y: -offset.y)
                 path = path.applying(transform)
@@ -273,7 +354,6 @@ struct iOSRenderer: PlatformRenderer {
                 context.strokePath()
             }
             
-            // Draw text boxes (upright, centered in y-down context)
             for box in textBoxes {
                 let scaledX = (box.position.x - offset.x) * annotationScale
                 let scaledY = (box.position.y - offset.y) * annotationScale
@@ -286,7 +366,6 @@ struct iOSRenderer: PlatformRenderer {
                 let attributedString = NSAttributedString(string: box.text, attributes: attributes)
                 let stringSize = attributedString.size()
                 
-                // Center the text bounding box around the scaled position
                 let textRect = CGRect(
                     x: scaledX - stringSize.width / 2,
                     y: scaledY - stringSize.height / 2,
@@ -316,7 +395,6 @@ typealias PlatformColor = NSColor
 typealias PlatformColor = UIColor
 #endif
 
-// MARK: - SwiftUI Image Extension for PlatformImage
 extension Image {
     init(platformImage: PlatformImage) {
         #if os(macOS)
@@ -327,38 +405,12 @@ extension Image {
     }
 }
 
-// MARK: - Secure Access Utility
 func withSecureAccess<T>(to url: URL, perform: () throws -> T) throws -> T {
     let didStart = url.startAccessingSecurityScopedResource()
     defer { if didStart { url.stopAccessingSecurityScopedResource() } }
     return try perform()
 }
 
-#if os(iOS)
-class FilePickerDelegate: NSObject, UIDocumentPickerDelegate {
-    let callback: FilePickerCallback
-    
-    init(callback: @escaping FilePickerCallback) {
-        self.callback = callback
-    }
-    
-    func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
-        print("Picked URLs in delegate: \(urls)")
-        callback(.success(urls))
-        controller.dismiss(animated: true)
-        FilePickerManager.shared.activeDelegates.removeAll { $0 === self } // Release self
-    }
-    
-    func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
-        print("Picker cancelled in delegate")
-        callback(.failure(NSError(domain: "FilePicker", code: 0, userInfo: [NSLocalizedDescriptionKey: "User cancelled"])))
-        controller.dismiss(animated: true)
-        FilePickerManager.shared.activeDelegates.removeAll { $0 === self } // Release self
-    }
-}
-#endif
-
-// Note: Add this extension to PlatformAbstractions.swift for full abstraction
 extension PlatformImage {
     func platformData(forType ext: String, compressionQuality: CGFloat = 1.0) -> Data? {
         let lower = ext.lowercased()
@@ -373,7 +425,6 @@ extension PlatformImage {
             return jpegData(compressionQuality: compressionQuality)
             #endif
         }
-        // Add support for more formats if needed
         return nil
     }
 }
@@ -450,35 +501,3 @@ typealias PlatformTextDelegate = NSTextViewDelegate
 #elseif os(iOS)
 typealias PlatformTextDelegate = UITextViewDelegate
 #endif
-
-typealias FileSaveCallback = (Result<URL, Error>) -> Void // Changed to single URL for save
-
-struct PlatformFileSaver {
-    static func presentSavePanel(
-        suggestedName: String,
-        allowedTypes: [UTType],
-        message: String? = nil,
-        prompt: String? = "Save",
-        directoryURL: URL? = nil,
-        callback: @escaping FileSaveCallback
-    ) {
-        #if os(macOS)
-        let panel = NSSavePanel()
-        panel.allowedContentTypes = allowedTypes
-        panel.nameFieldStringValue = suggestedName
-        panel.canCreateDirectories = true
-        if let message = message {
-            panel.message = message
-        }
-        panel.prompt = prompt
-        panel.directoryURL = directoryURL ?? FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
-        panel.begin { response in
-            if response == .OK, let url = panel.url {
-                callback(.success(url))
-            } else {
-                callback(.failure(NSError(domain: "FileSaver", code: 0, userInfo: [NSLocalizedDescriptionKey: "User cancelled"])))
-            }
-        }
-        #endif
-    }
-}

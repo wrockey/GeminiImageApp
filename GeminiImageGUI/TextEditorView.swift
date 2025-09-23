@@ -2,6 +2,8 @@ import SwiftUI
 import UniformTypeIdentifiers
 #if os(macOS)
 import AppKit
+#elseif os(iOS)
+import UIKit
 #endif
 
 #if os(macOS)
@@ -108,10 +110,6 @@ struct TextEditorView: View {
     @State private var error: String? = nil
     @State private var platformTextView: PlatformTextView? = nil
     @State private var showSaveConfirm: Bool = false
-    #if os(iOS)
-    @State private var showFilenamePrompt: Bool = false
-    @State private var newFilename: String = "batch.txt"
-    #endif
     @Environment(\.dismiss) var dismiss
 
     var body: some View {
@@ -187,15 +185,6 @@ struct TextEditorView: View {
                 }
             }
             Button("Cancel", role: .cancel) {}
-        }
-        .alert("Enter filename", isPresented: $showFilenamePrompt) {
-            TextField("Filename", text: $newFilename)
-            Button("OK") {
-                presentFolderPicker()
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Please enter a name for the new file.")
         }
         #else
         Group {
@@ -355,10 +344,9 @@ struct TextEditorView: View {
     }
 
     private func saveAndDismiss() {
-        if let _ = fileURL {
+        if let url = fileURL {
             showSaveConfirm = true
         } else {
-            #if os(macOS)
             PlatformFileSaver.presentSavePanel(
                 suggestedName: "batch.txt",
                 allowedTypes: [UTType.text],
@@ -371,41 +359,15 @@ struct TextEditorView: View {
                             }
                         }
                     case .failure(let err):
-                        self.error = err.localizedDescription
+                        if err.localizedDescription.lowercased() != "user cancelled" {
+                            self.error = err.localizedDescription
+                        }
+                        // Do not dismiss; stay in editor
                     }
                 }
             )
-            #elseif os(iOS)
-            showFilenamePrompt = true
-            #endif
         }
     }
-
-    #if os(iOS)
-    private func presentFolderPicker() {
-        PlatformFilePicker.presentOpenPanel(
-            allowedTypes: [UTType.folder],
-            allowsMultiple: false,
-            canChooseDirectories: true,
-            message: "Select a folder to save the file",
-            prompt: "Select",
-            callback: { result in
-                switch result {
-                case .success(let urls):
-                    guard let folder = urls.first else { return }
-                    let newURL = folder.appendingPathComponent(newFilename)
-                    performSave(to: newURL, accessURL: folder) { success in
-                        if success {
-                            dismiss()
-                        }
-                    }
-                case .failure(let err):
-                    self.error = err.localizedDescription
-                }
-            }
-        )
-    }
-    #endif
 
     private func performSave(to url: URL, accessURL: URL? = nil, completion: @escaping (Bool) -> Void) {
         if let access = accessURL {

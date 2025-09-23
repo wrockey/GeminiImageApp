@@ -206,6 +206,7 @@ struct ContentView: View {
             }
             .onAppear {
                 performOnAppear()
+                validateBatchFileBookmark()
             }
             .onChange(of: appState.ui.outputImage) { _ in
                 imageScale = 1.0
@@ -233,6 +234,7 @@ struct ContentView: View {
             }
             .onAppear {
                 performOnAppear()
+                validateBatchFileBookmark()
             }
             .onChange(of: appState.ui.outputImage) { _ in
                 imageScale = 1.0
@@ -491,5 +493,37 @@ struct ContentView: View {
         if let url = URL(string: "https://console.x.ai/billing") {
             PlatformBrowser.open(url: url)
         }
+    }
+
+    private func validateBatchFileBookmark() {
+        if let bookmarkData = UserDefaults.standard.data(forKey: "batchFileBookmark") {
+            do {
+                var isStale = false
+                #if os(macOS)
+                let options: URL.BookmarkResolutionOptions = [.withSecurityScope]
+                #else
+                let options: URL.BookmarkResolutionOptions = []
+                #endif
+                let resolvedURL = try URL(resolvingBookmarkData: bookmarkData, options: options, bookmarkDataIsStale: &isStale)
+                if resolvedURL.startAccessingSecurityScopedResource() {
+                    defer { resolvedURL.stopAccessingSecurityScopedResource() }
+                    if FileManager.default.fileExists(atPath: resolvedURL.path) {
+                        batchFilePath = resolvedURL.path
+                    } else {
+                        clearBatchFile()
+                    }
+                } else {
+                    clearBatchFile()
+                }
+            } catch {
+                clearBatchFile()
+            }
+        }
+    }
+
+    private func clearBatchFile() {
+        batchFilePath = ""
+        appState.batchPrompts = []
+        UserDefaults.standard.removeObject(forKey: "batchFileBookmark")
     }
 }
