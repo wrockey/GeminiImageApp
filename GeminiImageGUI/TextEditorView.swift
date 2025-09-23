@@ -219,7 +219,7 @@ struct TextEditorView: View {
 
     @ViewBuilder
     private var content: some View {
-        if let error = error {
+        if let error = error, !error.isEmpty {
             Text(error).foregroundColor(.red).padding()
         } else {
             CustomTextEditor(text: $text, platformTextView: $platformTextView)
@@ -361,6 +361,8 @@ struct TextEditorView: View {
                     case .failure(let err):
                         if err.localizedDescription.lowercased() != "user cancelled" {
                             self.error = err.localizedDescription
+                        } else {
+                            self.error = nil // Explicitly clear error on cancel
                         }
                         // Do not dismiss; stay in editor
                     }
