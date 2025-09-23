@@ -1,4 +1,3 @@
-// TextEditorView.swift
 import SwiftUI
 import UniformTypeIdentifiers
 #if os(macOS)
@@ -296,10 +295,14 @@ struct TextEditorView: View {
     }
 
     private func onAppearAction() {
-        if let data = bookmarkData {
+        if let data = bookmarkData, !data.isEmpty {
             resolveURL(from: data)
+        } else {
+            // Initialize with empty text for new file
+            text = ""
+            fileURL = nil
+            error = nil
         }
-        // If no bookmarkData, editor opens empty; no need to load text
     }
 
     private func resolveURL(from bookmarkData: Data) {

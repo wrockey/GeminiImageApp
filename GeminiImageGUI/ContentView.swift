@@ -1,4 +1,3 @@
-// ContentView.swift
 import SwiftUI
 #if os(macOS)
 import AppKit
@@ -6,9 +5,42 @@ import AppKit
 import UIKit
 #endif
 
-struct IdentifiableData: Identifiable {
-    let id = UUID()
+struct IdentifiableData: Identifiable, Codable, Hashable {
+    var id: UUID // Changed from let to var to allow decoding
     let data: Data
+
+    // Codable conformance
+    enum CodingKeys: String, CodingKey {
+        case id
+        case data
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(data, forKey: .data)
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        data = try container.decode(Data.self, forKey: .data)
+    }
+
+    // Hashable conformance
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+        hasher.combine(data)
+    }
+
+    static func == (lhs: IdentifiableData, rhs: IdentifiableData) -> Bool {
+        return lhs.id == rhs.id && lhs.data == rhs.data
+    }
+
+    init(data: Data) {
+        self.id = UUID()
+        self.data = data
+    }
 }
 
 extension View {
@@ -98,36 +130,36 @@ enum GenerationError: Error {
 struct ContentView: View {
     @EnvironmentObject var appState: AppState
     @Environment(\.colorScheme) var colorScheme
-    @State var isLoading: Bool = false // Removed 'private'
-    @State var progress: Double = 0.0 // Removed 'private'
-    @State var webSocketTask: URLSessionWebSocketTask? = nil // Removed 'private'
-    @State var isCancelled: Bool = false // Removed 'private'
-    @State var errorMessage: String? = nil // Removed 'private'
-    @State var showErrorAlert: Bool = false // Removed 'private'
-    @State var showApiKey: Bool = false // Removed 'private'
-    @State var apiKeyPath: String = "" // Removed 'private'
-    @State var outputPath: String = "" // Removed 'private'
-    @State var showOnboarding: Bool = false // Removed 'private'
-    @State var imageScale: CGFloat = 1.0 // Removed 'private'
-    @State var isTestingApi: Bool = false // Removed 'private'
-    @State var showFullImage: Bool = false // Removed 'private'
-    @State var showAnnotationSheet: Bool = false // Removed 'private'
-    @State var selectedSlotId: UUID? // Removed 'private'
-    @State var batchFilePath: String = "" // Removed 'private'
+    @State var isLoading: Bool = false
+    @State var progress: Double = 0.0
+    @State var webSocketTask: URLSessionWebSocketTask? = nil
+    @State var isCancelled: Bool = false
+    @State var errorMessage: String? = nil
+    @State var showErrorAlert: Bool = false
+    @State var showApiKey: Bool = false
+    @State var apiKeyPath: String = ""
+    @State var outputPath: String = ""
+    @State var showOnboarding: Bool = false
+    @State var imageScale: CGFloat = 1.0
+    @State var isTestingApi: Bool = false
+    @State var showFullImage: Bool = false
+    @State var showAnnotationSheet: Bool = false
+    @State var selectedSlotId: UUID?
+    @State var batchFilePath: String = ""
     @State var batchStartIndex: Int = 1
     @State var batchEndIndex: Int = 1
-    @State var successMessage: String = "" // Removed 'private'
-    @State var showSuccessAlert: Bool = false // Removed 'private'
-    @State var showHelp: Bool = false // New: For help sheet
-    @State var showSelectFolderAlert: Bool = false // New: For output folder alert
-    @State var pendingAction: (() -> Void)? = nil // New: For pending submit action
+    @State var successMessage: String = ""
+    @State var showSuccessAlert: Bool = false
+    @State var showHelp: Bool = false
+    @State var showSelectFolderAlert: Bool = false
+    @State var pendingAction: (() -> Void)? = nil
     @State var generationTask: Task<Void, Error>? = nil
     @AppStorage("hasLaunchedBefore") var hasLaunchedBefore: Bool = false
     @AppStorage("configExpanded") private var configExpanded: Bool = true
     @AppStorage("promptExpanded") private var promptExpanded: Bool = true
     @AppStorage("inputImagesExpanded") private var inputImagesExpanded: Bool = true
     @AppStorage("responseExpanded") private var responseExpanded: Bool = true
-    @State private var showTextEditorBookmark: IdentifiableData? = nil // Updated for text editor with bookmark
+    @State private var showTextEditorBookmark: IdentifiableData? = nil
 
     #if os(macOS)
     @Environment(\.openWindow) private var openWindow
@@ -154,7 +186,7 @@ struct ContentView: View {
             .successAlert(showSuccessAlert: $showSuccessAlert, successMessage: successMessage)
             .onboardingSheet(showOnboarding: $showOnboarding)
             .helpSheet(showHelp: $showHelp, mode: appState.settings.mode)
-            .selectFolderAlert(isPresented: $showSelectFolderAlert) { // New: Attach alert modifier
+            .selectFolderAlert(isPresented: $showSelectFolderAlert) {
                 print("Showing output folder picker from alert")
                 PlatformFilePicker.presentOpenPanel(allowedTypes: [.folder], allowsMultiple: false, canChooseDirectories: true) { result in
                     handleOutputFolderSelection(result)
@@ -186,7 +218,7 @@ struct ContentView: View {
             .successAlert(showSuccessAlert: $showSuccessAlert, successMessage: successMessage)
             .onboardingSheet(showOnboarding: $showOnboarding)
             .helpSheet(showHelp: $showHelp, mode: appState.settings.mode)
-            .selectFolderAlert(isPresented: $showSelectFolderAlert) { // New: Attach alert modifier
+            .selectFolderAlert(isPresented: $showSelectFolderAlert) {
                 print("Showing output folder picker from alert")
                 PlatformFilePicker.presentOpenPanel(allowedTypes: [.folder], allowsMultiple: false, canChooseDirectories: true) { result in
                     handleOutputFolderSelection(result)
@@ -213,10 +245,7 @@ struct ContentView: View {
     private var iOSLayout: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 16) { // Added VStack for better grouping and spacing
-                    // Text("Main UI")
-                    // .foregroundColor(.primary)
-                    // .font(.headline) // Slightly bolder for hierarchy
+                VStack(spacing: 16) {
                     MainFormView(
                         configExpanded: $configExpanded,
                         promptExpanded: $promptExpanded,
@@ -248,7 +277,9 @@ struct ContentView: View {
                         onBatchFileSelected: handleBatchFileSelection,
                         onBatchSubmit: batchSubmit,
                         onEditBatchFile: {
-                            if let bookmarkData = UserDefaults.standard.data(forKey: "batchFileBookmark") {
+                            if batchFilePath.isEmpty {
+                                showTextEditorBookmark = IdentifiableData(data: Data())
+                            } else if let bookmarkData = UserDefaults.standard.data(forKey: "batchFileBookmark") {
                                 showTextEditorBookmark = IdentifiableData(data: bookmarkData)
                             } else {
                                 errorMessage = "Failed to access batch file."
@@ -260,7 +291,7 @@ struct ContentView: View {
                         batchEndIndex: $batchEndIndex
                     )
                     .environmentObject(appState)
-                    .padding(.horizontal, 20) // Increased horizontal padding for iPad comfort
+                    .padding(.horizontal, 20)
                 }
             }
             .background(LinearGradient(gradient: Gradient(colors: [topColor, bottomColor]), startPoint: .top, endPoint: .bottom))
@@ -343,7 +374,9 @@ struct ContentView: View {
                     onBatchFileSelected: handleBatchFileSelection,
                     onBatchSubmit: batchSubmit,
                     onEditBatchFile: {
-                        if let bookmarkData = UserDefaults.standard.data(forKey: "batchFileBookmark") {
+                        if batchFilePath.isEmpty {
+                            openWindow(id: "text-editor", value: Data())
+                        } else if let bookmarkData = UserDefaults.standard.data(forKey: "batchFileBookmark") {
                             openWindow(id: "text-editor", value: bookmarkData)
                         } else {
                             errorMessage = "Failed to access batch file."
@@ -355,11 +388,10 @@ struct ContentView: View {
                     batchEndIndex: $batchEndIndex
                 )
                 .environmentObject(appState)
-                .padding(.horizontal, 20) // Add padding for better readability and alignment with iOS
+                .padding(.horizontal, 20)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        
         
         .background(LinearGradient(gradient: Gradient(colors: [topColor, bottomColor]), startPoint: .top, endPoint: .bottom))
         .toolbar {
@@ -460,6 +492,4 @@ struct ContentView: View {
             PlatformBrowser.open(url: url)
         }
     }
-    // Other functions like performOnAppear, submitPrompt, stopGeneration, handleApiKeySelection, handleOutputFolderSelection, handleComfyJSONSelection, resetAppState, etc., should be here as per your original code...
 }
-

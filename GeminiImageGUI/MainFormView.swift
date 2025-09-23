@@ -1,11 +1,10 @@
-//MainFormView.swift
 import SwiftUI
 #if os(macOS)
 import AppKit
 #elseif os(iOS)
 import UIKit
 #endif
- 
+
 struct MainFormView: View {
     @Binding var configExpanded: Bool
     @Binding var promptExpanded: Bool
@@ -31,26 +30,26 @@ struct MainFormView: View {
     let onApiKeySelected: (Result<[URL], Error>) -> Void
     let onOutputFolderSelected: (Result<[URL], Error>) -> Void
     let onComfyJSONSelected: (Result<[URL], Error>) -> Void
-    let onBatchFileSelected: (Result<[URL], Error>) -> Void  // New: Handler for batch file selection
-    let onBatchSubmit: () -> Void  // New: Handler for batch submission (implement in ContentView to loop over prompts)
-    let onEditBatchFile: () -> Void  // New: Handler for editing batch file
- 
+    let onBatchFileSelected: (Result<[URL], Error>) -> Void
+    let onBatchSubmit: () -> Void
+    let onEditBatchFile: () -> Void
+
     @EnvironmentObject var appState: AppState
     
     @Environment(\.undoManager) private var undoManager
     
     @State private var showCopiedMessage: Bool = false
-    @Binding var batchFilePath: String  // New: Path to selected batch file
+    @Binding var batchFilePath: String
     @Binding var batchStartIndex: Int
     @Binding var batchEndIndex: Int
-    @AppStorage("batchExpanded") private var batchExpanded: Bool = true  // New: Expansion state
+    @AppStorage("batchExpanded") private var batchExpanded: Bool = true
     
     @Environment(\.horizontalSizeClass) private var sizeClass
     
     private var isCompact: Bool {
         sizeClass == .compact
     }
- 
+
     var isSubmitDisabled: Bool {
         switch appState.settings.mode {
         case .gemini:
@@ -58,7 +57,7 @@ struct MainFormView: View {
         case .comfyUI:
             let effectivePromptEmpty = prompt.isEmpty && selectedPromptText.isEmpty
             return appState.generation.comfyWorkflow == nil || appState.generation.comfyPromptNodeID.isEmpty || appState.generation.comfyOutputNodeID.isEmpty || appState.settings.comfyServerURL.isEmpty || effectivePromptEmpty
-        case .grok:  // Added
+        case .grok:
             return appState.settings.grokApiKey.isEmpty || prompt.isEmpty
         }
     }
@@ -67,7 +66,7 @@ struct MainFormView: View {
         appState.generation.promptNodes.first(where: { $0.id == appState.generation.comfyPromptNodeID })?.promptText ?? ""
     }
     
-    private var isBatchSubmitDisabled: Bool {  // Updated: Disable if no prompts or invalid range or invalid config
+    private var isBatchSubmitDisabled: Bool {
         switch appState.settings.mode {
         case .gemini:
             if appState.settings.apiKey.isEmpty {
@@ -77,7 +76,7 @@ struct MainFormView: View {
             if appState.generation.comfyWorkflow == nil || appState.generation.comfyPromptNodeID.isEmpty || appState.generation.comfyOutputNodeID.isEmpty || appState.settings.comfyServerURL.isEmpty {
                 return true
             }
-        case .grok:  // Added
+        case .grok:
             if appState.settings.grokApiKey.isEmpty {
                 return true
             }
@@ -105,20 +104,20 @@ struct MainFormView: View {
                     )
                 } label: {
                     Text("Configuration")
-                        .font(.system(size: 20, weight: .semibold))  // Increased label font size
+                        .font(.system(size: 20, weight: .semibold))
                         .help("Configure API keys, output paths, and other settings for image generation")
                 }
                 .kerning(0.2)
-                .foregroundColor(.primary) // Ensure visibility
-                
+                .foregroundColor(.primary)
+
                 CustomDivider()
                 
                 DisclosureGroup(isExpanded: $promptExpanded) {
-                                    PromptSection(prompt: $prompt, isUnsafe: $isUnsafe)  // Pass isUnsafe binding
+                    PromptSection(prompt: $prompt, isUnsafe: $isUnsafe)
                 } label: {
                     HStack {
                         Text("Prompt")
-                            .font(.system(size: 20, weight: .semibold))  // Increased label font size
+                            .font(.system(size: 20, weight: .semibold))
                             .help("Enter or manage the text prompt for image generation")
                         
                         Spacer()
@@ -166,7 +165,7 @@ struct MainFormView: View {
                     )
                 } label: {
                     Text("Input Images")
-                        .font(.system(size: 20, weight: .semibold))  // Increased label font size
+                        .font(.system(size: 20, weight: .semibold))
                         .help("Add or manage input images for the generation process")
                 }
                 .kerning(0.2)
@@ -182,12 +181,11 @@ struct MainFormView: View {
                             onSubmit()
                         }
                         .buttonStyle(.borderedProminent)
-//                        .tint(.blue)  // System blue for accent
                         .tint(isSubmitDisabled ? .gray : .blue)
                         .foregroundColor(isSubmitDisabled ? .gray : .white)
                         .controlSize(.large)
                         .disabled(isSubmitDisabled)
-                        .frame(maxWidth: .infinity, minHeight: 44)  // Standard iOS button height
+                        .frame(maxWidth: .infinity, minHeight: 44)
                         .font(.system(size: 17, weight: .semibold))
                         .help("Submit the current prompt and settings to generate an image")
                     }
@@ -197,8 +195,6 @@ struct MainFormView: View {
                 
                 CustomDivider()
                 
-                
-                // New: Batch Mode section
                 DisclosureGroup(isExpanded: $batchExpanded) {
                     VStack(alignment: .leading, spacing: 16) {
                         if isCompact {
@@ -235,8 +231,7 @@ struct MainFormView: View {
                                             .foregroundColor(.blue)
                                     }
                                     .buttonStyle(.borderless)
-                                    .disabled(batchFilePath.isEmpty)
-                                    .help("Edit the selected batch file")
+                                    .help("Edit or create a batch file")
                                     
                                     Spacer()
                                 }
@@ -275,8 +270,7 @@ struct MainFormView: View {
                                         .foregroundColor(.blue)
                                 }
                                 .buttonStyle(.borderless)
-                                .disabled(batchFilePath.isEmpty)
-                                .help("Edit the selected batch file")
+                                .help("Edit or create a batch file")
                                 
                                 Spacer()
                             }
@@ -478,11 +472,16 @@ struct MainFormView: View {
                                 .foregroundColor(.secondary)
                                 .font(.system(size: 14))
                                 .padding(.top, 4)
+                            if batchFilePath.isEmpty {
+                                Text("Or create a new batch file using the edit button.")
+                                    .foregroundColor(.secondary)
+                                    .font(.system(size: 14))
+                            }
+                            EmptyView()
                                 .help("The batch file should contain one prompt per line for sequential processing")
                         }
                         
                         Group {
-                            // New: Batch Submit button
                             Button("Submit Batch Job") {
                                 onBatchSubmit()
                             }
@@ -501,7 +500,7 @@ struct MainFormView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                 } label: {
                     Text("Batch Mode")
-                        .font(.system(size: 20, weight: .semibold))  // Increased label font size
+                        .font(.system(size: 20, weight: .semibold))
                         .help("Process multiple prompts from a file in batch for efficient generation")
                 }
                 .kerning(0.2)
@@ -519,7 +518,7 @@ struct MainFormView: View {
                 } label: {
                     HStack {
                         Text("Response")
-                            .font(.system(size: 20, weight: .semibold))  // Increased label font size
+                            .font(.system(size: 20, weight: .semibold))
                             .help("View generated images and responses from the AI")
                         Spacer()
                         Button(action: onPopOut) {
@@ -544,7 +543,7 @@ struct MainFormView: View {
                     .help("Confirmation that the prompt was copied to the clipboard")
             }
         }
-        .onChange(of: appState.batchPrompts) { newPrompts in  // New: Update start/end on batch load
+        .onChange(of: appState.batchPrompts) { newPrompts in
             if !newPrompts.isEmpty {
                 batchStartIndex = 1
                 batchEndIndex = newPrompts.count

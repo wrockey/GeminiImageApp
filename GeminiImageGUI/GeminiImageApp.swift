@@ -423,7 +423,7 @@ struct NewGenerateContentResponse: Codable {
  
 @main
 struct GeminiImageApp: App {
-    let appState = AppState()
+    @StateObject private var appState = AppState()
     @State private var showSplash = true
     
     var body: some Scene {
@@ -433,10 +433,8 @@ struct GeminiImageApp: App {
                 .environmentObject(appState)
         }
         WindowGroup(id: "text-editor", for: Data.self) { $data in
-            if let data = data {
-                TextEditorView(bookmarkData: data)
-                    .frame(minWidth: 400, minHeight: 300)
-            }
+            TextEditorView(bookmarkData: data)
+                .frame(minWidth: 400, minHeight: 300)
         }
         
         WindowGroup(for: UUID.self) { $slotId in
@@ -454,7 +452,7 @@ struct GeminiImageApp: App {
         }
         .defaultSize(width: 800, height: 600)
         
-        Window("Response", id: "response-window") {
+        WindowGroup(id: "response-window") {
             PopOutView()
                 .environmentObject(appState)
         }
@@ -489,8 +487,6 @@ struct GeminiImageApp: App {
                     }
             }
         }
-
-
         #endif
     }
 }
