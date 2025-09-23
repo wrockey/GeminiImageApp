@@ -105,11 +105,13 @@ extension Notification.Name {
 
 struct TextEditorView: View {
     let bookmarkData: Data?
+    @Binding var batchFilePath: String // Added to update ContentView's batchFilePath
     @State private var fileURL: URL? = nil
     @State private var text: String = ""
     @State private var error: String? = nil
     @State private var platformTextView: PlatformTextView? = nil
     @State private var showSaveConfirm: Bool = false
+    @EnvironmentObject var appState: AppState
     @Environment(\.dismiss) var dismiss
 
     var body: some View {
@@ -290,7 +292,7 @@ struct TextEditorView: View {
             // Initialize with empty text for new file
             text = ""
             fileURL = nil
-            error = nil
+            self.error = nil
         }
     }
 
@@ -307,11 +309,29 @@ struct TextEditorView: View {
             let resolvedURL = try URL(resolvingBookmarkData: bookmarkData, options: options, bookmarkDataIsStale: &isStale)
             
             if resolvedURL.startAccessingSecurityScopedResource() {
-                fileURL = resolvedURL
-                loadText(from: resolvedURL)
+                if FileManager.default.fileExists(atPath: resolvedURL.path) {
+                    fileURL = resolvedURL
+                    loadText(from: resolvedURL)
+                } else {
+                    // File doesn't exist; initialize empty editor
+                    text = ""
+                    fileURL = nil
+                    self.error = nil
+                    UserDefaults.standard.removeObject(forKey: "batchFileBookmark")
+                    appState.batchPrompts = []
+                    appState.batchFileURL = nil
+                    batchFilePath = ""
+                }
+                resolvedURL.stopAccessingSecurityScopedResource()
             } else {
-                self.error = "Failed to start accessing security-scoped resource."
-                return
+                // Failed to access resource; initialize empty editor
+                text = ""
+                fileURL = nil
+                self.error = nil
+                UserDefaults.standard.removeObject(forKey: "batchFileBookmark")
+                appState.batchPrompts = []
+                appState.batchFileURL = nil
+                batchFilePath = ""
             }
             
             if isStale {
@@ -320,7 +340,14 @@ struct TextEditorView: View {
                 }
             }
         } catch {
-            self.error = "Failed to resolve file: \(error.localizedDescription)"
+            // Failed to resolve bookmark; initialize empty editor
+            text = ""
+            fileURL = nil
+            self.error = nil
+            UserDefaults.standard.removeObject(forKey: "batchFileBookmark")
+            appState.batchPrompts = []
+            appState.batchFileURL = nil
+            batchFilePath = ""
         }
     }
 
@@ -331,6 +358,7 @@ struct TextEditorView: View {
                 defer { coordinatedURL.stopAccessingSecurityScopedResource() }
                 do {
                     text = try String(contentsOf: coordinatedURL, encoding: .utf8)
+                    self.error = nil // Clear any previous error
                 } catch {
                     self.error = error.localizedDescription
                 }
@@ -355,6 +383,10 @@ struct TextEditorView: View {
                     case .success(let url):
                         performSave(to: url) { success in
                             if success {
+                                // Update app state directly
+                                appState.batchFileURL = url
+                                appState.batchPrompts = text.components(separatedBy: .newlines).filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+                                batchFilePath = url.path
                                 dismiss()
                             }
                         }
@@ -400,7 +432,7 @@ struct TextEditorView: View {
                     }
                     fileURL = url
                 }
-                NotificationCenter.default.post(name: .batchFileUpdated, object: nil)
+                // Do not post notification to avoid redundant loadBatchPrompts
                 completion(true)
             } catch {
                 self.error = error.localizedDescription

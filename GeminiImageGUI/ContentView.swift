@@ -6,10 +6,9 @@ import UIKit
 #endif
 
 struct IdentifiableData: Identifiable, Codable, Hashable {
-    var id: UUID // Changed from let to var to allow decoding
+    var id: UUID
     let data: Data
 
-    // Codable conformance
     enum CodingKeys: String, CodingKey {
         case id
         case data
@@ -27,7 +26,6 @@ struct IdentifiableData: Identifiable, Codable, Hashable {
         data = try container.decode(Data.self, forKey: .data)
     }
 
-    // Hashable conformance
     func hash(into hasher: inout Hasher) {
         hasher.combine(id)
         hasher.combine(data)
@@ -197,9 +195,10 @@ struct ContentView: View {
                 }
             }
             .sheet(item: $showTextEditorBookmark) { identifiable in
-                TextEditorView(bookmarkData: identifiable.data)
+                TextEditorView(bookmarkData: identifiable.data, batchFilePath: $batchFilePath)
                     .presentationDetents([.large])
                     .presentationDragIndicator(.visible)
+                    .environmentObject(appState)
             }
             .onReceive(NotificationCenter.default.publisher(for: .batchFileUpdated)) { _ in
                 loadBatchPrompts()
@@ -282,7 +281,31 @@ struct ContentView: View {
                             if batchFilePath.isEmpty {
                                 showTextEditorBookmark = IdentifiableData(data: Data())
                             } else if let bookmarkData = UserDefaults.standard.data(forKey: "batchFileBookmark") {
-                                showTextEditorBookmark = IdentifiableData(data: bookmarkData)
+                                // Validate bookmark before opening editor
+                                do {
+                                    var isStale = false
+                                    #if os(macOS)
+                                    let options: URL.BookmarkResolutionOptions = [.withSecurityScope]
+                                    #else
+                                    let options: URL.BookmarkResolutionOptions = []
+                                    #endif
+                                    let resolvedURL = try URL(resolvingBookmarkData: bookmarkData, options: options, bookmarkDataIsStale: &isStale)
+                                    if resolvedURL.startAccessingSecurityScopedResource() {
+                                        defer { resolvedURL.stopAccessingSecurityScopedResource() }
+                                        if FileManager.default.fileExists(atPath: resolvedURL.path) {
+                                            showTextEditorBookmark = IdentifiableData(data: bookmarkData)
+                                        } else {
+                                            clearBatchFile()
+                                            showTextEditorBookmark = IdentifiableData(data: Data())
+                                        }
+                                    } else {
+                                        clearBatchFile()
+                                        showTextEditorBookmark = IdentifiableData(data: Data())
+                                    }
+                                } catch {
+                                    clearBatchFile()
+                                    showTextEditorBookmark = IdentifiableData(data: Data())
+                                }
                             } else {
                                 errorMessage = "Failed to access batch file."
                                 showErrorAlert = true
@@ -379,7 +402,31 @@ struct ContentView: View {
                         if batchFilePath.isEmpty {
                             openWindow(id: "text-editor", value: Data())
                         } else if let bookmarkData = UserDefaults.standard.data(forKey: "batchFileBookmark") {
-                            openWindow(id: "text-editor", value: bookmarkData)
+                            // Validate bookmark before opening editor
+                            do {
+                                var isStale = false
+                                #if os(macOS)
+                                let options: URL.BookmarkResolutionOptions = [.withSecurityScope]
+                                #else
+                                let options: URL.BookmarkResolutionOptions = []
+                                #endif
+                                let resolvedURL = try URL(resolvingBookmarkData: bookmarkData, options: options, bookmarkDataIsStale: &isStale)
+                                if resolvedURL.startAccessingSecurityScopedResource() {
+                                    defer { resolvedURL.stopAccessingSecurityScopedResource() }
+                                    if FileManager.default.fileExists(atPath: resolvedURL.path) {
+                                        openWindow(id: "text-editor", value: bookmarkData)
+                                    } else {
+                                        clearBatchFile()
+                                        openWindow(id: "text-editor", value: Data())
+                                    }
+                                } else {
+                                    clearBatchFile()
+                                    openWindow(id: "text-editor", value: Data())
+                                }
+                            } catch {
+                                clearBatchFile()
+                                openWindow(id: "text-editor", value: Data())
+                            }
                         } else {
                             errorMessage = "Failed to access batch file."
                             showErrorAlert = true
