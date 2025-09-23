@@ -6,6 +6,10 @@ typealias Representable = NSViewRepresentable // <-- CHANGED: Use NSViewRepresen
 #elseif os(iOS)
 typealias Representable = UIViewRepresentable
 #endif
+// Add this at the top of TextEditorView.swift, after import SwiftUI
+#if os(macOS)
+import AppKit
+#endif
 
 // Remove the entire TextEditorViewController class, as it's no longer needed with NSViewRepresentable.
 
@@ -192,13 +196,12 @@ struct TextEditorView: View {
     private var toolbarButtons: some View {
         Group {
             Button(action: {
-                print("Attempting paste: \(platformTextView != nil)")
-                platformTextView?.paste()
+                NSApp.sendAction(#selector(NSText.paste(_:)), to: nil, from: nil)
             }) {
                 Image(systemName: "doc.on.clipboard")
             }
             Button(action: {
-                platformTextView?.copySelected()
+                NSApp.sendAction(#selector(NSText.copy(_:)), to: nil, from: nil)
             }) {
                 Image(systemName: "doc.on.doc")
             }
