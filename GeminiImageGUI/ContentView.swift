@@ -1,4 +1,3 @@
-
 // ContentView.swift
 import SwiftUI
 #if os(macOS)
@@ -463,3 +462,4 @@ struct ContentView: View {
     }
     // Other functions like performOnAppear, submitPrompt, stopGeneration, handleApiKeySelection, handleOutputFolderSelection, handleComfyJSONSelection, resetAppState, etc., should be here as per your original code...
 }
+

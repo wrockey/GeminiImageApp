@@ -136,7 +136,6 @@ struct TextEditorView: View {
                     }
                     ToolbarItem(placement: .navigationBarTrailing) { // Additional trailing: Paste and Copy
                         Button {
-                            platformTextView?.makeFirstResponder()
                             platformTextView?.paste()
                         } label: {
                             Image(systemName: "doc.on.clipboard")
@@ -144,7 +143,6 @@ struct TextEditorView: View {
                     }
                     ToolbarItem(placement: .navigationBarTrailing) {
                         Button {
-                            platformTextView?.makeFirstResponder()
                             platformTextView?.copySelected()
                         } label: {
                             Image(systemName: "doc.on.doc")
@@ -194,13 +192,12 @@ struct TextEditorView: View {
     private var toolbarButtons: some View {
         Group {
             Button(action: {
-                platformTextView?.makeFirstResponder()
+                print("Attempting paste: \(platformTextView != nil)")
                 platformTextView?.paste()
             }) {
                 Image(systemName: "doc.on.clipboard")
             }
             Button(action: {
-                platformTextView?.makeFirstResponder()
                 platformTextView?.copySelected()
             }) {
                 Image(systemName: "doc.on.doc")
@@ -295,4 +292,3 @@ struct TextEditorView: View {
         }
     }
 }
-

@@ -384,7 +384,6 @@ protocol PlatformTextView {
     func copySelected()
     func paste()
     func clear()
-    func makeFirstResponder()
 }
 
 #if os(macOS)
@@ -394,21 +393,22 @@ extension NSTextView: PlatformTextView {
     }
     
     func copySelected() {
-        if selectedRange().length > 0 {
-            copy(nil)
+        if let window = self.window {
+            window.makeFirstResponder(self)
         }
+        self.copy(nil)
     }
     
     func paste() {
-        paste(nil)
+        print("Executing paste in NSTextView")
+        if let window = self.window {
+            window.makeFirstResponder(self)
+        }
+        self.paste(nil)
     }
     
     func clear() {
         string = ""
-    }
-    
-    func makeFirstResponder() {
-        window?.makeFirstResponder(self)
     }
 }
 #elseif os(iOS)
@@ -426,21 +426,21 @@ extension UITextView: PlatformTextView {
     }
     
     func copySelected() {
-        if !selectedText.isEmpty {
-            copy(nil)
+        if !isFirstResponder {
+            becomeFirstResponder()
         }
+        self.copy(nil)
     }
     
     func paste() {
-        paste(nil)
+        if !isFirstResponder {
+            becomeFirstResponder()
+        }
+        self.paste(nil)
     }
     
     func clear() {
         text = ""
-    }
-    
-    func makeFirstResponder() {
-        becomeFirstResponder()
     }
 }
 #endif
