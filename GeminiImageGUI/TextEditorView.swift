@@ -1,59 +1,17 @@
 //TextEditorView.swift
 import SwiftUI
  
+import SwiftUI
+
 #if os(macOS)
-typealias Representable = NSViewControllerRepresentable
+typealias Representable = NSViewRepresentable  // <-- CHANGED: Use NSViewRepresentable for direct view embedding
 #elseif os(iOS)
 typealias Representable = UIViewRepresentable
 #endif
 
+// Remove the entire TextEditorViewController class, as it's no longer needed with NSViewRepresentable.
 
-#if os(macOS)
-class TextEditorViewController: NSViewController {
-    var textView: NSTextView!
-    var onTextChange: ((String) -> Void)?  // Callback for text updates
-    
-    override func loadView() {
-        let scrollView = NSScrollView()
-        let contentSize = scrollView.contentSize
-        
-        let textStorage = NSTextStorage()
-        let layoutManager = NSLayoutManager()
-        textStorage.addLayoutManager(layoutManager)
-        
-        let textContainer = NSTextContainer(containerSize: NSSize(width: contentSize.width, height: CGFloat.greatestFiniteMagnitude))
-        textContainer.widthTracksTextView = true
-        layoutManager.addTextContainer(textContainer)
-        
-        textView = NSTextView(frame: NSRect(x: 0, y: 0, width: contentSize.width, height: contentSize.height), textContainer: textContainer)
-        textView.font = NSFont.monospacedSystemFont(ofSize: 14, weight: .regular)
-        textView.textColor = .textColor
-        textView.backgroundColor = .textBackgroundColor
-        textView.isEditable = true
-        textView.isSelectable = true
-        textView.allowsUndo = true
-        textView.autoresizingMask = [.width]
-        
-        scrollView.documentView = textView
-        scrollView.hasVerticalScroller = true
-        scrollView.hasHorizontalScroller = true
-        scrollView.autohidesScrollers = true
-        
-        self.view = scrollView
-    }
-    
-    override func viewDidAppear() {
-        super.viewDidAppear()
-        view.window?.makeFirstResponder(textView)
-    }
-    
-    func updateText(_ newText: String) {
-        if textView.string != newText {
-            textView.string = newText
-        }
-    }
-}
-#endif
+
  
 struct CustomTextEditor: Representable {
     @Binding var text: String
@@ -64,29 +22,35 @@ struct CustomTextEditor: Representable {
     }
 
     #if os(macOS)
-    func dismantleNSViewController(_ nsViewController: TextEditorViewController, coordinator: Coordinator) {
-        nsViewController.textView.delegate = nil
-    }
-    #endif
+    func makeNSView(context: Context) -> NSScrollView {
+        let scrollView = NSTextView.scrollableTextView()
+        let textView = scrollView.documentView as! NSTextView
 
-#if os(macOS)
-    func makeNSViewController(context: Context) -> TextEditorViewController {
-        let controller = TextEditorViewController()
-        _ = controller.view  // Force loadView() to initialize textView
-        controller.textView.delegate = context.coordinator
-        controller.onTextChange = { newText in
-            self.text = newText
-        }
-        platformTextView = controller.textView
-        return controller
+        textView.font = NSFont.monospacedSystemFont(ofSize: 14, weight: .regular)
+        textView.textColor = .textColor
+        textView.backgroundColor = .textBackgroundColor
+        textView.isEditable = true
+        textView.isSelectable = true
+        textView.allowsUndo = true
+        textView.autoresizingMask = [.width]
+        scrollView.hasHorizontalScroller = true
+        scrollView.autohidesScrollers = true
+
+        textView.delegate = context.coordinator
+        textView.string = text
+        platformTextView = textView
+
+        return scrollView
     }
-    
-    func updateNSViewController(_ nsViewController: TextEditorViewController, context: Context) {
-        _ = nsViewController.view  // Ensure loaded if not already
-        nsViewController.updateText(text)
+
+    func updateNSView(_ nsView: NSScrollView, context: Context) {
+        let textView = nsView.documentView as! NSTextView
+        if textView.string != text {
+            textView.string = text
+        }
         DispatchQueue.main.async {
-            if let window = nsViewController.view.window, window.firstResponder != nsViewController.textView {
-                window.makeFirstResponder(nsViewController.textView)
+            if let window = nsView.window, window.firstResponder != textView {
+                window.makeFirstResponder(textView)
             }
         }
     }
