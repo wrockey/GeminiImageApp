@@ -1,3 +1,4 @@
+
 // ContentView.swift
 import SwiftUI
 #if os(macOS)
@@ -23,7 +24,7 @@ extension View {
         }
         .accessibilityLabel("Workflow Error Alert")
     }
-
+    
     func fullImageSheet(showFullImage: Binding<Bool>, outputImage: PlatformImage?) -> some View {
         sheet(isPresented: showFullImage) {
             if let outputImage = outputImage {
@@ -32,7 +33,7 @@ extension View {
         }
         .accessibilityLabel("Full Image View Sheet")
     }
-
+    
     func errorAlert(showErrorAlert: Binding<Bool>, errorMessage: String?) -> some View {
         alert("Error", isPresented: showErrorAlert) {
             Button("OK") {}
@@ -41,7 +42,7 @@ extension View {
         }
         .accessibilityLabel("Error Alert")
     }
-
+    
     func successAlert(showSuccessAlert: Binding<Bool>, successMessage: String) -> some View {
         alert("Success", isPresented: showSuccessAlert) {
             Button("OK") {}
@@ -50,21 +51,21 @@ extension View {
         }
         .accessibilityLabel("Success Alert")
     }
-
+    
     func onboardingSheet(showOnboarding: Binding<Bool>) -> some View {
         sheet(isPresented: showOnboarding) {
             OnboardingView()
         }
         .accessibilityLabel("Onboarding Sheet")
     }
-
+    
     func helpSheet(showHelp: Binding<Bool>, mode: GenerationMode) -> some View {
         sheet(isPresented: showHelp) {
             HelpView(mode: mode)
         }
         .accessibilityLabel("Help Sheet")
     }
-
+    
     func selectFolderAlert(isPresented: Binding<Bool>, selectHandler: @escaping () -> Void) -> some View {
         alert("Select Output Folder", isPresented: isPresented) {
             Button("Select Folder") {
@@ -98,27 +99,27 @@ enum GenerationError: Error {
 struct ContentView: View {
     @EnvironmentObject var appState: AppState
     @Environment(\.colorScheme) var colorScheme
-    @State var isLoading: Bool = false  // Removed 'private'
-    @State var progress: Double = 0.0  // Removed 'private'
-    @State var webSocketTask: URLSessionWebSocketTask? = nil  // Removed 'private'
-    @State var isCancelled: Bool = false  // Removed 'private'
-    @State var errorMessage: String? = nil  // Removed 'private'
-    @State var showErrorAlert: Bool = false  // Removed 'private'
-    @State var showApiKey: Bool = false  // Removed 'private'
-    @State var apiKeyPath: String = ""  // Removed 'private'
-    @State var outputPath: String = ""  // Removed 'private'
-    @State var showOnboarding: Bool = false  // Removed 'private'
-    @State var imageScale: CGFloat = 1.0  // Removed 'private'
-    @State var isTestingApi: Bool = false  // Removed 'private'
-    @State var showFullImage: Bool = false  // Removed 'private'
-    @State var showAnnotationSheet: Bool = false  // Removed 'private'
-    @State var selectedSlotId: UUID?  // Removed 'private'
-    @State var batchFilePath: String = ""  // Removed 'private'
+    @State var isLoading: Bool = false // Removed 'private'
+    @State var progress: Double = 0.0 // Removed 'private'
+    @State var webSocketTask: URLSessionWebSocketTask? = nil // Removed 'private'
+    @State var isCancelled: Bool = false // Removed 'private'
+    @State var errorMessage: String? = nil // Removed 'private'
+    @State var showErrorAlert: Bool = false // Removed 'private'
+    @State var showApiKey: Bool = false // Removed 'private'
+    @State var apiKeyPath: String = "" // Removed 'private'
+    @State var outputPath: String = "" // Removed 'private'
+    @State var showOnboarding: Bool = false // Removed 'private'
+    @State var imageScale: CGFloat = 1.0 // Removed 'private'
+    @State var isTestingApi: Bool = false // Removed 'private'
+    @State var showFullImage: Bool = false // Removed 'private'
+    @State var showAnnotationSheet: Bool = false // Removed 'private'
+    @State var selectedSlotId: UUID? // Removed 'private'
+    @State var batchFilePath: String = "" // Removed 'private'
     @State var batchStartIndex: Int = 1
     @State var batchEndIndex: Int = 1
-    @State var successMessage: String = ""  // Removed 'private'
-    @State var showSuccessAlert: Bool = false  // Removed 'private'
-    @State var showHelp: Bool = false  // New: For help sheet
+    @State var successMessage: String = "" // Removed 'private'
+    @State var showSuccessAlert: Bool = false // Removed 'private'
+    @State var showHelp: Bool = false // New: For help sheet
     @State var showSelectFolderAlert: Bool = false // New: For output folder alert
     @State var pendingAction: (() -> Void)? = nil // New: For pending submit action
     @State var generationTask: Task<Void, Error>? = nil
@@ -128,25 +129,25 @@ struct ContentView: View {
     @AppStorage("inputImagesExpanded") private var inputImagesExpanded: Bool = true
     @AppStorage("responseExpanded") private var responseExpanded: Bool = true
     @State private var showTextEditorBookmark: IdentifiableData? = nil // Updated for text editor with bookmark
-#if os(macOS)
+
+    #if os(macOS)
     @Environment(\.openWindow) private var openWindow
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
-#else
+    #else
     @State private var showHistory: Bool = false
     @State private var columnVisibility: NavigationSplitViewVisibility = .detailOnly
-#endif
-    
-    
+    #endif
+
     private var topColor: Color {
         colorScheme == .light ? Color(white: 0.98) : Color(white: 0.1)
     }
-    
+
     private var bottomColor: Color {
         colorScheme == .light ? Color(white: 0.95) : Color(white: 0.15)
     }
 
     var body: some View {
-#if os(iOS)
+        #if os(iOS)
         iOSLayout
             .workflowErrorAlert(appState: appState)
             .fullImageSheet(showFullImage: $showFullImage, outputImage: appState.ui.outputImage)
@@ -178,7 +179,7 @@ struct ContentView: View {
             .onChange(of: appState.ui.outputImage) { _ in
                 imageScale = 1.0
             }
-#else
+        #else
         macOSLayout
             .workflowErrorAlert(appState: appState)
             .fullImageSheet(showFullImage: $showFullImage, outputImage: appState.ui.outputImage)
@@ -205,21 +206,18 @@ struct ContentView: View {
             .onChange(of: appState.ui.outputImage) { _ in
                 imageScale = 1.0
             }
-#endif
+        #endif
     }
-    
-#if os(iOS)
+
+    #if os(iOS)
     @ViewBuilder
-    
     private var iOSLayout: some View {
-        
         NavigationStack {
-            
             ScrollView {
-                VStack(spacing: 16) {  // Added VStack for better grouping and spacing
-                    //                Text("Main UI")
-                    //                    .foregroundColor(.primary)
-                    //                    .font(.headline)  // Slightly bolder for hierarchy
+                VStack(spacing: 16) { // Added VStack for better grouping and spacing
+                    // Text("Main UI")
+                    // .foregroundColor(.primary)
+                    // .font(.headline) // Slightly bolder for hierarchy
                     MainFormView(
                         configExpanded: $configExpanded,
                         promptExpanded: $promptExpanded,
@@ -263,7 +261,7 @@ struct ContentView: View {
                         batchEndIndex: $batchEndIndex
                     )
                     .environmentObject(appState)
-                    .padding(.horizontal, 20)  // Increased horizontal padding for iPad comfort
+                    .padding(.horizontal, 20) // Increased horizontal padding for iPad comfort
                 }
             }
             .background(LinearGradient(gradient: Gradient(colors: [topColor, bottomColor]), startPoint: .top, endPoint: .bottom))
@@ -307,10 +305,9 @@ struct ContentView: View {
             }
         }
     }
-#else
+    #else
     @ViewBuilder
     private var macOSLayout: some View {
-        
         NavigationSplitView(columnVisibility: $columnVisibility) {
             HistoryView(imageSlots: $appState.ui.imageSlots, columnVisibility: $columnVisibility)
                 .environmentObject(appState)
@@ -359,7 +356,7 @@ struct ContentView: View {
                     batchEndIndex: $batchEndIndex
                 )
                 .environmentObject(appState)
-                .padding(.horizontal, 20)  // Add padding for better readability and alignment with iOS
+                .padding(.horizontal, 20) // Add padding for better readability and alignment with iOS
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
@@ -372,8 +369,8 @@ struct ContentView: View {
             }
         }
     }
-#endif
-    
+    #endif
+
     private var toolbarContent: some View {
         Group {
             Button(action: {
@@ -398,13 +395,13 @@ struct ContentView: View {
             .accessibilityHint("Resets the current session, clearing prompt and images.")
             
             Button(action: {
-#if os(iOS)
+                #if os(iOS)
                 showHistory.toggle()
-#else
+                #else
                 withAnimation(.easeInOut(duration: 0.3)) {
                     columnVisibility = columnVisibility == .all ? .detailOnly : .all
                 }
-#endif
+                #endif
             }) {
                 Image(systemName: "clock.arrow.circlepath")
                     .symbolRenderingMode(.hierarchical)
@@ -432,7 +429,7 @@ struct ContentView: View {
             .help("Show onboarding guide")
             .accessibilityLabel("Onboarding")
             .accessibilityHint("Opens the onboarding guide.")
-
+            
             if appState.settings.mode == .gemini {
                 Button(action: openBillingConsole) {
                     Image(systemName: "dollarsign.circle")
@@ -464,6 +461,5 @@ struct ContentView: View {
             PlatformBrowser.open(url: url)
         }
     }
-
     // Other functions like performOnAppear, submitPrompt, stopGeneration, handleApiKeySelection, handleOutputFolderSelection, handleComfyJSONSelection, resetAppState, etc., should be here as per your original code...
 }

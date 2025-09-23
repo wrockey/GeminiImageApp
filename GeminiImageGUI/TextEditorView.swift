@@ -1,18 +1,14 @@
-//TextEditorView.swift
-import SwiftUI
- 
+// TextEditorView.swift
 import SwiftUI
 
 #if os(macOS)
-typealias Representable = NSViewRepresentable  // <-- CHANGED: Use NSViewRepresentable for direct view embedding
+typealias Representable = NSViewRepresentable // <-- CHANGED: Use NSViewRepresentable for direct view embedding
 #elseif os(iOS)
 typealias Representable = UIViewRepresentable
 #endif
 
 // Remove the entire TextEditorViewController class, as it's no longer needed with NSViewRepresentable.
 
-
- 
 struct CustomTextEditor: Representable {
     @Binding var text: String
     @Binding var platformTextView: PlatformTextView?
@@ -25,7 +21,6 @@ struct CustomTextEditor: Representable {
     func makeNSView(context: Context) -> NSScrollView {
         let scrollView = NSTextView.scrollableTextView()
         let textView = scrollView.documentView as! NSTextView
-
         textView.font = NSFont.monospacedSystemFont(ofSize: 14, weight: .regular)
         textView.textColor = .textColor
         textView.backgroundColor = .textBackgroundColor
@@ -35,11 +30,9 @@ struct CustomTextEditor: Representable {
         textView.autoresizingMask = [.width]
         scrollView.hasHorizontalScroller = true
         scrollView.autohidesScrollers = true
-
         textView.delegate = context.coordinator
         textView.string = text
         platformTextView = textView
-
         return scrollView
     }
 
@@ -54,19 +47,17 @@ struct CustomTextEditor: Representable {
             }
         }
     }
-
-    
     #elseif os(iOS)
     func makeUIView(context: Context) -> UITextView {
         let textView = UITextView()
         textView.font = UIFont.monospacedSystemFont(ofSize: 14, weight: .regular)
         textView.delegate = context.coordinator
-        textView.textColor = .label  // Adaptive text color (black in light mode, white in dark)
-        textView.backgroundColor = .systemBackground  // Adaptive background
+        textView.textColor = .label // Adaptive text color (black in light mode, white in dark)
+        textView.backgroundColor = .systemBackground // Adaptive background
         textView.isEditable = true
         textView.isSelectable = true
-        textView.textContainerInset = UIEdgeInsets(top: 20, left: 10, bottom: 20, right: 10)  // Padding for better usability
-        textView.contentInsetAdjustmentBehavior = .automatic  // Respects safe areas and keyboard
+        textView.textContainerInset = UIEdgeInsets(top: 20, left: 10, bottom: 20, right: 10) // Padding for better usability
+        textView.contentInsetAdjustmentBehavior = .automatic // Respects safe areas and keyboard
         platformTextView = textView
         return textView
     }
@@ -77,7 +68,7 @@ struct CustomTextEditor: Representable {
         }
         DispatchQueue.main.async {
             if !uiView.isFirstResponder {
-                uiView.becomeFirstResponder()  // <-- ADDED: Shows keyboard, makes editable
+                uiView.becomeFirstResponder() // <-- ADDED: Shows keyboard, makes editable
             }
         }
     }
@@ -103,11 +94,11 @@ struct CustomTextEditor: Representable {
         #endif
     }
 }
- 
+
 extension Notification.Name {
     static let batchFileUpdated = Notification.Name("batchFileUpdated")
 }
- 
+
 struct TextEditorView: View {
     let bookmarkData: Data
     @State private var fileURL: URL? = nil
@@ -117,18 +108,18 @@ struct TextEditorView: View {
     @Environment(\.dismiss) var dismiss
 
     var body: some View {
-#if os(iOS)
+        #if os(iOS)
         NavigationStack {
             content
                 .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {  // Leading: Cancel (xmark)
+                    ToolbarItem(placement: .cancellationAction) { // Leading: Cancel (xmark)
                         Button {
                             dismiss()
                         } label: {
                             Image(systemName: "xmark")
                         }
                     }
-                    ToolbarItem(placement: .destructiveAction) {  // Trailing: Clear (trash)
+                    ToolbarItem(placement: .destructiveAction) { // Trailing: Clear (trash)
                         Button {
                             platformTextView?.clear()
                             text = ""
@@ -136,15 +127,16 @@ struct TextEditorView: View {
                             Image(systemName: "trash")
                         }
                     }
-                    ToolbarItem(placement: .confirmationAction) {  // Trailing: Save (checkmark)
+                    ToolbarItem(placement: .confirmationAction) { // Trailing: Save (checkmark)
                         Button {
                             saveAndDismiss()
                         } label: {
                             Image(systemName: "checkmark")
                         }
                     }
-                    ToolbarItem(placement: .navigationBarTrailing) {  // Additional trailing: Paste and Copy
+                    ToolbarItem(placement: .navigationBarTrailing) { // Additional trailing: Paste and Copy
                         Button {
+                            platformTextView?.makeFirstResponder()
                             platformTextView?.paste()
                         } label: {
                             Image(systemName: "doc.on.clipboard")
@@ -152,7 +144,8 @@ struct TextEditorView: View {
                     }
                     ToolbarItem(placement: .navigationBarTrailing) {
                         Button {
-                            platformTextView?.copySelectedOrAll()
+                            platformTextView?.makeFirstResponder()
+                            platformTextView?.copySelected()
                         } label: {
                             Image(systemName: "doc.on.doc")
                         }
@@ -160,9 +153,9 @@ struct TextEditorView: View {
                 }
         }
         .navigationTitle(fileURL?.lastPathComponent ?? "Batch Editor")
-                .navigationBarTitleDisplayMode(.inline)
-                .onAppear(perform: onAppearAction)  // <-- ADD THIS: Loads the text on iOS
-#else
+        .navigationBarTitleDisplayMode(.inline)
+        .onAppear(perform: onAppearAction) // <-- ADD THIS: Loads the text on iOS
+        #else
         Group {
             content
         }
@@ -178,8 +171,7 @@ struct TextEditorView: View {
             }
         }
         .onAppear(perform: onAppearAction)
-#endif
-
+        #endif
     }
 
     @ViewBuilder
@@ -188,23 +180,29 @@ struct TextEditorView: View {
             Text(error).foregroundColor(.red).padding()
         } else {
             CustomTextEditor(text: $text, platformTextView: $platformTextView)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)  // Ensures it fills the available space below the nav bar
+                .frame(maxWidth: .infinity, maxHeight: .infinity) // Ensures it fills the available space below the nav bar
                 .background(Color({
-#if os(macOS)
+                    #if os(macOS)
                     NSColor.textBackgroundColor
-#elseif os(iOS)
+                    #elseif os(iOS)
                     UIColor.systemBackground
-#endif
+                    #endif
                 }()))
         }
     }
 
     private var toolbarButtons: some View {
         Group {
-            Button(action: { platformTextView?.paste() }) {
+            Button(action: {
+                platformTextView?.makeFirstResponder()
+                platformTextView?.paste()
+            }) {
                 Image(systemName: "doc.on.clipboard")
             }
-            Button(action: { platformTextView?.copySelectedOrAll() }) {
+            Button(action: {
+                platformTextView?.makeFirstResponder()
+                platformTextView?.copySelected()
+            }) {
                 Image(systemName: "doc.on.doc")
             }
             Button(action: { platformTextView?.clear(); text = "" }) {
@@ -226,13 +224,13 @@ struct TextEditorView: View {
     private func resolveURL() {
         do {
             var isStale = false
-    #if os(macOS)
+            #if os(macOS)
             let options: URL.BookmarkResolutionOptions = [.withSecurityScope]
             let bookmarkOptions: URL.BookmarkCreationOptions = [.withSecurityScope]
-    #else
+            #else
             let options: URL.BookmarkResolutionOptions = []
             let bookmarkOptions: URL.BookmarkCreationOptions = [.minimalBookmark]
-    #endif
+            #endif
             let resolvedURL = try URL(resolvingBookmarkData: bookmarkData, options: options, bookmarkDataIsStale: &isStale)
             
             // Start access (works on both platforms if scoped)
@@ -252,6 +250,7 @@ struct TextEditorView: View {
             self.error = "Failed to resolve file: \(error.localizedDescription)"
         }
     }
+
     private func loadText(from url: URL) {
         var coordError: NSError?
         NSFileCoordinator().coordinate(readingItemAt: url, options: [], error: &coordError) { coordinatedURL in

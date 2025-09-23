@@ -1,11 +1,11 @@
 //
-//  PlatformAbstractions.swift
+// PlatformAbstractions.swift
 //
 import Foundation
 import SwiftUI
 import UniformTypeIdentifiers
 import CoreGraphics
-import PhotosUI  // Added for PHPicker
+import PhotosUI // Added for PHPicker
 #if os(macOS)
 import AppKit
 #elseif os(iOS)
@@ -21,21 +21,21 @@ typealias PlatformImage = UIImage
 
 extension PlatformImage {
     var platformSize: CGSize {
-#if os(macOS)
+        #if os(macOS)
         return size
-#elseif os(iOS)
+        #elseif os(iOS)
         return size
-#endif
+        #endif
     }
-
+    
     convenience init?(platformData: Data) {
-#if os(macOS)
+        #if os(macOS)
         self.init(data: platformData)
-#elseif os(iOS)
+        #elseif os(iOS)
         self.init(data: platformData)
-#endif
+        #endif
     }
-
+    
     convenience init?(contentsOf url: URL) {
         do {
             let data = try Data(contentsOf: url)
@@ -44,62 +44,62 @@ extension PlatformImage {
             return nil
         }
     }
-
+    
     func platformPngData() -> Data? {
-#if os(macOS)
+        #if os(macOS)
         guard let tiff = tiffRepresentation,
               let bitmap = NSBitmapImageRep(data: tiff) else { return nil }
         return bitmap.representation(using: .png, properties: [:])
-#elseif os(iOS)
+        #elseif os(iOS)
         return pngData()
-#endif
+        #endif
     }
-
+    
     func platformTiffRepresentation() -> Data? {
-#if os(macOS)
+        #if os(macOS)
         return tiffRepresentation
-#elseif os(iOS)
+        #elseif os(iOS)
         // iOS equivalent: Convert to TIFF if needed, but rare; stub for compatibility
         return nil // Implement if required for port
-#endif
+        #endif
     }
 }
 
 // MARK: - Pasteboard Abstraction
 struct PlatformPasteboard {
     static func clearContents() {
-#if os(macOS)
+        #if os(macOS)
         NSPasteboard.general.clearContents()
-#elseif os(iOS)
+        #elseif os(iOS)
         UIPasteboard.general.items = []
-#endif
+        #endif
     }
-
+    
     static func writeImage(_ image: PlatformImage) {
-#if os(macOS)
+        #if os(macOS)
         NSPasteboard.general.writeObjects([image])
-#elseif os(iOS)
+        #elseif os(iOS)
         UIPasteboard.general.image = image
-#endif
+        #endif
     }
-
+    
     static func writeString(_ string: String) {
-#if os(macOS)
+        #if os(macOS)
         NSPasteboard.general.setString(string, forType: .string)
-#elseif os(iOS)
+        #elseif os(iOS)
         UIPasteboard.general.string = string
-#endif
+        #endif
     }
-
+    
     static func readImages() -> [PlatformImage]? {
-#if os(macOS)
+        #if os(macOS)
         return NSPasteboard.general.readObjects(forClasses: [NSImage.self], options: nil) as? [PlatformImage]
-#elseif os(iOS)
+        #elseif os(iOS)
         if let image = UIPasteboard.general.image {
             return [image]
         }
         return nil
-#endif
+        #endif
     }
 }
 
@@ -130,14 +130,12 @@ struct PlatformFilePicker {
         panel.allowedContentTypes = allowedTypes
         panel.allowsMultipleSelection = allowsMultiple
         panel.canChooseDirectories = canChooseDirectories
-        panel.canChooseFiles = !canChooseDirectories  // For folders, disable file selection
+        panel.canChooseFiles = !canChooseDirectories // For folders, disable file selection
         if let message = message {
             panel.message = message
         }
         panel.prompt = prompt
-        panel.directoryURL = directoryURL ?? FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
-        
-        // Asynchronous presentation
+        panel.directoryURL = directoryURL ?? FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first // Asynchronous presentation
         panel.begin { response in
             if response == .OK {
                 callback(.success(panel.urls))
@@ -145,55 +143,55 @@ struct PlatformFilePicker {
                 callback(.failure(NSError(domain: "FilePicker", code: 0, userInfo: [NSLocalizedDescriptionKey: "User cancelled"])))
             }
         }
-#elseif os(iOS)
-let asCopy = false  // Use false for all to get scoped access without copy
-let picker = UIDocumentPickerViewController(forOpeningContentTypes: allowedTypes, asCopy: asCopy)
-picker.allowsMultipleSelection = allowsMultiple
-picker.directoryURL = directoryURL ?? FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
-picker.shouldShowFileExtensions = true
-let delegate = FilePickerDelegate(callback: callback)
-FilePickerManager.shared.activeDelegates.append(delegate)  // Retain delegate
-picker.delegate = delegate
-// Present from top VC to avoid dismissal bugs
-var topVC = UIApplication.shared.windows.first(where: { $0.isKeyWindow })?.rootViewController
-while let presentedVC = topVC?.presentedViewController {
-    topVC = presentedVC
-}
-if let topVC = topVC {
-    print("Presenting picker from top VC: \(topVC)")
-    topVC.present(picker, animated: true)
-} else {
-    print("No top VC found")
-    callback(.failure(NSError(domain: "FilePicker", code: 1, userInfo: [NSLocalizedDescriptionKey: "No root view controller"])))
-}
-#endif
+        #elseif os(iOS)
+        let asCopy = false // Use false for all to get scoped access without copy
+        let picker = UIDocumentPickerViewController(forOpeningContentTypes: allowedTypes, asCopy: asCopy)
+        picker.allowsMultipleSelection = allowsMultiple
+        picker.directoryURL = directoryURL ?? FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
+        picker.shouldShowFileExtensions = true
+        let delegate = FilePickerDelegate(callback: callback)
+        FilePickerManager.shared.activeDelegates.append(delegate) // Retain delegate
+        picker.delegate = delegate
+        // Present from top VC to avoid dismissal bugs
+        var topVC = UIApplication.shared.windows.first(where: { $0.isKeyWindow })?.rootViewController
+        while let presentedVC = topVC?.presentedViewController {
+            topVC = presentedVC
+        }
+        if let topVC = topVC {
+            print("Presenting picker from top VC: \(topVC)")
+            topVC.present(picker, animated: true)
+        } else {
+            print("No top VC found")
+            callback(.failure(NSError(domain: "FilePicker", code: 1, userInfo: [NSLocalizedDescriptionKey: "No root view controller"])))
+        }
+        #endif
     }
 }
 
 // MARK: - Browser Opener Abstraction
 struct PlatformBrowser {
-static func open(url: URL) {
-#if os(macOS)
-NSWorkspace.shared.open(url)
-#elseif os(iOS)
-UIApplication.shared.open(url)
-#endif
-}
+    static func open(url: URL) {
+        #if os(macOS)
+        NSWorkspace.shared.open(url)
+        #elseif os(iOS)
+        UIApplication.shared.open(url)
+        #endif
+    }
 }
 
 // MARK: - Graphics Context Abstraction for Annotation Rendering
 protocol PlatformRenderer {
-func render(image: PlatformImage, strokes: [Stroke], textBoxes: [TextBox], annotationScale: CGFloat, offset: CGPoint) -> PlatformImage?
+    func render(image: PlatformImage, strokes: [Stroke], textBoxes: [TextBox], annotationScale: CGFloat, offset: CGPoint) -> PlatformImage?
 }
 
 struct PlatformRendererFactory {
-static var renderer: PlatformRenderer {
-#if os(macOS)
-MacOSRenderer()
-#elseif os(iOS)
-iOSRenderer()
-#endif
-}
+    static var renderer: PlatformRenderer {
+        #if os(macOS)
+        MacOSRenderer()
+        #elseif os(iOS)
+        iOSRenderer()
+        #endif
+    }
 }
 
 #if os(macOS)
@@ -203,7 +201,6 @@ struct MacOSRenderer: PlatformRenderer {
         let newImage = NSImage(size: size, flipped: true) { _ in
             // Draw base image (in flipped y-down context)
             image.draw(in: NSRect(origin: .zero, size: size))
-            
             guard let context = NSGraphicsContext.current?.cgContext else { return false }
             
             // Draw strokes (no manual flip needed)
@@ -260,7 +257,6 @@ struct iOSRenderer: PlatformRenderer {
             // Draw base image (in flipped y-down context provided by renderer)
             image.draw(in: CGRect(origin: .zero, size: image.size))
             let context = ctx.cgContext
-            
             // Draw strokes (no manual flip needed)
             for stroke in strokes {
                 context.setLineCap(.round)
@@ -306,11 +302,11 @@ struct iOSRenderer: PlatformRenderer {
 
 extension Color {
     var platformColor: PlatformColor {
-#if os(macOS)
+        #if os(macOS)
         NSColor(self)
-#elseif os(iOS)
+        #elseif os(iOS)
         UIColor(self)
-#endif
+        #endif
     }
 }
 
@@ -323,11 +319,11 @@ typealias PlatformColor = UIColor
 // MARK: - SwiftUI Image Extension for PlatformImage
 extension Image {
     init(platformImage: PlatformImage) {
-#if os(macOS)
+        #if os(macOS)
         self.init(nsImage: platformImage)
-#elseif os(iOS)
+        #elseif os(iOS)
         self.init(uiImage: platformImage)
-#endif
+        #endif
     }
 }
 
@@ -341,23 +337,23 @@ func withSecureAccess<T>(to url: URL, perform: () throws -> T) throws -> T {
 #if os(iOS)
 class FilePickerDelegate: NSObject, UIDocumentPickerDelegate {
     let callback: FilePickerCallback
-     
+    
     init(callback: @escaping FilePickerCallback) {
         self.callback = callback
     }
-     
+    
     func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
         print("Picked URLs in delegate: \(urls)")
         callback(.success(urls))
         controller.dismiss(animated: true)
-        FilePickerManager.shared.activeDelegates.removeAll { $0 === self }  // Release self
+        FilePickerManager.shared.activeDelegates.removeAll { $0 === self } // Release self
     }
-     
+    
     func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
         print("Picker cancelled in delegate")
         callback(.failure(NSError(domain: "FilePicker", code: 0, userInfo: [NSLocalizedDescriptionKey: "User cancelled"])))
         controller.dismiss(animated: true)
-        FilePickerManager.shared.activeDelegates.removeAll { $0 === self }  // Release self
+        FilePickerManager.shared.activeDelegates.removeAll { $0 === self } // Release self
     }
 }
 #endif
@@ -385,9 +381,10 @@ extension PlatformImage {
 protocol PlatformTextView {
     var string: String { get set }
     var selectedText: String { get }
-    func copySelectedOrAll()
+    func copySelected()
     func paste()
     func clear()
+    func makeFirstResponder()
 }
 
 #if os(macOS)
@@ -395,22 +392,23 @@ extension NSTextView: PlatformTextView {
     var selectedText: String {
         return (string as NSString).substring(with: selectedRange()) as String
     }
-
-    func copySelectedOrAll() {
+    
+    func copySelected() {
         if selectedRange().length > 0 {
             copy(nil)
-        } else {
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(string, forType: .string)
         }
     }
-
+    
     func paste() {
         paste(nil)
     }
-
+    
     func clear() {
         string = ""
+    }
+    
+    func makeFirstResponder() {
+        window?.makeFirstResponder(self)
     }
 }
 #elseif os(iOS)
@@ -419,28 +417,30 @@ extension UITextView: PlatformTextView {
         get { text ?? "" }
         set { text = newValue }
     }
-
+    
     var selectedText: String {
         if let range = selectedTextRange {
             return text(in: range) ?? ""
         }
         return ""
     }
-
-    func copySelectedOrAll() {
+    
+    func copySelected() {
         if !selectedText.isEmpty {
             copy(nil)
-        } else {
-            UIPasteboard.general.string = string
         }
     }
-
+    
     func paste() {
         paste(nil)
     }
-
+    
     func clear() {
         text = ""
+    }
+    
+    func makeFirstResponder() {
+        becomeFirstResponder()
     }
 }
 #endif

@@ -1,6 +1,6 @@
 // ContentView+Batch.swift
 import SwiftUI
-import Foundation  // Add other imports as needed
+import Foundation // Add other imports as needed
 
 extension ContentView {
     func handleBatchFileSelection(_ result: Result<[URL], Error>) {
@@ -13,8 +13,9 @@ extension ContentView {
             }
             do {
                 #if os(macOS)
-                let bookmarkOptions: URL.BookmarkCreationOptions = [.withSecurityScope]  // Allows read/write
-                let bookmarkData = try url.bookmarkData(options: bookmarkOptions, includingResourceValuesForKeys: nil, relativeTo: nil)                #else
+                let bookmarkOptions: URL.BookmarkCreationOptions = [.withSecurityScope] // Allows read/write
+                let bookmarkData = try url.bookmarkData(options: bookmarkOptions, includingResourceValuesForKeys: nil, relativeTo: nil)
+                #else
                 let bookmarkOptions: URL.BookmarkCreationOptions = .minimalBookmark
                 var bookmarkData: Data?
                 var coordError: NSError?
@@ -53,7 +54,6 @@ extension ContentView {
             NSFileCoordinator().coordinate(readingItemAt: url, options: [], error: &loadError) { coordinatedURL in
                 if coordinatedURL.startAccessingSecurityScopedResource() {
                     defer { coordinatedURL.stopAccessingSecurityScopedResource() }
-                    
                     do {
                         let text = try String(contentsOf: coordinatedURL)
                         appState.batchPrompts = text.components(separatedBy: .newlines).filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
@@ -82,27 +82,29 @@ extension ContentView {
             showErrorAlert = true
         }
     }
+
     func loadBatchPrompts() {
-            guard let bookmarkData = UserDefaults.standard.data(forKey: "batchFileBookmark") else { return }
-            do {
-                var isStale = false
-                #if os(macOS)
-                let options: URL.BookmarkResolutionOptions = .withSecurityScope
-                #else
-                let options: URL.BookmarkResolutionOptions = []
-                #endif
-                let resolvedURL = try URL(resolvingBookmarkData: bookmarkData, options: options, relativeTo: nil, bookmarkDataIsStale: &isStale)
-                let accessing = resolvedURL.startAccessingSecurityScopedResource()
-                defer { if accessing { resolvedURL.stopAccessingSecurityScopedResource() } }
-                let content = try String(contentsOf: resolvedURL, encoding: .utf8)
-                appState.batchPrompts = content.components(separatedBy: .newlines).filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
-                appState.batchFileURL = resolvedURL
-                batchFilePath = resolvedURL.path
-            } catch {
-                errorMessage = "Failed to load batch file: \(error.localizedDescription)"
-                showErrorAlert = true
-            }
+        guard let bookmarkData = UserDefaults.standard.data(forKey: "batchFileBookmark") else { return }
+        do {
+            var isStale = false
+            #if os(macOS)
+            let options: URL.BookmarkResolutionOptions = .withSecurityScope
+            #else
+            let options: URL.BookmarkResolutionOptions = []
+            #endif
+            let resolvedURL = try URL(resolvingBookmarkData: bookmarkData, options: options, relativeTo: nil, bookmarkDataIsStale: &isStale)
+            let accessing = resolvedURL.startAccessingSecurityScopedResource()
+            defer { if accessing { resolvedURL.stopAccessingSecurityScopedResource() } }
+            let content = try String(contentsOf: resolvedURL, encoding: .utf8)
+            appState.batchPrompts = content.components(separatedBy: .newlines).filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+            appState.batchFileURL = resolvedURL
+            batchFilePath = resolvedURL.path
+        } catch {
+            errorMessage = "Failed to load batch file: \(error.localizedDescription)"
+            showErrorAlert = true
         }
+    }
+
     func batchSubmit() {
         if outputPath.isEmpty {
             pendingAction = batchSubmit
@@ -126,7 +128,7 @@ extension ContentView {
             showErrorAlert = true
             return
         }
-        var failures: [(Int, String, String)] = []  // (index, prompt, errorDesc)
+        var failures: [(Int, String, String)] = [] // (index, prompt, errorDesc)
         
         isLoading = true
         
@@ -168,3 +170,6 @@ extension ContentView {
         }
     }
 }
+
+
+
