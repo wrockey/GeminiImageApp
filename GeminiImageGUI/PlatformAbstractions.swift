@@ -450,3 +450,35 @@ typealias PlatformTextDelegate = NSTextViewDelegate
 #elseif os(iOS)
 typealias PlatformTextDelegate = UITextViewDelegate
 #endif
+
+typealias FileSaveCallback = (Result<URL, Error>) -> Void // Changed to single URL for save
+
+struct PlatformFileSaver {
+    static func presentSavePanel(
+        suggestedName: String,
+        allowedTypes: [UTType],
+        message: String? = nil,
+        prompt: String? = "Save",
+        directoryURL: URL? = nil,
+        callback: @escaping FileSaveCallback
+    ) {
+        #if os(macOS)
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = allowedTypes
+        panel.nameFieldStringValue = suggestedName
+        panel.canCreateDirectories = true
+        if let message = message {
+            panel.message = message
+        }
+        panel.prompt = prompt
+        panel.directoryURL = directoryURL ?? FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
+        panel.begin { response in
+            if response == .OK, let url = panel.url {
+                callback(.success(url))
+            } else {
+                callback(.failure(NSError(domain: "FileSaver", code: 0, userInfo: [NSLocalizedDescriptionKey: "User cancelled"])))
+            }
+        }
+        #endif
+    }
+}

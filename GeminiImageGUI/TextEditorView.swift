@@ -1,17 +1,15 @@
 // TextEditorView.swift
 import SwiftUI
-
-#if os(macOS)
-typealias Representable = NSViewRepresentable // <-- CHANGED: Use NSViewRepresentable for direct view embedding
-#elseif os(iOS)
-typealias Representable = UIViewRepresentable
-#endif
-// Add this at the top of TextEditorView.swift, after import SwiftUI
+import UniformTypeIdentifiers
 #if os(macOS)
 import AppKit
 #endif
 
-// Remove the entire TextEditorViewController class, as it's no longer needed with NSViewRepresentable.
+#if os(macOS)
+typealias Representable = NSViewRepresentable
+#elseif os(iOS)
+typealias Representable = UIViewRepresentable
+#endif
 
 struct CustomTextEditor: Representable {
     @Binding var text: String
@@ -56,12 +54,13 @@ struct CustomTextEditor: Representable {
         let textView = UITextView()
         textView.font = UIFont.monospacedSystemFont(ofSize: 14, weight: .regular)
         textView.delegate = context.coordinator
-        textView.textColor = .label // Adaptive text color (black in light mode, white in dark)
-        textView.backgroundColor = .systemBackground // Adaptive background
+        textView.textColor = .label
+        textView.backgroundColor = .systemBackground
         textView.isEditable = true
         textView.isSelectable = true
-        textView.textContainerInset = UIEdgeInsets(top: 20, left: 10, bottom: 20, right: 10) // Padding for better usability
-        textView.contentInsetAdjustmentBehavior = .automatic // Respects safe areas and keyboard
+        textView.textContainerInset = UIEdgeInsets(top: 20, left: 10, bottom: 20, right: 10)
+        textView.contentInsetAdjustmentBehavior = .automatic
+        textView.text = text
         platformTextView = textView
         return textView
     }
@@ -72,7 +71,7 @@ struct CustomTextEditor: Representable {
         }
         DispatchQueue.main.async {
             if !uiView.isFirstResponder {
-                uiView.becomeFirstResponder() // <-- ADDED: Shows keyboard, makes editable
+                uiView.becomeFirstResponder()
             }
         }
     }
@@ -104,11 +103,16 @@ extension Notification.Name {
 }
 
 struct TextEditorView: View {
-    let bookmarkData: Data
+    let bookmarkData: Data?
     @State private var fileURL: URL? = nil
     @State private var text: String = ""
     @State private var error: String? = nil
     @State private var platformTextView: PlatformTextView? = nil
+    @State private var showSaveConfirm: Bool = false
+    #if os(iOS)
+    @State private var showFilenamePrompt: Bool = false
+    @State private var newFilename: String = "batch.txt"
+    #endif
     @Environment(\.dismiss) var dismiss
 
     var body: some View {
@@ -116,14 +120,14 @@ struct TextEditorView: View {
         NavigationStack {
             content
                 .toolbar {
-                    ToolbarItem(placement: .cancellationAction) { // Leading: Cancel (xmark)
+                    ToolbarItem(placement: .cancellationAction) {
                         Button {
                             dismiss()
                         } label: {
                             Image(systemName: "xmark")
                         }
                     }
-                    ToolbarItem(placement: .destructiveAction) { // Trailing: Clear (trash)
+                    ToolbarItem(placement: .destructiveAction) {
                         Button {
                             platformTextView?.clear()
                             text = ""
@@ -131,14 +135,14 @@ struct TextEditorView: View {
                             Image(systemName: "trash")
                         }
                     }
-                    ToolbarItem(placement: .confirmationAction) { // Trailing: Save (checkmark)
+                    ToolbarItem(placement: .confirmationAction) {
                         Button {
                             saveAndDismiss()
                         } label: {
                             Image(systemName: "checkmark")
                         }
                     }
-                    ToolbarItem(placement: .navigationBarTrailing) { // Additional trailing: Paste and Copy
+                    ToolbarItem(placement: .navigationBarTrailing) {
                         Button {
                             platformTextView?.paste()
                         } label: {
@@ -152,11 +156,48 @@ struct TextEditorView: View {
                             Image(systemName: "doc.on.doc")
                         }
                     }
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        Button {
+                            platformTextView?.undo()
+                        } label: {
+                            Image(systemName: "arrow.uturn.left")
+                        }
+                        .disabled(!(platformTextView?.canUndo ?? false))
+                    }
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        Button {
+                            platformTextView?.redo()
+                        } label: {
+                            Image(systemName: "arrow.uturn.right")
+                        }
+                        .disabled(!(platformTextView?.canRedo ?? false))
+                    }
                 }
         }
         .navigationTitle(fileURL?.lastPathComponent ?? "Batch Editor")
         .navigationBarTitleDisplayMode(.inline)
-        .onAppear(perform: onAppearAction) // <-- ADD THIS: Loads the text on iOS
+        .onAppear(perform: onAppearAction)
+        .alert("Are you sure you want to overwrite \(fileURL?.lastPathComponent ?? "the file")?", isPresented: $showSaveConfirm) {
+            Button("Yes", role: .destructive) {
+                if let url = fileURL {
+                    performSave(to: url) { success in
+                        if success {
+                            dismiss()
+                        }
+                    }
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        }
+        .alert("Enter filename", isPresented: $showFilenamePrompt) {
+            TextField("Filename", text: $newFilename)
+            Button("OK") {
+                presentFolderPicker()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Please enter a name for the new file.")
+        }
         #else
         Group {
             content
@@ -173,6 +214,18 @@ struct TextEditorView: View {
             }
         }
         .onAppear(perform: onAppearAction)
+        .alert("Are you sure you want to overwrite \(fileURL?.lastPathComponent ?? "the file")?", isPresented: $showSaveConfirm) {
+            Button("Yes", role: .destructive) {
+                if let url = fileURL {
+                    performSave(to: url) { success in
+                        if success {
+                            dismiss()
+                        }
+                    }
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        }
         #endif
     }
 
@@ -182,7 +235,7 @@ struct TextEditorView: View {
             Text(error).foregroundColor(.red).padding()
         } else {
             CustomTextEditor(text: $text, platformTextView: $platformTextView)
-                .frame(maxWidth: .infinity, maxHeight: .infinity) // Ensures it fills the available space below the nav bar
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(Color({
                     #if os(macOS)
                     NSColor.textBackgroundColor
@@ -195,19 +248,47 @@ struct TextEditorView: View {
 
     private var toolbarButtons: some View {
         Group {
+            #if os(macOS)
             Button(action: {
-                NSApp.sendAction(#selector(NSText.paste(_:)), to: nil, from: nil)
+                NSApp.sendAction(#selector(NSTextView.paste(_:)), to: nil, from: nil as Any?)
             }) {
                 Image(systemName: "doc.on.clipboard")
             }
             Button(action: {
-                NSApp.sendAction(#selector(NSText.copy(_:)), to: nil, from: nil)
+                NSApp.sendAction(#selector(NSTextView.copy(_:)), to: nil, from: nil as Any?)
             }) {
                 Image(systemName: "doc.on.doc")
             }
-            Button(action: { platformTextView?.clear(); text = "" }) {
+            #elseif os(iOS)
+            Button(action: {
+                platformTextView?.paste()
+            }) {
+                Image(systemName: "doc.on.clipboard")
+            }
+            Button(action: {
+                platformTextView?.copySelected()
+            }) {
+                Image(systemName: "doc.on.doc")
+            }
+            #endif
+            Button(action: {
+                platformTextView?.clear()
+                text = ""
+            }) {
                 Image(systemName: "trash")
             }
+            Button(action: {
+                platformTextView?.undo()
+            }) {
+                Image(systemName: "arrow.uturn.left")
+            }
+            .disabled(!(platformTextView?.canUndo ?? false))
+            Button(action: {
+                platformTextView?.redo()
+            }) {
+                Image(systemName: "arrow.uturn.right")
+            }
+            .disabled(!(platformTextView?.canRedo ?? false))
             Button(action: saveAndDismiss) {
                 Image(systemName: "checkmark")
             }
@@ -215,13 +296,13 @@ struct TextEditorView: View {
     }
 
     private func onAppearAction() {
-        resolveURL()
-        if let url = fileURL {
-            loadText(from: url)
+        if let data = bookmarkData {
+            resolveURL(from: data)
         }
+        // If no bookmarkData, editor opens empty; no need to load text
     }
 
-    private func resolveURL() {
+    private func resolveURL(from bookmarkData: Data) {
         do {
             var isStale = false
             #if os(macOS)
@@ -233,9 +314,9 @@ struct TextEditorView: View {
             #endif
             let resolvedURL = try URL(resolvingBookmarkData: bookmarkData, options: options, bookmarkDataIsStale: &isStale)
             
-            // Start access (works on both platforms if scoped)
             if resolvedURL.startAccessingSecurityScopedResource() {
                 fileURL = resolvedURL
+                loadText(from: resolvedURL)
             } else {
                 self.error = "Failed to start accessing security-scoped resource."
                 return
@@ -271,27 +352,139 @@ struct TextEditorView: View {
     }
 
     private func saveAndDismiss() {
-        guard let url = fileURL else {
-            self.error = "No file URL."
-            return
-        }
-        var coordError: NSError?
-        NSFileCoordinator().coordinate(writingItemAt: url, options: [], error: &coordError) { coordinatedURL in
-            if coordinatedURL.startAccessingSecurityScopedResource() {
-                defer { coordinatedURL.stopAccessingSecurityScopedResource() }
-                do {
-                    try text.write(to: coordinatedURL, atomically: true, encoding: .utf8)
-                    NotificationCenter.default.post(name: .batchFileUpdated, object: nil)
-                    dismiss()
-                } catch {
-                    self.error = error.localizedDescription
+        if let _ = fileURL {
+            showSaveConfirm = true
+        } else {
+            #if os(macOS)
+            PlatformFileSaver.presentSavePanel(
+                suggestedName: "batch.txt",
+                allowedTypes: [UTType.text],
+                callback: { result in
+                    switch result {
+                    case .success(let url):
+                        performSave(to: url) { success in
+                            if success {
+                                dismiss()
+                            }
+                        }
+                    case .failure(let err):
+                        self.error = err.localizedDescription
+                    }
                 }
-            } else {
-                self.error = "Failed to access file for writing."
+            )
+            #elseif os(iOS)
+            showFilenamePrompt = true
+            #endif
+        }
+    }
+
+    #if os(iOS)
+    private func presentFolderPicker() {
+        PlatformFilePicker.presentOpenPanel(
+            allowedTypes: [UTType.folder],
+            allowsMultiple: false,
+            canChooseDirectories: true,
+            message: "Select a folder to save the file",
+            prompt: "Select",
+            callback: { result in
+                switch result {
+                case .success(let urls):
+                    guard let folder = urls.first else { return }
+                    let newURL = folder.appendingPathComponent(newFilename)
+                    performSave(to: newURL, accessURL: folder) { success in
+                        if success {
+                            dismiss()
+                        }
+                    }
+                case .failure(let err):
+                    self.error = err.localizedDescription
+                }
+            }
+        )
+    }
+    #endif
+
+    private func performSave(to url: URL, accessURL: URL? = nil, completion: @escaping (Bool) -> Void) {
+        if let access = accessURL {
+            if !access.startAccessingSecurityScopedResource() {
+                self.error = "Failed to access folder."
+                completion(false)
+                return
+            }
+            defer { access.stopAccessingSecurityScopedResource() }
+        }
+        
+        var coordError: NSError?
+        let options: NSFileCoordinator.WritingOptions = fileURL == nil ? [] : [.forReplacing]
+        NSFileCoordinator().coordinate(writingItemAt: url, options: options, error: &coordError) { coordinatedURL in
+            let didStart = coordinatedURL.startAccessingSecurityScopedResource()
+            defer { if didStart { coordinatedURL.stopAccessingSecurityScopedResource() } }
+            
+            do {
+                try text.write(to: coordinatedURL, atomically: true, encoding: .utf8)
+                if fileURL == nil {
+                    #if os(macOS)
+                    let bookmarkOptions: URL.BookmarkCreationOptions = [.withSecurityScope]
+                    #else
+                    let bookmarkOptions: URL.BookmarkCreationOptions = [.minimalBookmark]
+                    #endif
+                    if let newBookmark = try? url.bookmarkData(options: bookmarkOptions) {
+                        UserDefaults.standard.set(newBookmark, forKey: "batchFileBookmark")
+                    }
+                    fileURL = url
+                }
+                NotificationCenter.default.post(name: .batchFileUpdated, object: nil)
+                completion(true)
+            } catch {
+                self.error = error.localizedDescription
+                completion(false)
             }
         }
         if let coordError = coordError {
             self.error = coordError.localizedDescription
+            completion(false)
         }
+    }
+}
+
+extension PlatformTextView {
+    var canUndo: Bool {
+        #if os(macOS)
+        return (self as? NSTextView)?.undoManager?.canUndo ?? false
+        #elseif os(iOS)
+        return (self as? UITextView)?.undoManager?.canUndo ?? false
+        #endif
+    }
+
+    var canRedo: Bool {
+        #if os(macOS)
+        return (self as? NSTextView)?.undoManager?.canRedo ?? false
+        #elseif os(iOS)
+        return (self as? UITextView)?.undoManager?.canRedo ?? false
+        #endif
+    }
+
+    func undo() {
+        #if os(macOS)
+        if let textView = self as? NSTextView {
+            textView.undoManager?.undo()
+        }
+        #elseif os(iOS)
+        if let textView = self as? UITextView {
+            textView.undoManager?.undo()
+        }
+        #endif
+    }
+
+    func redo() {
+        #if os(macOS)
+        if let textView = self as? NSTextView {
+            textView.undoManager?.redo()
+        }
+        #elseif os(iOS)
+        if let textView = self as? UITextView {
+            textView.undoManager?.redo()
+        }
+        #endif
     }
 }
