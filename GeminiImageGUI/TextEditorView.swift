@@ -2,21 +2,18 @@
 import SwiftUI
  
 #if os(macOS)
-typealias Representable = NSViewRepresentable
+typealias Representable = NSViewControllerRepresentable
 #elseif os(iOS)
 typealias Representable = UIViewRepresentable
 #endif
- 
-struct CustomTextEditor: Representable {
-    @Binding var text: String
-    @Binding var platformTextView: PlatformTextView?
- 
-    func makeCoordinator() -> Coordinator {
-        Coordinator(parent: self)
-    }
- 
-    #if os(macOS)
-    func makeNSView(context: Context) -> NSScrollView {
+
+
+#if os(macOS)
+class TextEditorViewController: NSViewController {
+    var textView: NSTextView!
+    var onTextChange: ((String) -> Void)?  // Callback for text updates
+    
+    override func loadView() {
         let scrollView = NSScrollView()
         let contentSize = scrollView.contentSize
         
@@ -28,14 +25,13 @@ struct CustomTextEditor: Representable {
         textContainer.widthTracksTextView = true
         layoutManager.addTextContainer(textContainer)
         
-        let textView = NSTextView(frame: NSRect(x: 0, y: 0, width: contentSize.width, height: contentSize.height), textContainer: textContainer)
+        textView = NSTextView(frame: NSRect(x: 0, y: 0, width: contentSize.width, height: contentSize.height), textContainer: textContainer)
         textView.font = NSFont.monospacedSystemFont(ofSize: 14, weight: .regular)
-        textView.textColor = .textColor  // Adaptive system text color (white in dark mode, black in light)
-        textView.backgroundColor = .textBackgroundColor  // Optional: Adaptive background (light grey in light, dark grey in dark)
+        textView.textColor = .textColor
+        textView.backgroundColor = .textBackgroundColor
         textView.isEditable = true
         textView.isSelectable = true
         textView.allowsUndo = true
-        textView.delegate = context.coordinator
         textView.autoresizingMask = [.width]
         
         scrollView.documentView = textView
@@ -43,22 +39,59 @@ struct CustomTextEditor: Representable {
         scrollView.hasHorizontalScroller = true
         scrollView.autohidesScrollers = true
         
-        platformTextView = textView
-        return scrollView
+        self.view = scrollView
     }
+    
+    override func viewDidAppear() {
+        super.viewDidAppear()
+        view.window?.makeFirstResponder(textView)
+    }
+    
+    func updateText(_ newText: String) {
+        if textView.string != newText {
+            textView.string = newText
+        }
+    }
+}
+#endif
  
-    func updateNSView(_ nsView: NSScrollView, context: Context) {
-            if let textView = nsView.documentView as? NSTextView {
-                if textView.string != text {
-                    textView.string = text  // <-- CHANGED: Respects textColor and font
-                }
-                DispatchQueue.main.async {
-                    if let window = nsView.window, window.firstResponder != textView {
-                        window.makeFirstResponder(textView)  // <-- ADDED: Makes editable/focused
-                    }
-                }
+struct CustomTextEditor: Representable {
+    @Binding var text: String
+    @Binding var platformTextView: PlatformTextView?
+
+    func makeCoordinator() -> Coordinator {
+        return Coordinator(parent: self)
+    }
+
+    #if os(macOS)
+    func dismantleNSViewController(_ nsViewController: TextEditorViewController, coordinator: Coordinator) {
+        nsViewController.textView.delegate = nil
+    }
+    #endif
+
+#if os(macOS)
+    func makeNSViewController(context: Context) -> TextEditorViewController {
+        let controller = TextEditorViewController()
+        _ = controller.view  // Force loadView() to initialize textView
+        controller.textView.delegate = context.coordinator
+        controller.onTextChange = { newText in
+            self.text = newText
+        }
+        platformTextView = controller.textView
+        return controller
+    }
+    
+    func updateNSViewController(_ nsViewController: TextEditorViewController, context: Context) {
+        _ = nsViewController.view  // Ensure loaded if not already
+        nsViewController.updateText(text)
+        DispatchQueue.main.async {
+            if let window = nsViewController.view.window, window.firstResponder != nsViewController.textView {
+                window.makeFirstResponder(nsViewController.textView)
             }
         }
+    }
+
+    
     #elseif os(iOS)
     func makeUIView(context: Context) -> UITextView {
         let textView = UITextView()
@@ -73,26 +106,26 @@ struct CustomTextEditor: Representable {
         platformTextView = textView
         return textView
     }
- 
+
     func updateUIView(_ uiView: UITextView, context: Context) {
-            if uiView.text != text {
-                uiView.text = text
-            }
-            DispatchQueue.main.async {
-                if !uiView.isFirstResponder {
-                    uiView.becomeFirstResponder()  // <-- ADDED: Shows keyboard, makes editable
-                }
+        if uiView.text != text {
+            uiView.text = text
+        }
+        DispatchQueue.main.async {
+            if !uiView.isFirstResponder {
+                uiView.becomeFirstResponder()  // <-- ADDED: Shows keyboard, makes editable
             }
         }
+    }
     #endif
- 
+
     class Coordinator: NSObject, PlatformTextDelegate {
         var parent: CustomTextEditor
- 
+        
         init(parent: CustomTextEditor) {
             self.parent = parent
         }
- 
+        
         #if os(macOS)
         func textDidChange(_ notification: Notification) {
             if let textView = notification.object as? NSTextView {
@@ -192,7 +225,13 @@ struct TextEditorView: View {
         } else {
             CustomTextEditor(text: $text, platformTextView: $platformTextView)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)  // Ensures it fills the available space below the nav bar
-//                .background(Color(UIColor.systemBackground))  // Adaptive background for visibility
+                .background(Color({
+#if os(macOS)
+                    NSColor.textBackgroundColor
+#elseif os(iOS)
+                    UIColor.systemBackground
+#endif
+                }()))
         }
     }
 
