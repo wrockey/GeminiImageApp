@@ -1,3 +1,4 @@
+//SplashView.swift
 import SwiftUI
 
 struct SplashView: View {

@@ -1,3 +1,4 @@
+//InputImagesSection.swift
 import SwiftUI
 import ImageIO  // For PNG metadata extraction
 import UniformTypeIdentifiers  // Added for UTType on macOS

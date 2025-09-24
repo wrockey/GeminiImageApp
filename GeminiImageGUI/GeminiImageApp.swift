@@ -1,3 +1,4 @@
+//GeminiImageApp.swift
 import SwiftUI
 import Combine
 #if os(macOS)
