@@ -1,4 +1,3 @@
-//InputImagesSection.swift
 import SwiftUI
 import ImageIO  // For PNG metadata extraction
 import UniformTypeIdentifiers  // Added for UTType on macOS
@@ -520,6 +519,21 @@ struct ImageSlotItemView: View {
                 .accessibilityLabel("Paste")
                 .accessibilityHint("Pastes an image from the clipboard into this slot.")
                 
+#if os(iOS)
+                Button {
+                    showPicker = true
+                } label: {
+                    Image(systemName: "photo.on.rectangle")
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.cyan)
+                .cornerRadius(10)
+                .shadow(radius: 2)
+                .help("Add from Photos") // Tooltip
+                .accessibilityLabel("Add from Photos")
+                .accessibilityHint("Opens photo picker to select an image from your library.")
+#endif
+                
                 Button {
                     if slot.image != nil {
                         print("DEBUG: Annotate tapped for slot \(slot.id), image exists: true")
@@ -539,23 +553,6 @@ struct ImageSlotItemView: View {
                 .help("Annotate the loaded image") // Tooltip
                 .accessibilityLabel("Annotate")
                 .accessibilityHint("Opens annotation tool for the loaded image.")
-                
-#if os(iOS)
-                Button {
-                    showPicker = true
-                } label: {
-                    Image(systemName: "photo.on.rectangle")
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(.cyan)
-                .cornerRadius(10)
-                .shadow(radius: 2)
-                .help("Add from Photos") // Tooltip
-                .accessibilityLabel("Add from Photos")
-                .accessibilityHint("Opens photo picker to select an image from your library.")
-#endif
-
-
             }
         }
     }
