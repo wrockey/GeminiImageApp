@@ -50,12 +50,18 @@ struct CustomTextEditor: Representable {
             textView.string = text
         }
         DispatchQueue.main.async {
-            if let window = nsView.window, window.firstResponder != textView {
-                window.makeFirstResponder(textView)
-            }
-            if let window = nsView.window, let windowDelegate = windowDelegate, window.delegate !== windowDelegate {
-                print("Setting delegate for window: \(window.title), all windows: \(NSApp.windows.map { $0.title })")
-                window.delegate = windowDelegate
+            if let window = nsView.window {
+                if window.firstResponder != textView {
+                    window.makeFirstResponder(textView)
+                }
+                if let windowDelegate = windowDelegate, window.delegate !== windowDelegate {
+                    print("Setting delegate for window: \(window.title), all windows: \(NSApp.windows.map { $0.title })")
+                    windowDelegate.window = window
+                    window.delegate = windowDelegate
+                }
+                if window.title != windowTitle {
+                    window.title = windowTitle
+                }
             }
         }
     }
@@ -115,6 +121,7 @@ extension Notification.Name {
 #if os(macOS)
 class TextEditorWindowDelegate: NSObject, NSWindowDelegate {
     var shouldCloseHandler: (() -> Bool)?
+    weak var window: NSWindow?
     
     func windowShouldClose(_ sender: NSWindow) -> Bool {
         print("windowShouldClose called for window: \(sender.title)")
@@ -185,6 +192,7 @@ struct TextEditorView: View {
                 saveAndDismiss()
             }
             Button("Discard Changes", role: .destructive) {
+                initialText = text
                 dismiss()
             }
             Button("Cancel", role: .cancel) {}
@@ -238,10 +246,7 @@ struct TextEditorView: View {
                 if let url = fileURL {
                     performSave(to: url) { success in
                         if success {
-                            let targetTitle = fileURL?.lastPathComponent ?? "Batch Editor"
-                            if let window = NSApp.windows.first(where: { $0.title == targetTitle }) {
-                                window.close()
-                            }
+                            windowDelegate.window?.close()
                         }
                     }
                 }
@@ -253,10 +258,8 @@ struct TextEditorView: View {
                 saveAndDismiss()
             }
             Button("Discard Changes", role: .destructive) {
-                let targetTitle = fileURL?.lastPathComponent ?? "Batch Editor"
-                if let window = NSApp.windows.first(where: { $0.title == targetTitle }) {
-                    window.close()
-                }
+                initialText = text
+                windowDelegate.window?.close()
             }
             Button("Cancel", role: .cancel) {}
         } message: {
@@ -332,7 +335,7 @@ struct TextEditorView: View {
             }
             loadText(from: resolvedURL)
         } catch {
-            self.error = "Failed to load batch file: \(error.localizedDescription)"
+            self.error = error.localizedDescription
             // Fallback to empty if error
             text = ""
             initialText = ""
@@ -382,10 +385,7 @@ struct TextEditorView: View {
                                 appState.batchPrompts = text.components(separatedBy: .newlines).filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
                                 batchFilePath = url.path
                                 #if os(macOS)
-                                let targetTitle = fileURL?.lastPathComponent ?? "Batch Editor"
-                                if let window = NSApp.windows.first(where: { $0.title == targetTitle }) {
-                                    window.close()
-                                }
+                                windowDelegate.window?.close()
                                 #else
                                 dismiss()
                                 #endif
@@ -462,10 +462,7 @@ struct TextEditorView: View {
             }
         } else {
             #if os(macOS)
-            let targetTitle = fileURL?.lastPathComponent ?? "Batch Editor"
-            if let window = NSApp.windows.first(where: { $0.title == targetTitle }) {
-                window.close()
-            }
+            windowDelegate.window?.close()
             #else
             dismiss()
             #endif
