@@ -48,21 +48,6 @@ extension View {
  }
 }
 
-// Extension to make window non-resizable on macOS
-extension View {
-    func nonResizableWindow() -> some View {
-        #if os(macOS)
-        self.onAppear {
-            if let window = NSApp.windows.first {
-                window.styleMask.remove(.resizable)
-            }
-        }
-        #else
-        self
-        #endif
-    }
-}
-
 #if os(macOS)
 struct WindowAccessor: NSViewRepresentable {
     @Binding var window: NSWindow?
@@ -120,6 +105,7 @@ struct MarkupView: View {
  #if os(macOS)
  @State private var editorWindow: NSWindow? = nil
  @State private var windowDelegate: WindowCloseDelegate? = nil
+ @State private var contentSize: CGSize
  #endif
  
  let colors: [Color] = [.red, .green, .blue, .yellow, .purple, .orange, .black, .white]
@@ -128,6 +114,34 @@ struct MarkupView: View {
  
  private var hasChanges: Bool {
      !strokes.isEmpty || !textBoxes.isEmpty
+ }
+
+ init(image: PlatformImage, baseFileName: String, fileExtension: String, onSave: @escaping (PlatformImage) -> Void) {
+     self.image = image
+     self.baseFileName = baseFileName
+     self.fileExtension = fileExtension
+     self.onSave = onSave
+     #if os(macOS)
+     if let screen = NSScreen.main {
+         let visibleFrame = screen.visibleFrame
+         let titleBarHeight: CGFloat = 28
+         let maxWidth = visibleFrame.width
+         let maxHeight = visibleFrame.height - titleBarHeight
+         let imgW = image.platformSize.width
+         let imgH = image.platformSize.height
+         var scale = min(maxWidth / imgW, (maxHeight - paletteHeight) / imgH, 1.0)
+         if scale < 1.0 {
+             scale *= 0.9
+         }
+         var contentW = imgW * scale
+         let contentH = imgH * scale + paletteHeight
+         let minPaletteWidth: CGFloat = 800
+         contentW = max(contentW, minPaletteWidth)
+         _contentSize = State(initialValue: CGSize(width: contentW, height: contentH))
+     } else {
+         _contentSize = State(initialValue: CGSize(width: image.platformSize.width, height: image.platformSize.height + paletteHeight))
+     }
+     #endif
  }
  
  var body: some View {
@@ -142,8 +156,7 @@ struct MarkupView: View {
          #endif
      }
 #if os(macOS)
-     .frame(width: image.platformSize.width, height: image.platformSize.height + paletteHeight)
-     .nonResizableWindow()
+     .frame(width: contentSize.width, height: contentSize.height)
 #else
      .navigationBarHidden(true)
 #endif
@@ -224,12 +237,15 @@ struct MarkupView: View {
              let imgW = image.platformSize.width
              let imgH = image.platformSize.height
              
-             let scaleW = maxWidth / imgW
-             let scaleH = (maxHeight - paletteHeight) / imgH
-             let scale = min(scaleW, scaleH, 1.0)
+             var scale = min(maxWidth / imgW, (maxHeight - paletteHeight) / imgH, 1.0)
+             if scale < 1.0 {
+                 scale *= 0.9
+             }
              
-             let contentW = imgW * scale
+             var contentW = imgW * scale
              let contentH = imgH * scale + paletteHeight
+             let minPaletteWidth: CGFloat = 800
+             contentW = max(contentW, minPaletteWidth)
              
              window.setContentSize(CGSize(width: contentW, height: contentH))
              window.center()
