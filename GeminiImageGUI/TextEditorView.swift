@@ -15,7 +15,7 @@ typealias Representable = UIViewRepresentable
 
 struct CustomTextEditor: Representable {
     @Binding var text: String
-    @Binding var platformTextView: PlatformTextView?
+    @Binding var platformTextView: (any PlatformTextView)?
     #if os(macOS)
     let windowDelegate: TextEditorWindowDelegate?
     let windowTitle: String
@@ -130,7 +130,7 @@ struct TextEditorView: View {
     @State private var text: String = ""
     @State private var initialText: String = ""
     @State private var error: String? = nil
-    @State private var platformTextView: PlatformTextView? = nil
+    @State private var platformTextView: (any PlatformTextView)? = nil
     @State private var showSaveConfirm: Bool = false
     @State private var showCloseConfirm: Bool = false
     @EnvironmentObject var appState: AppState
@@ -152,7 +152,6 @@ struct TextEditorView: View {
                     }
                     ToolbarItem(placement: .destructiveAction) {
                         Button {
-                            platformTextView?.clear()
                             text = ""
                         } label: {
                             Image(systemName: "trash")
@@ -165,338 +164,179 @@ struct TextEditorView: View {
                             Image(systemName: "checkmark")
                         }
                     }
-                    ToolbarItem(placement: .navigationBarTrailing) {
-                        Button {
-                            platformTextView?.paste()
-                        } label: {
-                            Image(systemName: "doc.on.clipboard")
-                        }
-                    }
-                    ToolbarItem(placement: .navigationBarTrailing) {
-                        Button {
-                            platformTextView?.copySelected()
-                        } label: {
-                            Image(systemName: "doc.on.doc")
-                        }
-                    }
-                    ToolbarItem(placement: .navigationBarTrailing) {
-                        Button {
-                            platformTextView?.undo()
-                        } label: {
-                            Image(systemName: "arrow.uturn.left")
-                        }
-                        .disabled(!(platformTextView?.canUndo ?? false))
-                    }
-                    ToolbarItem(placement: .navigationBarTrailing) {
-                        Button {
-                            platformTextView?.redo()
-                        } label: {
-                            Image(systemName: "arrow.uturn.right")
-                        }
-                        .disabled(!(platformTextView?.canRedo ?? false))
-                    }
-                }
-                .alert("Are you sure you want to overwrite \(fileURL?.lastPathComponent ?? "the file")?", isPresented: $showSaveConfirm) {
-                    Button("Yes", role: .destructive) {
-                        if let url = fileURL {
-                            performSave(to: url) { success in
-                                if success {
-                                    dismiss()
-                                }
-                            }
-                        }
-                    }
-                    Button("Cancel", role: .cancel) {}
-                }
-                .alert("Save changes to \(fileURL?.lastPathComponent ?? "new file") before closing?", isPresented: $showCloseConfirm) {
-                    Button("Save", role: .destructive) {
-                        if let url = fileURL {
-                            performSave(to: url) { success in
-                                if success {
-                                    dismiss()
-                                }
-                            }
-                        } else {
-                            PlatformFileSaver.presentSavePanel(
-                                suggestedName: "batch.txt",
-                                allowedTypes: [UTType.text],
-                                callback: { result in
-                                    switch result {
-                                    case .success(let url):
-                                        performSave(to: url) { success in
-                                            if success {
-                                                appState.batchFileURL = url
-                                                appState.batchPrompts = text.components(separatedBy: .newlines).filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
-                                                batchFilePath = url.path
-                                                dismiss()
-                                            }
-                                        }
-                                    case .failure(let err):
-                                        if err.localizedDescription.lowercased() != "user cancelled" {
-                                            self.error = err.localizedDescription
-                                        } else {
-                                            self.error = nil
-                                        }
-                                    }
-                                }
-                            )
-                        }
-                    }
-                    Button("Don’t Save", role: .destructive) {
-                        dismiss()
-                    }
-                    Button("Cancel", role: .cancel) {}
                 }
         }
         .navigationTitle(fileURL?.lastPathComponent ?? "Batch Editor")
         .navigationBarTitleDisplayMode(.inline)
-        .onAppear(perform: onAppearAction)
-        #else
-        Group {
-            content
-        }
-        .navigationTitle(fileURL?.lastPathComponent ?? "Batch Editor")
-        .toolbar {
-            ToolbarItem(placement: .automatic) {
-                Button(action: { handleCloseAttempt() }) {
-                    Image(systemName: "xmark")
-                }
-            }
-            ToolbarItemGroup(placement: .automatic) {
-                toolbarButtons
-            }
-        }
-        .onAppear {
-            onAppearAction()
-            #if os(macOS)
-            windowDelegate.shouldCloseHandler = handleWindowClose
-            #endif
-        }
-        .alert("Are you sure you to overwrite \(fileURL?.lastPathComponent ?? "the file")?", isPresented: $showSaveConfirm) {
+        .alert("Are you sure you want to overwrite \(fileURL?.lastPathComponent ?? "the file")?", isPresented: $showSaveConfirm) {
             Button("Yes", role: .destructive) {
                 if let url = fileURL {
                     performSave(to: url) { success in
                         if success {
-                            #if os(macOS)
-                            let targetTitle = fileURL?.lastPathComponent ?? "Batch Editor"
-                            if let window = NSApp.windows.first(where: { $0.title == targetTitle }) {
-                                window.close()
-                            }
-                            #else
                             dismiss()
-                            #endif
                         }
                     }
                 }
             }
             Button("Cancel", role: .cancel) {}
         }
-        .alert("Save changes to \(fileURL?.lastPathComponent ?? "new file") before closing?", isPresented: $showCloseConfirm) {
-            Button("Save", role: .destructive) {
-                if let url = fileURL {
-                    performSave(to: url) { success in
-                        if success {
-                            #if os(macOS)
-                            let targetTitle = fileURL?.lastPathComponent ?? "Batch Editor"
-                            if let window = NSApp.windows.first(where: { $0.title == targetTitle }) {
-                                window.close()
-                            }
-                            #else
-                            dismiss()
-                            #endif
-                        }
-                    }
-                } else {
-                    PlatformFileSaver.presentSavePanel(
-                        suggestedName: "batch.txt",
-                        allowedTypes: [UTType.text],
-                        callback: { result in
-                            switch result {
-                            case .success(let url):
-                                performSave(to: url) { success in
-                                    if success {
-                                        appState.batchFileURL = url
-                                        appState.batchPrompts = text.components(separatedBy: .newlines).filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
-                                        batchFilePath = url.path
-                                        #if os(macOS)
-                                        let targetTitle = fileURL?.lastPathComponent ?? "Batch Editor"
-                                        if let window = NSApp.windows.first(where: { $0.title == targetTitle }) {
-                                            window.close()
-                                        }
-                                        #else
-                                        dismiss()
-                                        #endif
-                                    }
-                                }
-                            case .failure(let err):
-                                if err.localizedDescription.lowercased() != "user cancelled" {
-                                    self.error = err.localizedDescription
-                                } else {
-                                    self.error = nil
-                                }
-                            }
-                        }
-                    )
-                }
+        .alert("Unsaved Changes", isPresented: $showCloseConfirm) {
+            Button("Save and Close") {
+                saveAndDismiss()
             }
-            Button("Don’t Save", role: .destructive) {
-                #if os(macOS)
-                let targetTitle = fileURL?.lastPathComponent ?? "Batch Editor"
-                if let window = NSApp.windows.first(where: { $0.title == targetTitle }) {
-                    window.close()
-                }
-                #else
+            Button("Discard Changes", role: .destructive) {
                 dismiss()
-                #endif
             }
             Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("You have unsaved changes. Do you want to save them?")
         }
-        #endif
-    }
-
-    @ViewBuilder
-    private var content: some View {
-        if let error = error, !error.isEmpty {
-            Text(error).foregroundColor(.red).padding()
-        } else {
-            Group {
-                #if os(macOS)
-                CustomTextEditor(
-                    text: $text,
-                    platformTextView: $platformTextView,
-                    windowDelegate: windowDelegate,
-                    windowTitle: fileURL?.lastPathComponent ?? "Batch Editor"
-                )
-                #else
-                CustomTextEditor(
-                    text: $text,
-                    platformTextView: $platformTextView
-                )
-                #endif
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Color({
-                #if os(macOS)
-                NSColor.textBackgroundColor
-                #elseif os(iOS)
-                UIColor.systemBackground
-                #endif
-            }()))
+        .alert("Error", isPresented: Binding<Bool>(get: { error != nil }, set: { if !$0 { error = nil } })) {
+            Button("OK") {}
+        } message: {
+            Text(error ?? "Unknown error")
         }
-    }
-
-    private var toolbarButtons: some View {
-        Group {
-            #if os(macOS)
-            Button(action: {
-                NSApp.sendAction(#selector(NSTextView.paste(_:)), to: nil, from: nil as Any?)
-            }) {
-                Image(systemName: "doc.on.clipboard")
-            }
-            Button(action: {
-                NSApp.sendAction(#selector(NSTextView.copy(_:)), to: nil, from: nil as Any?)
-            }) {
-                Image(systemName: "doc.on.doc")
-            }
-            #elseif os(iOS)
-            Button(action: {
-                platformTextView?.paste()
-            }) {
-                Image(systemName: "doc.on.clipboard")
-            }
-            Button(action: {
-                platformTextView?.copySelected()
-            }) {
-                Image(systemName: "doc.on.doc")
-            }
-            #endif
-            Button(action: {
-                platformTextView?.clear()
-                text = ""
-            }) {
-                Image(systemName: "trash")
-            }
-            Button(action: {
-                platformTextView?.undo()
-            }) {
-                Image(systemName: "arrow.uturn.left")
-            }
-            .disabled(!(platformTextView?.canUndo ?? false))
-            Button(action: {
-                platformTextView?.redo()
-            }) {
-                Image(systemName: "arrow.uturn.right")
-            }
-            .disabled(!(platformTextView?.canRedo ?? false))
-            Button(action: saveAndDismiss) {
-                Image(systemName: "checkmark")
-            }
-        }
-    }
-
-    private func onAppearAction() {
-        if let data = bookmarkData, !data.isEmpty {
-            resolveURL(from: data)
-        } else {
-            // Initialize with empty text for new file
-            text = ""
-            initialText = ""
-            fileURL = nil
-            self.error = nil
-        }
-    }
-
-    private func resolveURL(from bookmarkData: Data) {
-        do {
-            var isStale = false
-            #if os(macOS)
-            let options: URL.BookmarkResolutionOptions = [.withSecurityScope]
-            let bookmarkOptions: URL.BookmarkCreationOptions = [.withSecurityScope]
-            #else
-            let options: URL.BookmarkResolutionOptions = []
-            let bookmarkOptions: URL.BookmarkCreationOptions = [.minimalBookmark]
-            #endif
-            let resolvedURL = try URL(resolvingBookmarkData: bookmarkData, options: options, bookmarkDataIsStale: &isStale)
-            
-            if resolvedURL.startAccessingSecurityScopedResource() {
-                if FileManager.default.fileExists(atPath: resolvedURL.path) {
-                    fileURL = resolvedURL
-                    loadText(from: resolvedURL)
-                } else {
-                    // File doesn't exist; initialize empty editor
-                    text = ""
-                    initialText = ""
-                    fileURL = nil
-                    self.error = nil
-                    UserDefaults.standard.removeObject(forKey: "batchFileBookmark")
-                    appState.batchPrompts = []
-                    appState.batchFileURL = nil
-                    batchFilePath = ""
-                }
-                resolvedURL.stopAccessingSecurityScopedResource()
+        .onAppear {
+            if let bookmarkData = bookmarkData, !bookmarkData.isEmpty {
+                loadFromBookmark(bookmarkData)
             } else {
-                // Failed to access resource; initialize empty editor
+                // No bookmark; initialize empty editor
                 text = ""
                 initialText = ""
                 fileURL = nil
                 self.error = nil
-                UserDefaults.standard.removeObject(forKey: "batchFileBookmark")
-                appState.batchPrompts = []
-                appState.batchFileURL = nil
-                batchFilePath = ""
+            }
+        }
+        #else
+        VStack(spacing: 0) {
+            content
+        }
+        .frame(minWidth: 400, minHeight: 300)
+        .toolbar {
+            ToolbarItem {
+                Button(action: { handleCloseAttempt() }) {
+                    Image(systemName: "xmark")
+                }
+            }
+            ToolbarItem {
+                Button {
+                    text = ""
+                } label: {
+                    Image(systemName: "trash")
+                }
+            }
+            ToolbarItem {
+                Button {
+                    saveAndDismiss()
+                } label: {
+                    Image(systemName: "checkmark")
+                }
+            }
+        }
+        .alert("Are you sure you want to overwrite \(fileURL?.lastPathComponent ?? "the file")?", isPresented: $showSaveConfirm) {
+            Button("Yes", role: .destructive) {
+                if let url = fileURL {
+                    performSave(to: url) { success in
+                        if success {
+                            let targetTitle = fileURL?.lastPathComponent ?? "Batch Editor"
+                            if let window = NSApp.windows.first(where: { $0.title == targetTitle }) {
+                                window.close()
+                            }
+                        }
+                    }
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        }
+        .alert("Unsaved Changes", isPresented: $showCloseConfirm) {
+            Button("Save and Close") {
+                saveAndDismiss()
+            }
+            Button("Discard Changes", role: .destructive) {
+                let targetTitle = fileURL?.lastPathComponent ?? "Batch Editor"
+                if let window = NSApp.windows.first(where: { $0.title == targetTitle }) {
+                    window.close()
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("You have unsaved changes. Do you want to save them?")
+        }
+        .alert("Error", isPresented: Binding<Bool>(get: { error != nil }, set: { if !$0 { error = nil } })) {
+            Button("OK") {}
+        } message: {
+            Text(error ?? "Unknown error")
+        }
+        .onAppear {
+            if let bookmarkData = bookmarkData, !bookmarkData.isEmpty {
+                loadFromBookmark(bookmarkData)
+            } else {
+                // No bookmark; initialize empty editor
+                text = ""
+                initialText = ""
+                fileURL = nil
+                self.error = nil
+            }
+            windowDelegate.shouldCloseHandler = handleWindowClose
+        }
+        #endif
+    }
+    
+    private var content: some View {
+        VStack(spacing: 0) {
+            if let err = error {
+                Text("Error: \(err)")
+                    .foregroundColor(.red)
+                    .padding()
             }
             
+            Group {
+                #if os(macOS)
+                CustomTextEditor(text: $text, platformTextView: $platformTextView, windowDelegate: windowDelegate, windowTitle: fileURL?.lastPathComponent ?? "Batch Editor")
+                #else
+                CustomTextEditor(text: $text, platformTextView: $platformTextView)
+                #endif
+            }
+            .background(systemBackgroundColor)
+        }
+    }
+    
+    private var systemBackgroundColor: Color {
+        #if os(macOS)
+        Color(NSColor.textBackgroundColor)
+        #else
+        Color(UIColor.systemBackground)
+        #endif
+    }
+    
+    private func loadFromBookmark(_ bookmarkData: Data) {
+        do {
+            var isStale = false
+            #if os(macOS)
+            let options: URL.BookmarkResolutionOptions = [.withSecurityScope]
+            #else
+            let options: URL.BookmarkResolutionOptions = []
+            #endif
+            let resolvedURL = try URL(resolvingBookmarkData: bookmarkData, options: options, bookmarkDataIsStale: &isStale)
+            fileURL = resolvedURL
+            batchFilePath = resolvedURL.path
             if isStale {
+                #if os(macOS)
+                let bookmarkOptions: URL.BookmarkCreationOptions = [.withSecurityScope]
+                #else
+                let bookmarkOptions: URL.BookmarkCreationOptions = [.minimalBookmark]
+                #endif
                 if let newBookmark = try? resolvedURL.bookmarkData(options: bookmarkOptions) {
                     UserDefaults.standard.set(newBookmark, forKey: "batchFileBookmark")
                 }
             }
+            loadText(from: resolvedURL)
         } catch {
-            // Failed to resolve bookmark; initialize empty editor
+            self.error = "Failed to load batch file: \(error.localizedDescription)"
+            // Fallback to empty if error
             text = ""
             initialText = ""
             fileURL = nil
-            self.error = nil
             UserDefaults.standard.removeObject(forKey: "batchFileBookmark")
             appState.batchPrompts = []
             appState.batchFileURL = nil
@@ -644,46 +484,4 @@ struct TextEditorView: View {
         return true
     }
     #endif
-}
-
-extension PlatformTextView {
-    var canUndo: Bool {
-        #if os(macOS)
-        return (self as? NSTextView)?.undoManager?.canUndo ?? false
-        #elseif os(iOS)
-        return (self as? UITextView)?.undoManager?.canUndo ?? false
-        #endif
-    }
-
-    var canRedo: Bool {
-        #if os(macOS)
-        return (self as? NSTextView)?.undoManager?.canRedo ?? false
-        #elseif os(iOS)
-        return (self as? UITextView)?.undoManager?.canRedo ?? false
-        #endif
-    }
-
-    func undo() {
-        #if os(macOS)
-        if let textView = self as? NSTextView {
-            textView.undoManager?.undo()
-        }
-        #elseif os(iOS)
-        if let textView = self as? UITextView {
-            textView.undoManager?.undo()
-        }
-        #endif
-    }
-
-    func redo() {
-        #if os(macOS)
-        if let textView = self as? NSTextView {
-            textView.undoManager?.redo()
-        }
-        #elseif os(iOS)
-        if let textView = self as? UITextView {
-            textView.undoManager?.redo()
-        }
-        #endif
-    }
 }
