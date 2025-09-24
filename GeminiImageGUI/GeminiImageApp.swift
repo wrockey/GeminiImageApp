@@ -1,4 +1,3 @@
-//GeminiImageApp.swift
 import SwiftUI
 import Combine
 #if os(macOS)
@@ -7,20 +6,20 @@ import AppKit
 import UIKit
 import PencilKit
 #endif
- 
+
 enum GenerationMode: String, Codable {
     case gemini
     case comfyUI
     case grok  // Added for Grok API
 }
- 
+
 // Updated NodeInfo struct (make promptText optional to accommodate non-prompt nodes)
 struct NodeInfo: Identifiable {
     let id: String
     let label: String
     let promptText: String?  // Optional: only set for prompt nodes
 }
- 
+
 class SettingsState: ObservableObject {
     @Published var apiKey: String = KeychainHelper.loadAPIKey() ?? ""  // Load from Keychain
     @Published var outputDirectory: URL? = nil
@@ -32,7 +31,7 @@ class SettingsState: ObservableObject {
     @Published var grokApiKey: String = KeychainHelper.loadGrokAPIKey() ?? ""  // Added: Grok API key from Keychain
     @Published var selectedGrokModel: String = "grok-2-image-1212"  // Added: Default model, options: ["grok-2-image-1212", "aurora"]
 }
- 
+
 class GenerationState: ObservableObject {
     @Published var comfyWorkflow: [String: Any]? = nil
     @Published var comfyPromptNodeID: String = ""
@@ -144,7 +143,7 @@ class GenerationState: ObservableObject {
             let lengthData = data.subdata(in: lengthRange)
             let lengthBytes = [UInt8](lengthData)
             let length = (UInt32(lengthBytes[0]) << 24) | (UInt32(lengthBytes[1]) << 16) |
-                         (UInt32(lengthBytes[2]) << 8) | UInt32(lengthBytes[3])
+                        (UInt32(lengthBytes[2]) << 8) | UInt32(lengthBytes[3])
             
             let fullChunkSize = 12 + Int(length)
             let fullChunkEnd = offset + fullChunkSize
@@ -251,7 +250,7 @@ class GenerationState: ObservableObject {
         workflowError = error
     }
 }
- 
+
 class HistoryState: ObservableObject {
     @Published var history: [HistoryItem] = []
     
@@ -268,13 +267,13 @@ class HistoryState: ObservableObject {
         }
     }
 }
- 
+
 class UIState: ObservableObject {
     @Published var imageSlots: [ImageSlot] = []
     @Published var responseText: String = ""
     @Published var outputImage: PlatformImage? = nil
 }
- 
+
 class AppState: ObservableObject {
     @Published var settings = SettingsState()
     @Published var generation = GenerationState()
@@ -315,7 +314,7 @@ class AppState: ObservableObject {
         }.store(in: &cancellables)
     }
 }
- 
+
 struct ImageSlot: Identifiable {
     let id = UUID()
     var path: String = ""
@@ -323,7 +322,7 @@ struct ImageSlot: Identifiable {
     var promptNodes: [NodeInfo] = []
     var selectedPromptIndex: Int = 0
 }
- 
+
 struct HistoryItem: Identifiable, Codable, Equatable {
     let id = UUID()
     let prompt: String
@@ -333,7 +332,7 @@ struct HistoryItem: Identifiable, Codable, Equatable {
     let mode: GenerationMode?
     let workflowName: String?
 }
- 
+
 struct Part: Codable {
     let text: String?
     let inlineData: InlineData?
@@ -348,7 +347,7 @@ struct Part: Codable {
         self.inlineData = inlineData
     }
 }
- 
+
 struct InlineData: Codable {
     let mimeType: String
     let data: String
@@ -358,27 +357,27 @@ struct InlineData: Codable {
         case data
     }
 }
- 
+
 struct Content: Codable {
     let parts: [Part]
 }
- 
+
 struct GenerateContentRequest: Codable {
     let contents: [Content]
 }
- 
+
 struct GenerateContentResponse: Codable {
     let candidates: [Candidate]
 }
- 
+
 struct Candidate: Codable {
     let content: ResponseContent
 }
- 
+
 struct ResponseContent: Codable {
     let parts: [ResponsePart]
 }
- 
+
 struct ResponsePart: Codable {
     let text: String?
     let inlineData: InlineData?
@@ -388,7 +387,7 @@ struct ResponsePart: Codable {
         case inlineData = "inline_data"
     }
 }
- 
+
 struct ResponseInlineData: Codable {
     let mimeType: String
     let data: String
@@ -398,7 +397,7 @@ struct ResponseInlineData: Codable {
         case data
     }
 }
- 
+
 struct NewResponsePart: Codable {
     let text: String?
     let inlineData: ResponseInlineData?
@@ -408,23 +407,24 @@ struct NewResponsePart: Codable {
         case inlineData
     }
 }
- 
+
 struct NewResponseContent: Codable {
     let parts: [NewResponsePart]
 }
- 
+
 struct NewCandidate: Codable {
     let content: NewResponseContent
 }
- 
+
 struct NewGenerateContentResponse: Codable {
     let candidates: [NewCandidate]
 }
- 
+
 @main
 struct GeminiImageApp: App {
     @StateObject private var appState = AppState()
     @State private var showSplash = true
+    @State private var batchFilePath: String = "" // Added to sync with ContentView
     
     var body: some Scene {
         #if os(macOS)
@@ -433,8 +433,9 @@ struct GeminiImageApp: App {
                 .environmentObject(appState)
         }
         WindowGroup(id: "text-editor", for: Data.self) { $data in
-            TextEditorView(bookmarkData: data)
+            TextEditorView(bookmarkData: data, batchFilePath: $batchFilePath)
                 .frame(minWidth: 400, minHeight: 300)
+                .environmentObject(appState) // Pass appState to TextEditorView
         }
         
         WindowGroup(for: UUID.self) { $slotId in
@@ -490,7 +491,7 @@ struct GeminiImageApp: App {
         #endif
     }
 }
- 
+
 struct MarkupWindowView: View {
     let slotId: UUID
     @EnvironmentObject var appState: AppState
