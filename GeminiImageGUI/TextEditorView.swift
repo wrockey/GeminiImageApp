@@ -145,9 +145,7 @@ struct TextEditorView: View {
             content
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
-                        Button {
-                            dismiss()
-                        } label: {
+                        Button(action: { handleCloseAttempt() }) {
                             Image(systemName: "xmark")
                         }
                     }
@@ -197,22 +195,61 @@ struct TextEditorView: View {
                         .disabled(!(platformTextView?.canRedo ?? false))
                     }
                 }
+                .alert("Are you sure you want to overwrite \(fileURL?.lastPathComponent ?? "the file")?", isPresented: $showSaveConfirm) {
+                    Button("Yes", role: .destructive) {
+                        if let url = fileURL {
+                            performSave(to: url) { success in
+                                if success {
+                                    dismiss()
+                                }
+                            }
+                        }
+                    }
+                    Button("Cancel", role: .cancel) {}
+                }
+                .alert("Save changes to \(fileURL?.lastPathComponent ?? "new file") before closing?", isPresented: $showCloseConfirm) {
+                    Button("Save", role: .destructive) {
+                        if let url = fileURL {
+                            performSave(to: url) { success in
+                                if success {
+                                    dismiss()
+                                }
+                            }
+                        } else {
+                            PlatformFileSaver.presentSavePanel(
+                                suggestedName: "batch.txt",
+                                allowedTypes: [UTType.text],
+                                callback: { result in
+                                    switch result {
+                                    case .success(let url):
+                                        performSave(to: url) { success in
+                                            if success {
+                                                appState.batchFileURL = url
+                                                appState.batchPrompts = text.components(separatedBy: .newlines).filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+                                                batchFilePath = url.path
+                                                dismiss()
+                                            }
+                                        }
+                                    case .failure(let err):
+                                        if err.localizedDescription.lowercased() != "user cancelled" {
+                                            self.error = err.localizedDescription
+                                        } else {
+                                            self.error = nil
+                                        }
+                                    }
+                                }
+                            )
+                        }
+                    }
+                    Button("Don’t Save", role: .destructive) {
+                        dismiss()
+                    }
+                    Button("Cancel", role: .cancel) {}
+                }
         }
         .navigationTitle(fileURL?.lastPathComponent ?? "Batch Editor")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear(perform: onAppearAction)
-        .alert("Are you sure you want to overwrite \(fileURL?.lastPathComponent ?? "the file")?", isPresented: $showSaveConfirm) {
-            Button("Yes", role: .destructive) {
-                if let url = fileURL {
-                    performSave(to: url) { success in
-                        if success {
-                            dismiss()
-                        }
-                    }
-                }
-            }
-            Button("Cancel", role: .cancel) {}
-        }
         #else
         Group {
             content
@@ -234,7 +271,7 @@ struct TextEditorView: View {
             windowDelegate.shouldCloseHandler = handleWindowClose
             #endif
         }
-        .alert("Are you sure you want to overwrite \(fileURL?.lastPathComponent ?? "the file")?", isPresented: $showSaveConfirm) {
+        .alert("Are you sure you to overwrite \(fileURL?.lastPathComponent ?? "the file")?", isPresented: $showSaveConfirm) {
             Button("Yes", role: .destructive) {
                 if let url = fileURL {
                     performSave(to: url) { success in
@@ -571,25 +608,36 @@ struct TextEditorView: View {
         }
     }
     
-    #if os(macOS)
     private func hasUnsavedChanges() -> Bool {
+        print("Checking unsaved changes: text=\(text), initialText=\(initialText), hasChanges=\(text != initialText)")
         return text != initialText
     }
     
     private func handleCloseAttempt() {
+        print("Handle close attempt: hasUnsavedChanges=\(hasUnsavedChanges())")
         if hasUnsavedChanges() {
-            showCloseConfirm = true
+            DispatchQueue.main.async {
+                showCloseConfirm = true
+            }
         } else {
+            #if os(macOS)
             let targetTitle = fileURL?.lastPathComponent ?? "Batch Editor"
             if let window = NSApp.windows.first(where: { $0.title == targetTitle }) {
                 window.close()
             }
+            #else
+            dismiss()
+            #endif
         }
     }
     
+    #if os(macOS)
     private func handleWindowClose() -> Bool {
+        print("Handle window close: hasUnsavedChanges=\(hasUnsavedChanges())")
         if hasUnsavedChanges() {
-            showCloseConfirm = true
+            DispatchQueue.main.async {
+                showCloseConfirm = true
+            }
             return false
         }
         return true
