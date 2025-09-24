@@ -568,14 +568,23 @@ struct ImageSlotItemView: View {
                 .foregroundColor(.secondary)
                 .accessibilityLabel("Embedded Workflow Prompts")
             
-            Picker("Select Prompt", selection: $slot.selectedPromptIndex) {
+            Menu {
                 ForEach(0..<slot.promptNodes.count, id: \.self) { index in
-                    Text(slot.promptNodes[index].label)
-                        .tag(index)
+                    Button {
+                        slot.selectedPromptIndex = index
+                    } label: {
+                        Text(slot.promptNodes[index].label)
+                            .font(.caption)
+                    }
                 }
+            } label: {
+                Text(slot.promptNodes[slot.selectedPromptIndex].label)
+                    .font(.caption2)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .foregroundColor(.blue)
             }
-            .pickerStyle(.menu)  // Dropdown-style menu on both iOS and macOS
-            .help("Select a prompt from the embedded workflow") // Tooltip
+            .help("Select a prompt from the embedded workflow")
             .accessibilityLabel("Select Prompt")
             .accessibilityHint("Choose a prompt node from the list.")
             
@@ -633,7 +642,7 @@ struct ImageSlotItemView: View {
     // Added: Handle PHPicker result on iOS
     private func handlePickerResult(_ result: PHPickerResult?) {
         guard let result = result else { return }
-        result.itemProvider.loadObject(ofClass: PlatformImage.self) { object, error in
+        result.itemProvider.loadDataRepresentation(forTypeIdentifier: UTType.image.identifier) { data, error in
             if let error = error {
                 DispatchQueue.main.async {
                     self.errorMessage = "Failed to load image: \(error.localizedDescription)"
@@ -641,14 +650,15 @@ struct ImageSlotItemView: View {
                 }
                 return
             }
-            guard let platformImage = object as? PlatformImage else { return }
+            guard let data = data else { return }
+            guard let platformImage = PlatformImage(data: data) else { return }
             DispatchQueue.main.async {
                 self.slot.image = platformImage
                 self.slot.path = "Selected from Photos"
                 
-                // Extract prompts if PNG (convert to Data)
-                if let pngData = platformImage.platformPngData() {
-                    let promptNodes = parsePromptNodes(from: pngData)
+                // Extract prompts if PNG (check signature and parse from original data)
+                if isPNGData(data) {
+                    let promptNodes = parsePromptNodes(from: data)
                     if !promptNodes.isEmpty {
                         self.slot.promptNodes = promptNodes.sorted { $0.id < $1.id }
                         self.slot.selectedPromptIndex = 0
@@ -675,9 +685,12 @@ struct ImageSlotItemView: View {
         }
         #elseif os(iOS)
         let pasteboard = UIPasteboard.general
-        if let uiImg = pasteboard.image {
+        if let data = pasteboard.data(forPasteboardType: "public.png") {
+            pngData = data
+            image = PlatformImage(data: data)
+        } else if let uiImg = pasteboard.image {
             image = uiImg
-            pngData = uiImg.pngData()
+            pngData = uiImg.pngData()  // Fallback, but may lose metadata
         }
         #endif
         
@@ -692,7 +705,7 @@ struct ImageSlotItemView: View {
         
         // Extract prompts if PNG data available
         var promptNodes: [NodeInfo] = []
-        if let data = pngData {
+        if let data = pngData, isPNGData(data) {
             promptNodes = parsePromptNodes(from: data)
         }
         
@@ -726,8 +739,8 @@ struct ImageSlotItemView: View {
                 return
             }
             
-            // Fallback: Load as image data (for direct image drags, e.g., from Photos or browsers)
-            provider.loadObject(ofClass: NSImage.self) { reading, error in
+            // Fallback: Load as raw image data (for direct image drags, e.g., from Photos or browsers)
+            provider.loadDataRepresentation(forTypeIdentifier: UTType.image.identifier) { data, error in
                 if let error = error {
                     DispatchQueue.main.async {
                         self.errorMessage = "Drop error: \(error.localizedDescription)"
@@ -736,18 +749,20 @@ struct ImageSlotItemView: View {
                     return
                 }
                 
-                guard let nsImage = reading as? NSImage else { return }
+                guard let data = data else { return }
+                
+                guard let nsImage = NSImage(data: data) else { return }
                 
                 DispatchQueue.main.async {
                     self.slot.image = nsImage
                     self.slot.path = "Dropped Image"
-                    
-                    // Attempt to extract PNG data for prompts (if applicable)
-                    if let tiffData = nsImage.tiffRepresentation,
-                       let bitmap = NSBitmapImageRep(data: tiffData),
-                       let pngData = bitmap.representation(using: .png, properties: [:]) {
-                        let promptNodes = parsePromptNodes(from: pngData)
-                        if !promptNodes.isEmpty {
+                }
+                
+                // Attempt to extract prompts if PNG (check signature and parse from original data)
+                if isPNGData(data) {
+                    let promptNodes = parsePromptNodes(from: data)
+                    if !promptNodes.isEmpty {
+                        DispatchQueue.main.async {
                             self.slot.promptNodes = promptNodes.sorted { $0.id < $1.id }
                             self.slot.selectedPromptIndex = 0
                         }
@@ -787,6 +802,13 @@ struct ImageSlotItemView: View {
             errorMessage = "Failed to access image: \(error.localizedDescription)"
             showErrorAlert = true
         }
+    }
+    
+    // Helper to check if data is PNG
+    private func isPNGData(_ data: Data) -> Bool {
+        guard data.count >= 8 else { return false }
+        let signature = data.subdata(in: 0..<8)
+        return signature == Data([137, 80, 78, 71, 13, 10, 26, 10])
     }
 }
 
