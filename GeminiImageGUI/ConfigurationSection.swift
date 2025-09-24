@@ -1,4 +1,3 @@
-// ConfigurationSection.swift
 import SwiftUI
 #if os(macOS)
 import AppKit
@@ -338,10 +337,17 @@ struct ConfigurationSection: View {
                 .font(labelFont)
                 .foregroundColor(.secondary)
                 .help("Select the Grok model")
+                .fixedSize() // Prevents label wrapping
             Picker("", selection: $appState.settings.selectedGrokModel) {
-                Text("grok-2-image-1212").tag("grok-2-image-1212")
+                Text("grok-2-image-1212")
+                    .font(textFont)
+                    .foregroundColor(.black)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .tag("grok-2-image-1212")
             }
             .pickerStyle(.menu)
+            .frame(width: 200) // Maintains wider picker
             .help("Choose the Grok model for generation")
             .accessibilityLabel("Grok model selector")
         }
