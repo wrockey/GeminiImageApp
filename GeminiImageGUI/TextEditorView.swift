@@ -209,7 +209,18 @@ struct TextEditorView: View {
                 if let url = fileURL {
                     performSave(to: url) { success in
                         if success {
+                            #if os(macOS)
+                            // Close the window by matching the title
+                            let targetTitle = fileURL?.lastPathComponent ?? "Batch Editor"
+                            if let window = NSApp.windows.first(where: { $0.title == targetTitle }) {
+                                print("Closing window with title: \(window.title)")
+                                window.close()
+                            } else {
+                                print("No window found with title: \(targetTitle)")
+                            }
+                            #else
                             dismiss()
+                            #endif
                         }
                     }
                 }
@@ -432,6 +443,10 @@ struct TextEditorView: View {
                     }
                     fileURL = url
                     // Post notification to trigger ContentView's loadBatchPrompts
+                    NotificationCenter.default.post(name: .batchFileUpdated, object: nil)
+                } else {
+                    // Update appState.batchPrompts for overwrites and post notification
+                    appState.batchPrompts = text.components(separatedBy: .newlines).filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
                     NotificationCenter.default.post(name: .batchFileUpdated, object: nil)
                 }
                 completion(true)
