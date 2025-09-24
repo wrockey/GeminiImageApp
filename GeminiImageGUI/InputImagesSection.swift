@@ -519,7 +519,7 @@ struct ImageSlotItemView: View {
                 .accessibilityLabel("Paste")
                 .accessibilityHint("Pastes an image from the clipboard into this slot.")
                 
-#if os(iOS)
+                #if os(iOS)
                 Button {
                     showPicker = true
                 } label: {
@@ -532,8 +532,32 @@ struct ImageSlotItemView: View {
                 .help("Add from Photos") // Tooltip
                 .accessibilityLabel("Add from Photos")
                 .accessibilityHint("Opens photo picker to select an image from your library.")
-#endif
+                #endif
                 
+                #if os(iOS)
+                // Show annotate button only on iPad (not iPhone)
+                if sizeClass != .compact || UIDevice.current.userInterfaceIdiom != .phone {
+                    Button {
+                        if slot.image != nil {
+                            print("DEBUG: Annotate tapped for slot \(slot.id), image exists: true")
+                            onAnnotate(slot.id)
+                        } else {
+                            print("DEBUG: Annotate tapped but no image in slot \(slot.id)")
+                            errorMessage = "No image loaded to annotate."
+                            showErrorAlert = true
+                        }
+                    } label: {
+                        Image(systemName: "square.and.pencil")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.purple)
+                    .cornerRadius(10)
+                    .shadow(radius: 2)
+                    .help("Annotate the loaded image") // Tooltip
+                    .accessibilityLabel("Annotate")
+                    .accessibilityHint("Opens annotation tool for the loaded image.")
+                }
+                #elseif os(macOS)
                 Button {
                     if slot.image != nil {
                         print("DEBUG: Annotate tapped for slot \(slot.id), image exists: true")
@@ -553,6 +577,7 @@ struct ImageSlotItemView: View {
                 .help("Annotate the loaded image") // Tooltip
                 .accessibilityLabel("Annotate")
                 .accessibilityHint("Opens annotation tool for the loaded image.")
+                #endif
             }
         }
     }
