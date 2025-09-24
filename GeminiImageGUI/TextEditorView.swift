@@ -15,6 +15,8 @@ typealias Representable = UIViewRepresentable
 struct CustomTextEditor: Representable {
     @Binding var text: String
     @Binding var platformTextView: PlatformTextView?
+    let windowDelegate: TextEditorWindowDelegate?
+    let windowTitle: String
 
     func makeCoordinator() -> Coordinator {
         return Coordinator(parent: self)
@@ -47,6 +49,10 @@ struct CustomTextEditor: Representable {
         DispatchQueue.main.async {
             if let window = nsView.window, window.firstResponder != textView {
                 window.makeFirstResponder(textView)
+            }
+            if let window = nsView.window, let windowDelegate = windowDelegate, window.delegate !== windowDelegate {
+                print("Setting delegate for window: \(window.title), all windows: \(NSApp.windows.map { $0.title })")
+                window.delegate = windowDelegate
             }
         }
     }
@@ -103,16 +109,33 @@ extension Notification.Name {
     static let batchFileUpdated = Notification.Name("batchFileUpdated")
 }
 
+#if os(macOS)
+class TextEditorWindowDelegate: NSObject, NSWindowDelegate {
+    var shouldCloseHandler: (() -> Bool)?
+    
+    func windowShouldClose(_ sender: NSWindow) -> Bool {
+        print("windowShouldClose called for window: \(sender.title)")
+        return shouldCloseHandler?() ?? true
+    }
+}
+#endif
+
 struct TextEditorView: View {
     let bookmarkData: Data?
     @Binding var batchFilePath: String
     @State private var fileURL: URL? = nil
     @State private var text: String = ""
+    @State private var initialText: String = ""
     @State private var error: String? = nil
     @State private var platformTextView: PlatformTextView? = nil
     @State private var showSaveConfirm: Bool = false
+    @State private var showCloseConfirm: Bool = false
     @EnvironmentObject var appState: AppState
     @Environment(\.dismiss) var dismiss
+    
+    #if os(macOS)
+    @State private var windowDelegate = TextEditorWindowDelegate()
+    #endif
 
     var body: some View {
         #if os(iOS)
@@ -195,7 +218,7 @@ struct TextEditorView: View {
         .navigationTitle(fileURL?.lastPathComponent ?? "Batch Editor")
         .toolbar {
             ToolbarItem(placement: .automatic) {
-                Button(action: { dismiss() }) {
+                Button(action: { handleCloseAttempt() }) {
                     Image(systemName: "xmark")
                 }
             }
@@ -203,26 +226,71 @@ struct TextEditorView: View {
                 toolbarButtons
             }
         }
-        .onAppear(perform: onAppearAction)
+        .onAppear {
+            onAppearAction()
+            #if os(macOS)
+            windowDelegate.shouldCloseHandler = handleWindowClose
+            #endif
+        }
         .alert("Are you sure you want to overwrite \(fileURL?.lastPathComponent ?? "the file")?", isPresented: $showSaveConfirm) {
             Button("Yes", role: .destructive) {
                 if let url = fileURL {
                     performSave(to: url) { success in
                         if success {
-                            #if os(macOS)
-                            // Close the window by matching the title
                             let targetTitle = fileURL?.lastPathComponent ?? "Batch Editor"
                             if let window = NSApp.windows.first(where: { $0.title == targetTitle }) {
-                                print("Closing window with title: \(window.title)")
                                 window.close()
-                            } else {
-                                print("No window found with title: \(targetTitle)")
                             }
-                            #else
-                            dismiss()
-                            #endif
                         }
                     }
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        }
+        .alert("Save changes to \(fileURL?.lastPathComponent ?? "new file") before closing?", isPresented: $showCloseConfirm) {
+            Button("Save", role: .destructive) {
+                if let url = fileURL {
+                    performSave(to: url) { success in
+                        if success {
+                            let targetTitle = fileURL?.lastPathComponent ?? "Batch Editor"
+                            if let window = NSApp.windows.first(where: { $0.title == targetTitle }) {
+                                window.close()
+                            }
+                        }
+                    }
+                } else {
+                    PlatformFileSaver.presentSavePanel(
+                        suggestedName: "batch.txt",
+                        allowedTypes: [UTType.text],
+                        callback: { result in
+                            switch result {
+                            case .success(let url):
+                                performSave(to: url) { success in
+                                    if success {
+                                        appState.batchFileURL = url
+                                        appState.batchPrompts = text.components(separatedBy: .newlines).filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+                                        batchFilePath = url.path
+                                        let targetTitle = fileURL?.lastPathComponent ?? "Batch Editor"
+                                        if let window = NSApp.windows.first(where: { $0.title == targetTitle }) {
+                                            window.close()
+                                        }
+                                    }
+                                }
+                            case .failure(let err):
+                                if err.localizedDescription.lowercased() != "user cancelled" {
+                                    self.error = err.localizedDescription
+                                } else {
+                                    self.error = nil
+                                }
+                            }
+                        }
+                    )
+                }
+            }
+            Button("Don’t Save", role: .destructive) {
+                let targetTitle = fileURL?.lastPathComponent ?? "Batch Editor"
+                if let window = NSApp.windows.first(where: { $0.title == targetTitle }) {
+                    window.close()
                 }
             }
             Button("Cancel", role: .cancel) {}
@@ -235,7 +303,12 @@ struct TextEditorView: View {
         if let error = error, !error.isEmpty {
             Text(error).foregroundColor(.red).padding()
         } else {
-            CustomTextEditor(text: $text, platformTextView: $platformTextView)
+            CustomTextEditor(
+                text: $text,
+                platformTextView: $platformTextView,
+                windowDelegate: windowDelegate,
+                windowTitle: fileURL?.lastPathComponent ?? "Batch Editor"
+            )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(Color({
                     #if os(macOS)
@@ -302,6 +375,7 @@ struct TextEditorView: View {
         } else {
             // Initialize with empty text for new file
             text = ""
+            initialText = ""
             fileURL = nil
             self.error = nil
         }
@@ -326,6 +400,7 @@ struct TextEditorView: View {
                 } else {
                     // File doesn't exist; initialize empty editor
                     text = ""
+                    initialText = ""
                     fileURL = nil
                     self.error = nil
                     UserDefaults.standard.removeObject(forKey: "batchFileBookmark")
@@ -337,6 +412,7 @@ struct TextEditorView: View {
             } else {
                 // Failed to access resource; initialize empty editor
                 text = ""
+                initialText = ""
                 fileURL = nil
                 self.error = nil
                 UserDefaults.standard.removeObject(forKey: "batchFileBookmark")
@@ -353,6 +429,7 @@ struct TextEditorView: View {
         } catch {
             // Failed to resolve bookmark; initialize empty editor
             text = ""
+            initialText = ""
             fileURL = nil
             self.error = nil
             UserDefaults.standard.removeObject(forKey: "batchFileBookmark")
@@ -368,8 +445,10 @@ struct TextEditorView: View {
             if coordinatedURL.startAccessingSecurityScopedResource() {
                 defer { coordinatedURL.stopAccessingSecurityScopedResource() }
                 do {
-                    text = try String(contentsOf: coordinatedURL, encoding: .utf8)
-                    self.error = nil // Clear any previous error
+                    let fileContent = try String(contentsOf: coordinatedURL, encoding: .utf8)
+                    text = fileContent
+                    initialText = fileContent
+                    self.error = nil
                 } catch {
                     self.error = error.localizedDescription
                 }
@@ -394,20 +473,21 @@ struct TextEditorView: View {
                     case .success(let url):
                         performSave(to: url) { success in
                             if success {
-                                // Update app state directly
                                 appState.batchFileURL = url
                                 appState.batchPrompts = text.components(separatedBy: .newlines).filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
                                 batchFilePath = url.path
-                                dismiss()
+                                let targetTitle = fileURL?.lastPathComponent ?? "Batch Editor"
+                                if let window = NSApp.windows.first(where: { $0.title == targetTitle }) {
+                                    window.close()
+                                }
                             }
                         }
                     case .failure(let err):
                         if err.localizedDescription.lowercased() != "user cancelled" {
                             self.error = err.localizedDescription
                         } else {
-                            self.error = nil // Explicitly clear error on cancel
+                            self.error = nil
                         }
-                        // Do not dismiss; stay in editor
                     }
                 }
             )
@@ -442,13 +522,12 @@ struct TextEditorView: View {
                         UserDefaults.standard.set(newBookmark, forKey: "batchFileBookmark")
                     }
                     fileURL = url
-                    // Post notification to trigger ContentView's loadBatchPrompts
                     NotificationCenter.default.post(name: .batchFileUpdated, object: nil)
                 } else {
-                    // Update appState.batchPrompts for overwrites and post notification
                     appState.batchPrompts = text.components(separatedBy: .newlines).filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
                     NotificationCenter.default.post(name: .batchFileUpdated, object: nil)
                 }
+                initialText = text
                 completion(true)
             } catch {
                 self.error = error.localizedDescription
@@ -460,6 +539,31 @@ struct TextEditorView: View {
             completion(false)
         }
     }
+    
+    #if os(macOS)
+    private func hasUnsavedChanges() -> Bool {
+        return text != initialText
+    }
+    
+    private func handleCloseAttempt() {
+        if hasUnsavedChanges() {
+            showCloseConfirm = true
+        } else {
+            let targetTitle = fileURL?.lastPathComponent ?? "Batch Editor"
+            if let window = NSApp.windows.first(where: { $0.title == targetTitle }) {
+                window.close()
+            }
+        }
+    }
+    
+    private func handleWindowClose() -> Bool {
+        if hasUnsavedChanges() {
+            showCloseConfirm = true
+            return false
+        }
+        return true
+    }
+    #endif
 }
 
 extension PlatformTextView {
