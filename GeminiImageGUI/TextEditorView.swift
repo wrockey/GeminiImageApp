@@ -105,7 +105,7 @@ extension Notification.Name {
 
 struct TextEditorView: View {
     let bookmarkData: Data?
-    @Binding var batchFilePath: String // Added to update ContentView's batchFilePath
+    @Binding var batchFilePath: String
     @State private var fileURL: URL? = nil
     @State private var text: String = ""
     @State private var error: String? = nil
@@ -431,8 +431,9 @@ struct TextEditorView: View {
                         UserDefaults.standard.set(newBookmark, forKey: "batchFileBookmark")
                     }
                     fileURL = url
+                    // Post notification to trigger ContentView's loadBatchPrompts
+                    NotificationCenter.default.post(name: .batchFileUpdated, object: nil)
                 }
-                // Do not post notification to avoid redundant loadBatchPrompts
                 completion(true)
             } catch {
                 self.error = error.localizedDescription
