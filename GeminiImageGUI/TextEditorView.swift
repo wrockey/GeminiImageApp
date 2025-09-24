@@ -15,8 +15,10 @@ typealias Representable = UIViewRepresentable
 struct CustomTextEditor: Representable {
     @Binding var text: String
     @Binding var platformTextView: PlatformTextView?
+    #if os(macOS)
     let windowDelegate: TextEditorWindowDelegate?
     let windowTitle: String
+    #endif
 
     func makeCoordinator() -> Coordinator {
         return Coordinator(parent: self)
@@ -237,10 +239,14 @@ struct TextEditorView: View {
                 if let url = fileURL {
                     performSave(to: url) { success in
                         if success {
+                            #if os(macOS)
                             let targetTitle = fileURL?.lastPathComponent ?? "Batch Editor"
                             if let window = NSApp.windows.first(where: { $0.title == targetTitle }) {
                                 window.close()
                             }
+                            #else
+                            dismiss()
+                            #endif
                         }
                     }
                 }
@@ -252,10 +258,14 @@ struct TextEditorView: View {
                 if let url = fileURL {
                     performSave(to: url) { success in
                         if success {
+                            #if os(macOS)
                             let targetTitle = fileURL?.lastPathComponent ?? "Batch Editor"
                             if let window = NSApp.windows.first(where: { $0.title == targetTitle }) {
                                 window.close()
                             }
+                            #else
+                            dismiss()
+                            #endif
                         }
                     }
                 } else {
@@ -270,10 +280,14 @@ struct TextEditorView: View {
                                         appState.batchFileURL = url
                                         appState.batchPrompts = text.components(separatedBy: .newlines).filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
                                         batchFilePath = url.path
+                                        #if os(macOS)
                                         let targetTitle = fileURL?.lastPathComponent ?? "Batch Editor"
                                         if let window = NSApp.windows.first(where: { $0.title == targetTitle }) {
                                             window.close()
                                         }
+                                        #else
+                                        dismiss()
+                                        #endif
                                     }
                                 }
                             case .failure(let err):
@@ -288,10 +302,14 @@ struct TextEditorView: View {
                 }
             }
             Button("Don’t Save", role: .destructive) {
+                #if os(macOS)
                 let targetTitle = fileURL?.lastPathComponent ?? "Batch Editor"
                 if let window = NSApp.windows.first(where: { $0.title == targetTitle }) {
                     window.close()
                 }
+                #else
+                dismiss()
+                #endif
             }
             Button("Cancel", role: .cancel) {}
         }
@@ -303,20 +321,29 @@ struct TextEditorView: View {
         if let error = error, !error.isEmpty {
             Text(error).foregroundColor(.red).padding()
         } else {
-            CustomTextEditor(
-                text: $text,
-                platformTextView: $platformTextView,
-                windowDelegate: windowDelegate,
-                windowTitle: fileURL?.lastPathComponent ?? "Batch Editor"
-            )
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Color({
-                    #if os(macOS)
-                    NSColor.textBackgroundColor
-                    #elseif os(iOS)
-                    UIColor.systemBackground
-                    #endif
-                }()))
+            Group {
+                #if os(macOS)
+                CustomTextEditor(
+                    text: $text,
+                    platformTextView: $platformTextView,
+                    windowDelegate: windowDelegate,
+                    windowTitle: fileURL?.lastPathComponent ?? "Batch Editor"
+                )
+                #else
+                CustomTextEditor(
+                    text: $text,
+                    platformTextView: $platformTextView
+                )
+                #endif
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color({
+                #if os(macOS)
+                NSColor.textBackgroundColor
+                #elseif os(iOS)
+                UIColor.systemBackground
+                #endif
+            }()))
         }
     }
 
@@ -476,10 +503,14 @@ struct TextEditorView: View {
                                 appState.batchFileURL = url
                                 appState.batchPrompts = text.components(separatedBy: .newlines).filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
                                 batchFilePath = url.path
+                                #if os(macOS)
                                 let targetTitle = fileURL?.lastPathComponent ?? "Batch Editor"
                                 if let window = NSApp.windows.first(where: { $0.title == targetTitle }) {
                                     window.close()
                                 }
+                                #else
+                                dismiss()
+                                #endif
                             }
                         }
                     case .failure(let err):
