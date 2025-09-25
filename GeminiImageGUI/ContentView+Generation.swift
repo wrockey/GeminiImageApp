@@ -124,7 +124,7 @@ extension ContentView {
                 appState.ui.responseText += "No image generated."
             }
             
-            let newItem = HistoryItem(prompt: appState.prompt, responseText: appState.ui.responseText, imagePath: savedPath, date: Date(), mode: appState.settings.mode, workflowName: nil)
+            let newItem = HistoryItem(prompt: appState.prompt, responseText: appState.ui.responseText, imagePath: savedPath, date: Date(), mode: appState.settings.mode, workflowName: nil, modelUsed: nil)
             appState.historyState.history.append(newItem)
             appState.historyState.saveHistory()
         case .comfyUI:
@@ -341,7 +341,7 @@ extension ContentView {
                     appState.ui.responseText = "Image generated with ComfyUI. Saved to \(savedPath ?? "unknown")"
                     
                     let workflowName = URL(fileURLWithPath: appState.settings.comfyJSONPath).deletingPathExtension().lastPathComponent
-                    let newItem = HistoryItem(prompt: appState.prompt, responseText: appState.ui.responseText, imagePath: savedPath, date: Date(), mode: appState.settings.mode, workflowName: workflowName)
+                    let newItem = HistoryItem(prompt: appState.prompt, responseText: appState.ui.responseText, imagePath: savedPath, date: Date(), mode: appState.settings.mode, workflowName: workflowName, modelUsed: nil)
                     appState.historyState.history.append(newItem)
                     appState.historyState.saveHistory()
                 } else {
@@ -404,6 +404,9 @@ extension ContentView {
                         textOutput += "Image saved to \(saved)\n"
                     }
                 }
+                let newItem = HistoryItem(prompt: appState.prompt, responseText: appState.ui.responseText, imagePath: savedPath, date: Date(), mode: appState.settings.mode, workflowName: nil, modelUsed: appState.settings.selectedGrokModel)
+                        appState.historyState.history.append(newItem)
+                        appState.historyState.saveHistory()
             }
         case .aimlapi:
                     guard let url = URL(string: "https://api.aimlapi.com/v1/images/generations") else {
@@ -505,7 +508,7 @@ extension ContentView {
                         appState.ui.responseText += "No image generated."
                     }
                     
-                    let newItem = HistoryItem(prompt: appState.prompt, responseText: appState.ui.responseText, imagePath: savedPath, date: Date(), mode: appState.settings.mode, workflowName: nil)
+            let newItem = HistoryItem(prompt: appState.prompt, responseText: appState.ui.responseText, imagePath: savedPath, date: Date(), mode: appState.settings.mode, workflowName: nil, modelUsed: appState.settings.selectedAIMLModel)
                     appState.historyState.history.append(newItem)
                     appState.historyState.saveHistory()
                 }

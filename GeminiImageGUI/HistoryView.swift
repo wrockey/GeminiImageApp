@@ -1,4 +1,4 @@
-// HistoryView.swift
+//HistoryView.swift
 import SwiftUI
 #if os(macOS)
 import AppKit
@@ -210,10 +210,11 @@ struct HistoryView: View {
                     .foregroundColor(.secondary)
                     .help("Date: \(dateFormatter.string(from: item.date))")
                 if let mode = item.mode {
-                    Text(mode == .gemini ? "Gemini" : mode == .grok ? appState.settings.selectedGrokModel : mode == .aimlapi ? appState.settings.selectedAIMLModel : (item.workflowName ?? "ComfyUI"))
+                    let creator: String = mode == .gemini ? "Gemini" : mode == .grok ? item.modelUsed ?? appState.settings.selectedGrokModel : mode == .aimlapi ? item.modelUsed ?? appState.settings.selectedAIMLModel : (item.workflowName ?? "ComfyUI")
+                    Text(creator)
                         .font(.caption)
                         .foregroundColor(.secondary)
-                        .help("Generated with: \(mode == .gemini ? "Gemini" : mode == .grok ? "Grok" : mode == .aimlapi ? appState.settings.selectedAIMLModel : (item.workflowName ?? "ComfyUI"))")
+                        .help("Generated with: \(creator)")
                 }
             }
             
@@ -590,7 +591,8 @@ struct FullHistoryItemView: View {
                                 .foregroundColor(.gray)
                                 .help("Date the image was generated")
                             if let mode = item.mode {
-                                Text(mode == .gemini ? "Gemini" : mode == .grok ? appState.settings.selectedGrokModel : mode == .aimlapi ? appState.settings.selectedAIMLModel : (item.workflowName ?? "ComfyUI"))
+                                let creator: String = mode == .gemini ? "Gemini" : mode == .grok ? item.modelUsed ?? appState.settings.selectedGrokModel : mode == .aimlapi ? item.modelUsed ?? appState.settings.selectedAIMLModel : (item.workflowName ?? "ComfyUI")
+                                Text("Created with: \(creator)")
                                     .font(.system(size: 10))
                                     .foregroundColor(.gray)
                                     .help("Generation mode or workflow used")
@@ -764,8 +766,9 @@ struct FullHistoryItemView: View {
             if let item = history.first(where: { $0.id == newValue }) {
                 print("Current prompt: \(item.prompt)")
                 print("Current date: \(dateFormatter.string(from: item.date))")
-               if let mode = item.mode {
-                   print("Created with: \(mode == .gemini ? "Gemini" : mode == .grok ? appState.settings.selectedGrokModel : mode == .aimlapi ? appState.settings.selectedAIMLModel : item.workflowName ?? "ComfyUI")")
+                if let mode = item.mode {
+                    let creator: String = mode == .gemini ? "Gemini" : mode == .grok ? item.modelUsed ?? appState.settings.selectedGrokModel : mode == .aimlapi ? item.modelUsed ?? appState.settings.selectedAIMLModel : item.workflowName ?? "ComfyUI"
+                    print("Created with: \(creator)")
                 }
             } else {
                 print("No item found for selected ID")
@@ -773,7 +776,7 @@ struct FullHistoryItemView: View {
             previousSelectedId = newValue // Update previous for next change
         }
     }
-
+    
     
     private func deleteHistoryItem(item: HistoryItem, deleteFile: Bool) {
         // Compute sorted history and current index before deletion

@@ -336,6 +336,7 @@ struct HistoryItem: Identifiable, Codable, Equatable {
     let date: Date
     let mode: GenerationMode?
     let workflowName: String?
+    let modelUsed: String?  // New: Store the model used at generation time
 }
 
 struct Part: Codable {

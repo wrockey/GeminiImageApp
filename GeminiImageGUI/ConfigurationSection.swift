@@ -1045,9 +1045,11 @@ struct ConfigurationSection: View {
                 // Filter for image models (adjust keywords based on actual IDs)
                 let imageModels = response.data.filter { model in
                     let lowerID = model.id.lowercased()
-                    return lowerID.contains("image") || lowerID.contains("t2i") || lowerID.contains("i2i") ||
-                           lowerID.contains("diffusion") || lowerID.contains("seedream") || lowerID.contains("flux") ||
-                           lowerID.contains("edit") || lowerID.contains("generation")  // Add more as needed
+                    return !lowerID.contains("video") && (
+                            lowerID.contains("image") || lowerID.contains("t2i") || lowerID.contains("i2i") ||
+                            lowerID.contains("diffusion") || lowerID.contains("seedream") || lowerID.contains("flux") ||
+                            lowerID.contains("edit") || lowerID.contains("generation")  // No comma here
+                        )
                 }.map { $0.id }.sorted()
                 
                 await MainActor.run {
