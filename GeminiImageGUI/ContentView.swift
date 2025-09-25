@@ -1,4 +1,3 @@
-//ContentView.swift
 import SwiftUI
 #if os(macOS)
 import AppKit
@@ -323,9 +322,7 @@ struct ContentView: View {
             .background(LinearGradient(gradient: Gradient(colors: [topColor, bottomColor]), startPoint: .top, endPoint: .bottom))
             .navigationTitle("")
             .toolbar {
-                ToolbarItemGroup(placement: .navigationBarTrailing) {
-                    toolbarContent
-                }
+                toolbar
             }
             .fullScreenCover(isPresented: $showHistory) {
                 HistoryView(imageSlots: $appState.ui.imageSlots, columnVisibility: $columnVisibility)
@@ -452,6 +449,16 @@ struct ContentView: View {
     }
     #endif
 
+#if os(iOS)
+@ToolbarContentBuilder
+private var toolbar: some ToolbarContent {
+    ToolbarItemGroup(placement: .navigationBarTrailing) {
+        toolbarContent
+    }
+
+}
+#endif
+
     private var toolbarContent: some View {
         Group {
             Button(action: {
@@ -501,33 +508,52 @@ struct ContentView: View {
             .accessibilityLabel("Help")
             .accessibilityHint("Opens the help and guide sheet.")
             
-            Button(action: {
-                showOnboarding = true
-            }) {
-                Image(systemName: "info.circle")
+            // Always include these now (no #if os(macOS))
+            onboardingButton
+            billingButton
+        }
+    }
+
+
+    @ViewBuilder
+    private var onboardingButton: some View {
+        Button(action: {
+            showOnboarding = true
+        }) {
+            Image(systemName: "info.circle")
+                .symbolRenderingMode(.hierarchical)
+        }
+        .help("Show onboarding guide")
+        .accessibilityLabel("Onboarding")
+        .accessibilityHint("Opens the onboarding guide.")
+    }
+
+    @ViewBuilder
+    private var billingButton: some View {
+        if appState.settings.mode == .gemini {
+            Button(action: openBillingConsole) {
+                Image(systemName: "dollarsign.circle")
                     .symbolRenderingMode(.hierarchical)
             }
-            .help("Show onboarding guide")
-            .accessibilityLabel("Onboarding")
-            .accessibilityHint("Opens the onboarding guide.")
-            
-            if appState.settings.mode == .gemini {
-                Button(action: openBillingConsole) {
-                    Image(systemName: "dollarsign.circle")
-                        .symbolRenderingMode(.hierarchical)
-                }
-                .help("Open Gemini Billing Console")
-                .accessibilityLabel("Billing")
-                .accessibilityHint("Opens the Gemini billing console in a browser.")
-            } else if appState.settings.mode == .grok {
-                Button(action: openGrokBillingConsole) {
-                    Image(systemName: "dollarsign.circle")
-                        .symbolRenderingMode(.hierarchical)
-                }
-                .help("Open Grok Billing Console")
-                .accessibilityLabel("Billing")
-                .accessibilityHint("Opens the Grok billing console in a browser.")
+            .help("Open Gemini Billing Console")
+            .accessibilityLabel("Billing")
+            .accessibilityHint("Opens the Gemini billing console in a browser.")
+        } else if appState.settings.mode == .grok {
+            Button(action: openGrokBillingConsole) {
+                Image(systemName: "dollarsign.circle")
+                    .symbolRenderingMode(.hierarchical)
             }
+            .help("Open Grok Billing Console")
+            .accessibilityLabel("Billing")
+            .accessibilityHint("Opens the Grok billing console in a browser.")
+        } else if appState.settings.mode == .aimlapi {
+            Button(action: openAIMLBillingConsole) {
+                Image(systemName: "dollarsign.circle")
+                    .symbolRenderingMode(.hierarchical)
+            }
+            .help("Open AI/ML API Billing Console")
+            .accessibilityLabel("Billing")
+            .accessibilityHint("Opens the AI/ML API billing console in a browser.")
         }
     }
 
@@ -538,7 +564,13 @@ struct ContentView: View {
     }
 
     private func openGrokBillingConsole() {
-        if let url = URL(string: "https://console.x.ai/billing") {
+        if let url = URL(string: "https://console.x.ai") {
+            PlatformBrowser.open(url: url)
+        }
+    }
+
+    private func openAIMLBillingConsole() {
+        if let url = URL(string: "https://aimlapi.com/app/billing") {
             PlatformBrowser.open(url: url)
         }
     }

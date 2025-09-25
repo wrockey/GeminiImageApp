@@ -1,4 +1,3 @@
-// ContentView+Generation.swift
 #if os(iOS)
 import UIKit
 #endif
@@ -26,7 +25,7 @@ extension ContentView {
             return
         }
         
-        // New: Check if prompt is safe
+        // Check if prompt is safe
         if !ContentView.isPromptSafe(appState.prompt) {
             errorMessage = "Prompt contains inappropriate content. Please revise and try again."
             showErrorAlert = true
@@ -63,7 +62,7 @@ extension ContentView {
         
         switch appState.settings.mode {
         case .gemini:
-            // New: Show consent alert on first Gemini use
+            // Show consent alert on first Gemini use
             if !UserDefaults.standard.bool(forKey: "hasShownGeminiConsent") {
                 let consented = await showGeminiConsentAlert()
                 if !consented {
@@ -357,8 +356,17 @@ extension ContentView {
             webSocketTask?.cancel(with: .goingAway, reason: nil)
             webSocketTask = nil
             progress = 0.0
-
+            
         case .grok:
+            // Show consent alert on first Grok use
+            if !UserDefaults.standard.bool(forKey: "hasShownGrokConsent") {
+                let consented = await showGrokConsentAlert()
+                if !consented {
+                    throw GenerationError.apiError("User did not consent to data sharing.")
+                }
+                UserDefaults.standard.set(true, forKey: "hasShownGrokConsent")
+            }
+            
             guard let url = URL(string: "https://api.x.ai/v1/images/generations") else {
                 throw GenerationError.invalidURL
             }
@@ -404,50 +412,67 @@ extension ContentView {
                         textOutput += "Image saved to \(saved)\n"
                     }
                 }
-                let newItem = HistoryItem(prompt: appState.prompt, responseText: appState.ui.responseText, imagePath: savedPath, date: Date(), mode: appState.settings.mode, workflowName: nil, modelUsed: appState.settings.selectedGrokModel)
-                        appState.historyState.history.append(newItem)
-                        appState.historyState.saveHistory()
             }
+            
+            appState.ui.responseText = textOutput.isEmpty ? "No text output." : textOutput
+            appState.ui.outputImage = savedImage
+            
+            if savedImage == nil {
+                appState.ui.responseText += "No image generated."
+            }
+            
+            let newItem = HistoryItem(prompt: appState.prompt, responseText: appState.ui.responseText, imagePath: savedPath, date: Date(), mode: appState.settings.mode, workflowName: nil, modelUsed: appState.settings.selectedGrokModel)
+            appState.historyState.history.append(newItem)
+            appState.historyState.saveHistory()
+            
         case .aimlapi:
-                    guard let url = URL(string: "https://api.aimlapi.com/v1/images/generations") else {
-                        throw GenerationError.invalidURL
+            // Show consent alert on first AI/ML API use
+            if !UserDefaults.standard.bool(forKey: "hasShownAIMLConsent") {
+                let consented = await showAIMLConsentAlert()
+                if !consented {
+                    throw GenerationError.apiError("User did not consent to data sharing.")
+                }
+                UserDefaults.standard.set(true, forKey: "hasShownAIMLConsent")
+            }
+            
+            guard let url = URL(string: "https://api.aimlapi.com/v1/images/generations") else {
+                throw GenerationError.invalidURL
+            }
+            
+            let selectedAIMLModel = appState.settings.selectedAIMLModel
+            var bodyDict: [String: Any] = [
+                "model": selectedAIMLModel,
+                "prompt": appState.prompt,
+                "num_images": 1,
+                "sync_mode": true,
+                "enable_safety_checker": true,
+                "image_size": appState.settings.selectedImageSize
+            ]
+            
+            // Optional: Add seed
+            bodyDict["seed"] = Int(Date().timeIntervalSince1970)
+            
+            // Image handling for i2i/edit models
+            if !appState.ui.imageSlots.isEmpty && selectedAIMLModel.contains("edit") {
+                var imageUrls: [String] = []
+                for slot in appState.ui.imageSlots {
+                    if let image = slot.image, let pngData = image.platformPngData() {
+                        let safeData = stripExif(from: pngData) ?? pngData
+                        let base64 = safeData.base64EncodedString()
+                        imageUrls.append("data:image/png;base64,\(base64)")
                     }
-                    
-                    let selectedAIMLModel = appState.settings.selectedAIMLModel
-                    var bodyDict: [String: Any] = [
-                        "model": selectedAIMLModel,
-                        "prompt": appState.prompt,
-                        "num_images": 1,
-                        "sync_mode": true,  // Wait for response
-                        "enable_safety_checker": true,
-                        "image_size": appState.settings.selectedImageSize
-                    ]
-                    
-                    // Optional: Add seed, image_size (e.g., for models requiring it)
-                    bodyDict["seed"] = Int(Date().timeIntervalSince1970)
-//                    bodyDict["image_size"] = "1024x1024"  // Default; consider making configurable
-                    
-                    // Image handling for i2i/edit models
-                    if !appState.ui.imageSlots.isEmpty && selectedAIMLModel.contains("edit") {
-                        var imageUrls: [String] = []
-                        for slot in appState.ui.imageSlots {
-                            if let image = slot.image, let pngData = image.platformPngData() {
-                                let safeData = stripExif(from: pngData) ?? pngData
-                                let base64 = safeData.base64EncodedString()
-                                imageUrls.append("data:image/png;base64,\(base64)")
-                            }
-                        }
-                        if !imageUrls.isEmpty {
-                            bodyDict["image_urls"] = imageUrls  // Up to 10
-                        } else {
-                            throw GenerationError.noOutputImage  // Require images for edit models
-                        }
-                    } else if appState.ui.imageSlots.isEmpty && selectedAIMLModel.contains("edit") {
-                        appState.ui.responseText += "Edit model selected without images; treating as t2i if possible.\n"
-                    } else if !appState.ui.imageSlots.isEmpty && !selectedAIMLModel.contains("edit") {
-                        throw GenerationError.apiError("Text-to-image model selected with input images; select an edit/i2i model.")
-                    }
-            //print bodyDict
+                }
+                if !imageUrls.isEmpty {
+                    bodyDict["image_urls"] = imageUrls // Up to 10
+                } else {
+                    throw GenerationError.noOutputImage // Require images for edit models
+                }
+            } else if appState.ui.imageSlots.isEmpty && selectedAIMLModel.contains("edit") {
+                appState.ui.responseText += "Edit model selected without images; treating as t2i if possible.\n"
+            } else if !appState.ui.imageSlots.isEmpty && !selectedAIMLModel.contains("edit") {
+                throw GenerationError.apiError("Text-to-image model selected with input images; select an edit/i2i model.")
+            }
+            
             do {
                 let jsonData = try JSONSerialization.data(withJSONObject: bodyDict, options: .prettyPrinted)
                 if let jsonString = String(data: jsonData, encoding: .utf8) {
@@ -456,64 +481,61 @@ extension ContentView {
             } catch {
                 print("Failed to serialize bodyDict: \(error)")
             }
-                    
-                    var request = URLRequest(url: url)
-                    request.httpMethod = "POST"
-                    request.addValue("application/json", forHTTPHeaderField: "Content-Type")
-                    request.addValue("Bearer \(appState.settings.aimlapiKey)", forHTTPHeaderField: "Authorization")
-                    
-                    do {
-                        request.httpBody = try JSONSerialization.data(withJSONObject: bodyDict)
-                    } catch {
-                        throw GenerationError.encodingFailed(error.localizedDescription)
-                    }
-                    
-                    try Task.checkCancellation()
-                    let (data, _) = try await URLSession.shared.data(for: request)
-                    print(String(data: data, encoding: .utf8) ?? "No data")  // Add for debugging, like in .gemini
-                    
-                    let response = try JSONDecoder().decode(GrokImageResponse.self, from: data)  // Compatible; should decode without issues
-                    
-                    // Complete parsing (copied/adapted from .grok)
-                    var textOutput = ""
-                    var savedImage: PlatformImage? = nil
-                    var savedPath: String? = nil
-                    
-                    if let item = response.data.first {
-                        if let revised = item.revised_prompt {
-                            textOutput += "Revised prompt: \(revised)\n"
-                        }
-                        
-                        if let b64 = item.b64_json, let imgData = Data(base64Encoded: b64) {
-                            savedImage = PlatformImage(platformData: imgData)
-                            savedPath = saveGeneratedImage(data: imgData)
-                            if let saved = savedPath {
-                                textOutput += "Image saved to \(saved)\n"
-                            }
-                        } else if let imageUrl = item.url, let url = URL(string: imageUrl) {
-                            // Fallback: Download from URL if no b64_json (rare, but handles variations)
-                            let (imgData, _) = try await URLSession.shared.data(from: url)
-                            savedImage = PlatformImage(platformData: imgData)
-                            savedPath = saveGeneratedImage(data: imgData)
-                            if let saved = savedPath {
-                                textOutput += "Image downloaded and saved to \(saved)\n"
-                            }
-                        }
-                    }
-                    
-                    appState.ui.responseText = textOutput.isEmpty ? "No text output." : textOutput
-                    appState.ui.outputImage = savedImage
-                    
-                    if savedImage == nil {
-                        appState.ui.responseText += "No image generated."
-                    }
-                    
-            let newItem = HistoryItem(prompt: appState.prompt, responseText: appState.ui.responseText, imagePath: savedPath, date: Date(), mode: appState.settings.mode, workflowName: nil, modelUsed: appState.settings.selectedAIMLModel)
-                    appState.historyState.history.append(newItem)
-                    appState.historyState.saveHistory()
-                }
             
-
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+            request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.addValue("Bearer \(appState.settings.aimlapiKey)", forHTTPHeaderField: "Authorization")
+            
+            do {
+                request.httpBody = try JSONSerialization.data(withJSONObject: bodyDict)
+            } catch {
+                throw GenerationError.encodingFailed(error.localizedDescription)
+            }
+            
+            try Task.checkCancellation()
+            let (data, _) = try await URLSession.shared.data(for: request)
+            print(String(data: data, encoding: .utf8) ?? "No data")
+            
+            let response = try JSONDecoder().decode(GrokImageResponse.self, from: data)
+            
+            var textOutput = ""
+            var savedImage: PlatformImage? = nil
+            var savedPath: String? = nil
+            
+            if let item = response.data.first {
+                if let revised = item.revised_prompt {
+                    textOutput += "Revised prompt: \(revised)\n"
+                }
+                
+                if let b64 = item.b64_json, let imgData = Data(base64Encoded: b64) {
+                    savedImage = PlatformImage(platformData: imgData)
+                    savedPath = saveGeneratedImage(data: imgData)
+                    if let saved = savedPath {
+                        textOutput += "Image saved to \(saved)\n"
+                    }
+                } else if let imageUrl = item.url, let url = URL(string: imageUrl) {
+                    // Fallback: Download from URL if no b64_json (rare, but handles variations)
+                    let (imgData, _) = try await URLSession.shared.data(from: url)
+                    savedImage = PlatformImage(platformData: imgData)
+                    savedPath = saveGeneratedImage(data: imgData)
+                    if let saved = savedPath {
+                        textOutput += "Image downloaded and saved to \(saved)\n"
+                    }
+                }
+            }
+            
+            appState.ui.responseText = textOutput.isEmpty ? "No text output." : textOutput
+            appState.ui.outputImage = savedImage
+            
+            if savedImage == nil {
+                appState.ui.responseText += "No image generated."
+            }
+            
+            let newItem = HistoryItem(prompt: appState.prompt, responseText: appState.ui.responseText, imagePath: savedPath, date: Date(), mode: appState.settings.mode, workflowName: nil, modelUsed: appState.settings.selectedAIMLModel)
+            appState.historyState.history.append(newItem)
+            appState.historyState.saveHistory()
+        }
     }
     
     func stopGeneration() {
@@ -554,7 +576,7 @@ extension ContentView {
         return (destination as? NSMutableData) as Data?
     }
     
-    // New: Show consent alert and await user response
+    // Show consent alert for Gemini
     @MainActor
     private func showGeminiConsentAlert() async -> Bool {
         await withCheckedContinuation { continuation in
@@ -598,6 +620,118 @@ extension ContentView {
             switch response {
             case .alertFirstButtonReturn: // View Privacy Policy
                 if let url = URL(string: "https://policies.google.com/privacy") {
+                    NSWorkspace.shared.open(url)
+                }
+                continuation.resume(returning: false)
+            case .alertSecondButtonReturn: // Continue
+                continuation.resume(returning: true)
+            default: // Cancel
+                continuation.resume(returning: false)
+            }
+            #endif
+        }
+    }
+    
+    // New: Show consent alert for Grok
+    @MainActor
+    private func showGrokConsentAlert() async -> Bool {
+        await withCheckedContinuation { continuation in
+            #if os(iOS)
+            let alert = UIAlertController(
+                title: "Data Sharing Notice",
+                message: "Prompts and images will be sent to xAI for generation. View xAI's privacy policy?",
+                preferredStyle: .alert
+            )
+            
+            alert.addAction(UIAlertAction(title: "View Privacy Policy", style: .default) { _ in
+                if let url = URL(string: "https://x.ai/privacy-policy") {
+                    UIApplication.shared.open(url)
+                }
+                continuation.resume(returning: false)
+            })
+            
+            alert.addAction(UIAlertAction(title: "Continue", style: .default) { _ in
+                continuation.resume(returning: true)
+            })
+            
+            alert.addAction(UIAlertAction(title: "Cancel", style: .cancel) { _ in
+                continuation.resume(returning: false)
+            })
+            
+            // Present from top VC
+            var topVC = UIApplication.shared.windows.first(where: { $0.isKeyWindow })?.rootViewController
+            while let presentedVC = topVC?.presentedViewController {
+                topVC = presentedVC
+            }
+            topVC?.present(alert, animated: true)
+            #elseif os(macOS)
+            let alert = NSAlert()
+            alert.messageText = "Data Sharing Notice"
+            alert.informativeText = "Prompts and images will be sent to xAI for generation. View xAI's privacy policy?"
+            alert.addButton(withTitle: "View Privacy Policy")
+            alert.addButton(withTitle: "Continue")
+            alert.addButton(withTitle: "Cancel")
+            
+            let response = alert.runModal()
+            switch response {
+            case .alertFirstButtonReturn: // View Privacy Policy
+                if let url = URL(string: "https://x.ai/privacy-policy") {
+                    NSWorkspace.shared.open(url)
+                }
+                continuation.resume(returning: false)
+            case .alertSecondButtonReturn: // Continue
+                continuation.resume(returning: true)
+            default: // Cancel
+                continuation.resume(returning: false)
+            }
+            #endif
+        }
+    }
+    
+    // New: Show consent alert for AI/ML API
+    @MainActor
+    private func showAIMLConsentAlert() async -> Bool {
+        await withCheckedContinuation { continuation in
+            #if os(iOS)
+            let alert = UIAlertController(
+                title: "Data Sharing Notice",
+                message: "Prompts and images will be sent to aimlapi.com for generation. View AI/ML API's privacy policy?",
+                preferredStyle: .alert
+            )
+            
+            alert.addAction(UIAlertAction(title: "View Privacy Policy", style: .default) { _ in
+                if let url = URL(string: "https://aimlapi.com/privacy-policy") {
+                    UIApplication.shared.open(url)
+                }
+                continuation.resume(returning: false)
+            })
+            
+            alert.addAction(UIAlertAction(title: "Continue", style: .default) { _ in
+                continuation.resume(returning: true)
+            })
+            
+            alert.addAction(UIAlertAction(title: "Cancel", style: .cancel) { _ in
+                continuation.resume(returning: false)
+            })
+            
+            // Present from top VC
+            var topVC = UIApplication.shared.windows.first(where: { $0.isKeyWindow })?.rootViewController
+            while let presentedVC = topVC?.presentedViewController {
+                topVC = presentedVC
+            }
+            topVC?.present(alert, animated: true)
+            #elseif os(macOS)
+            let alert = NSAlert()
+            alert.messageText = "Data Sharing Notice"
+            alert.informativeText = "Prompts and images will be sent to aimlapi.com for generation. View AI/ML API's privacy policy?"
+            alert.addButton(withTitle: "View Privacy Policy")
+            alert.addButton(withTitle: "Continue")
+            alert.addButton(withTitle: "Cancel")
+            
+            let response = alert.runModal()
+            switch response {
+            case .alertFirstButtonReturn: // View Privacy Policy
+                if let url = URL(string: "https://aimlapi.com/privacy-policy") {
                     NSWorkspace.shared.open(url)
                 }
                 continuation.resume(returning: false)
