@@ -1048,7 +1048,7 @@ struct ConfigurationSection: View {
                     return !lowerID.contains("video") && (
                             lowerID.contains("image") || lowerID.contains("t2i") || lowerID.contains("i2i") ||
                             lowerID.contains("diffusion") || lowerID.contains("seedream") || lowerID.contains("flux") ||
-                            lowerID.contains("edit") || lowerID.contains("generation")  // No comma here
+                            lowerID.contains("edit") || lowerID.contains("generation") || lowerID.contains("dall") // No comma here
                         )
                 }.map { $0.id }.sorted()
                 
