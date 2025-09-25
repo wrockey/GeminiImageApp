@@ -6,7 +6,7 @@ class KeychainHelper {
     static let service = "com.yourcompany.GeminiImageApp"  // Replace with your actual bundle ID
     static let account = "gemini_api_key"
     static let grokAccount = "grok_api_key"  // Added for Grok API key
-
+    
     static func saveAPIKey(_ key: String) -> Bool {
         guard let data = key.data(using: .utf8) else { return false }
         let query: [String: Any] = [
@@ -19,7 +19,7 @@ class KeychainHelper {
         let status = SecItemAdd(query as CFDictionary, nil)
         return status == errSecSuccess
     }
-
+    
     static func loadAPIKey() -> String? {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
@@ -33,7 +33,7 @@ class KeychainHelper {
         guard status == errSecSuccess, let data = item as? Data else { return nil }
         return String(data: data, encoding: .utf8)
     }
-
+    
     static func deleteAPIKey() {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
@@ -56,7 +56,7 @@ class KeychainHelper {
         let status = SecItemAdd(query as CFDictionary, nil)
         return status == errSecSuccess
     }
-
+    
     static func loadGrokAPIKey() -> String? {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
@@ -70,12 +70,51 @@ class KeychainHelper {
         guard status == errSecSuccess, let data = item as? Data else { return nil }
         return String(data: data, encoding: .utf8)
     }
-
+    
     static func deleteGrokAPIKey() {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: grokAccount
+        ]
+        SecItemDelete(query as CFDictionary)
+    }
+    
+    // Added: Methods for AI/ML API (Seedream) key
+    static let aimlapiAccount = "aimlapi_key"  // Or "seedream_aimlapi_key"
+    
+    static func saveAIMLAPIKey(_ key: String) -> Bool {
+        guard let data = key.data(using: .utf8) else { return false }
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: aimlapiAccount,
+            kSecValueData as String: data
+        ]
+        SecItemDelete(query as CFDictionary)
+        let status = SecItemAdd(query as CFDictionary, nil)
+        return status == errSecSuccess
+    }
+    
+    static func loadAIMLAPIKey() -> String? {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: aimlapiAccount,
+            kSecMatchLimit as String: kSecMatchLimitOne,
+            kSecReturnData as String: true
+        ]
+        var item: CFTypeRef?
+        let status = SecItemCopyMatching(query as CFDictionary, &item)
+        guard status == errSecSuccess, let data = item as? Data else { return nil }
+        return String(data: data, encoding: .utf8)
+    }
+    
+    static func deleteAIMLAPIKey() {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: aimlapiAccount
         ]
         SecItemDelete(query as CFDictionary)
     }

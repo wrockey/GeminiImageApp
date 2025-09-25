@@ -12,6 +12,7 @@ enum GenerationMode: String, Codable {
     case gemini
     case comfyUI
     case grok  // Added for Grok API
+    case aimlapi  // New: For AI/ML API (aimlapi.com)
 }
 
 // Updated NodeInfo struct (make promptText optional to accommodate non-prompt nodes)
@@ -31,6 +32,8 @@ class SettingsState: ObservableObject {
     @Published var comfyJSONPath: String = ""
     @Published var grokApiKey: String = KeychainHelper.loadGrokAPIKey() ?? ""  // Added: Grok API key from Keychain
     @Published var selectedGrokModel: String = "grok-2-image-1212"  // Added: Default model, options: ["grok-2-image-1212", "aurora"]
+    @Published var aimlapiKey: String = KeychainHelper.loadAIMLAPIKey() ?? ""  // New
+    @Published var selectedAIMLModel: String = ""  // New: Selected from fetched models
 }
 
 class GenerationState: ObservableObject {

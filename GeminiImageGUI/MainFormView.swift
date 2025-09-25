@@ -60,6 +60,8 @@ struct MainFormView: View {
             return appState.generation.comfyWorkflow == nil || appState.generation.comfyPromptNodeID.isEmpty || appState.generation.comfyOutputNodeID.isEmpty || appState.settings.comfyServerURL.isEmpty || effectivePromptEmpty
         case .grok:
             return appState.settings.grokApiKey.isEmpty || prompt.isEmpty
+        case .aimlapi:
+            return appState.settings.aimlapiKey.isEmpty || prompt.isEmpty
         }
     }
     
@@ -79,6 +81,10 @@ struct MainFormView: View {
             }
         case .grok:
             if appState.settings.grokApiKey.isEmpty {
+                return true
+            }
+        case .aimlapi:
+            if appState.settings.aimlapiKey.isEmpty {
                 return true
             }
         }

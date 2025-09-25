@@ -5,6 +5,17 @@ import AppKit
 import UIKit
 #endif
 
+// New struct for response parsing (add at top or in separate file)
+struct AIMLModelsResponse: Codable {
+    let object: String
+    let data: [AIMLModel]
+}
+
+struct AIMLModel: Codable {
+    let id: String
+    // Add other fields if needed: type, info, features
+}
+
 struct ConfigurationSection: View {
     @Binding var showApiKey: Bool
     @Binding var apiKeyPath: String
@@ -27,6 +38,8 @@ struct ConfigurationSection: View {
     @State private var serverErrorMessage: String = ""
     @State private var isTestingServer: Bool = false
     @State private var showGrokApiKey: Bool = false  // Added: For Grok key visibility toggle
+    @State private var availableModels: [String] = []  // New: Fetched image models
+    @State private var isFetchingModels: Bool = false  // New: Loading state
     
     private var isCompact: Bool {
         sizeClass == .compact
@@ -71,7 +84,8 @@ struct ConfigurationSection: View {
             Picker("Mode", selection: $appState.settings.mode) {
                 Text("Gemini").tag(GenerationMode.gemini)
                 Text("ComfyUI").tag(GenerationMode.comfyUI)
-                Text("Grok").tag(GenerationMode.grok)  // Added: Option for Grok
+                Text("Grok").tag(GenerationMode.grok)
+                Text("AI/ML").tag(GenerationMode.aimlapi)
             }
             .pickerStyle(.segmented)
             .padding(.bottom, isCompact ? 4 : 8)
@@ -85,6 +99,8 @@ struct ConfigurationSection: View {
                 comfyUIConfiguration
             case .grok:
                 grokConfiguration  // Added: New case for Grok
+            case .aimlapi:
+                aimlConfiguration  // New
             }
             
             outputFolderSection
@@ -121,19 +137,19 @@ struct ConfigurationSection: View {
                         .foregroundColor(.secondary)
                         .help("Select the folder where generated images will be saved")
                     HStack(spacing: isCompact ? 8 : 16) {
-                        #if os(iOS)
+#if os(iOS)
                         Text(outputPath.isEmpty ? "No folder selected" : URL(fileURLWithPath: outputPath).lastPathComponent)
                             .font(textFont)
                             .lineLimit(1)
                             .truncationMode(.middle)
                             .help("Currently selected output folder")
-                        #else
+#else
                         Text(outputPath.isEmpty ? "No folder selected" : outputPath)
                             .font(textFont)
                             .lineLimit(1)
                             .truncationMode(.middle)
                             .help("Currently selected output folder")
-                        #endif
+#endif
                         Button(action: {
                             print("Showing output folder picker")
                             PlatformFilePicker.presentOpenPanel(allowedTypes: [.folder], allowsMultiple: false, canChooseDirectories: true) { result in
@@ -155,19 +171,19 @@ struct ConfigurationSection: View {
                         .font(labelFont)
                         .foregroundColor(.secondary)
                         .help("Select the folder where generated images will be saved")
-                    #if os(iOS)
+#if os(iOS)
                     Text(outputPath.isEmpty ? "No folder selected" : URL(fileURLWithPath: outputPath).lastPathComponent)
                         .font(textFont)
                         .lineLimit(1)
                         .truncationMode(.middle)
                         .help("Currently selected output folder")
-                    #else
+#else
                     Text(outputPath.isEmpty ? "No folder selected" : outputPath)
                         .font(textFont)
                         .lineLimit(1)
                         .truncationMode(.middle)
                         .help("Currently selected output folder")
-                    #endif
+#endif
                     Button(action: {
                         print("Showing output folder picker")
                         PlatformFilePicker.presentOpenPanel(allowedTypes: [.folder], allowsMultiple: false, canChooseDirectories: true) { result in
@@ -352,6 +368,82 @@ struct ConfigurationSection: View {
             .accessibilityLabel("Grok model selector")
         }
     }
+    @ViewBuilder
+    private var aimlConfiguration: some View {
+        VStack(alignment: .leading, spacing: isCompact ? 12 : 16) {
+            aimlApiKeyRow
+            aimlModelRow  // Dynamic Picker
+        }
+    }
+    
+    @ViewBuilder
+    private var aimlApiKeyRow: some View {
+        HStack(spacing: isCompact ? 8 : 16) {
+            Text("AI/ML API Key:")
+                .font(labelFont)
+                .foregroundColor(.secondary)
+                .help("Enter your aimlapi.com API key")
+            Group {
+                if showGrokApiKey {  // Reuse toggle if needed; or add @State showAIMLApiKey
+                    TextField("Enter or paste AI/ML API key", text: $appState.settings.aimlapiKey)
+                        .onChange(of: appState.settings.aimlapiKey) { newValue in
+                            handleAIMLAPIKeyChange(newValue)
+                        }
+                } else {
+                    SecureField("Enter or paste AI/ML API key", text: $appState.settings.aimlapiKey)
+                        .onChange(of: appState.settings.aimlapiKey) { newValue in
+                            handleAIMLAPIKeyChange(newValue)
+                        }
+                }
+            }
+            .textFieldStyle(.roundedBorder)
+            .font(textFont)
+            .background(Color.black.opacity(0.1))
+            .cornerRadius(8)
+            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.4), lineWidth: 1))
+            .autocorrectionDisabled()
+            
+            // Toggle, paste, test buttons (copy from grokApiKeyRow, rename to AIML)
+            // ...
+            
+            Button(action: {
+                fetchAvailableModels()
+            }) {
+                Text(isFetchingModels ? "Fetching..." : "Fetch Models")
+                    .font(.system(size: isCompact ? 12 : 14))
+            }
+            .buttonStyle(.bordered)
+            .disabled(appState.settings.aimlapiKey.isEmpty || isFetchingModels)
+            .help("Fetch available image models from AI/ML API")
+        }
+    }
+    
+    @ViewBuilder
+    private var aimlModelRow: some View {
+        HStack(spacing: isCompact ? 8 : 16) {
+            Text("Model:")
+                .font(labelFont)
+                .foregroundColor(.secondary)
+                .help("Select an AI/ML image model")
+                .fixedSize()
+            if availableModels.isEmpty {
+                Text("No models fetched")
+                    .foregroundColor(.gray)
+            } else {
+                Picker("", selection: $appState.settings.selectedAIMLModel) {
+                    ForEach(availableModels, id: \.self) { model in
+                        Text(model)
+                            .font(textFont)
+                            .tag(model)
+                    }
+                }
+                .pickerStyle(.menu)
+                .frame(width: 300)  // Wider for long IDs
+                .help("Available t2i/i2i models from AI/ML API")
+                .accessibilityLabel("AI/ML model selector")
+            }
+        }
+    }
     
     @ViewBuilder
     private var comfyUIConfiguration: some View {
@@ -454,19 +546,19 @@ struct ConfigurationSection: View {
                 .font(labelFont)
                 .foregroundColor(.secondary)
                 .help("Select a JSON or PNG file for the workflow")
-            #if os(iOS)
+#if os(iOS)
             Text(appState.settings.comfyJSONPath.isEmpty ? "No file selected" : URL(fileURLWithPath: appState.settings.comfyJSONPath).lastPathComponent)
                 .font(textFont)
                 .lineLimit(1)
                 .truncationMode(.middle)
                 .help("Currently selected workflow file")
-            #else
+#else
             Text(appState.settings.comfyJSONPath.isEmpty ? "No file selected" : appState.settings.comfyJSONPath)
                 .font(textFont)
                 .lineLimit(1)
                 .truncationMode(.middle)
                 .help("Currently selected workflow file")
-            #endif
+#endif
             Button(action: {
                 print("Showing json file picker")
                 PlatformFilePicker.presentOpenPanel(allowedTypes: [.json, .png], allowsMultiple: false, canChooseDirectories: false) { result in
@@ -767,13 +859,13 @@ struct ConfigurationSection: View {
     }
     
     private func copyToClipboard(_ text: String) {
-        #if os(iOS)
+#if os(iOS)
         UIPasteboard.general.string = text
-        #elseif os(macOS)
+#elseif os(macOS)
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
         pasteboard.setString(text, forType: .string)
-        #endif
+#endif
     }
     
     private func handleAPIKeyChange(_ newValue: String) {
@@ -800,12 +892,12 @@ struct ConfigurationSection: View {
     
     private func pasteToApiKey() {
         var pastedText: String? = nil
-        #if os(macOS)
+#if os(macOS)
         let pasteboard = NSPasteboard.general
         pastedText = pasteboard.string(forType: .string)
-        #elseif os(iOS)
+#elseif os(iOS)
         pastedText = UIPasteboard.general.string
-        #endif
+#endif
         
         if let text = pastedText {
             appState.settings.apiKey = text
@@ -814,15 +906,128 @@ struct ConfigurationSection: View {
     
     private func pasteToGrokApiKey() {
         var pastedText: String? = nil
-        #if os(macOS)
+#if os(macOS)
         let pasteboard = NSPasteboard.general
         pastedText = pasteboard.string(forType: .string)
-        #elseif os(iOS)
+#elseif os(iOS)
         pastedText = UIPasteboard.general.string
-        #endif
+#endif
         
         if let text = pastedText {
             appState.settings.grokApiKey = text
+        }
+    }
+    
+    private func handleAIMLAPIKeyChange(_ newValue: String) {
+        if newValue.isEmpty {
+            KeychainHelper.deleteAIMLAPIKey()
+        } else if KeychainHelper.saveAIMLAPIKey(newValue) {
+            // Optional: Add saved message
+        } else {
+            errorMessage = "Failed to securely store Seedream API key."
+            showErrorAlert = true
+        }
+    }
+    
+    private func pasteToAIMLApiKey() {
+        var pastedText: String? = nil
+#if os(macOS)
+        let pasteboard = NSPasteboard.general
+        pastedText = pasteboard.string(forType: .string)
+#elseif os(iOS)
+        pastedText = UIPasteboard.general.string
+#endif
+        
+        if let text = pastedText {
+            appState.settings.aimlapiKey = text
+        }
+    }
+    
+    private func testAIMLApiKey() {
+        isTestingApi = true
+        errorMessage = nil
+        
+        Task {
+            defer { isTestingApi = false }
+            
+            let baseURL = "https://api.aimlapi.com/v1/models"
+            guard let url = URL(string: "\(baseURL)/models") else {  // Test endpoint (lists models)
+                errorMessage = "Invalid URL"
+                showErrorAlert = true
+                return
+            }
+            
+            var request = URLRequest(url: url)
+            request.httpMethod = "GET"
+            request.addValue("Bearer \(appState.settings.aimlapiKey)", forHTTPHeaderField: "Authorization")
+            
+            do {
+                let (_, response) = try await URLSession.shared.data(for: request)
+                if let httpResponse = response as? HTTPURLResponse, (200...299).contains(httpResponse.statusCode) {
+                    successMessage = "Seedream API test successful!"
+                    showSuccessAlert = true
+                } else {
+                    errorMessage = "Seedream API test failed. Check your key."
+                    showErrorAlert = true
+                }
+            } catch {
+                errorMessage = "Test error: \(error.localizedDescription)"
+                showErrorAlert = true
+            }
+        }
+    }
+    // New fetch function (add after testAIMLApiKey)
+    private func fetchAvailableModels() {
+        guard !appState.settings.aimlapiKey.isEmpty else {
+            errorMessage = "Enter API key first"
+            showErrorAlert = true
+            return
+        }
+        
+        isFetchingModels = true
+        errorMessage = nil
+        
+        Task {
+            defer { isFetchingModels = false }
+            
+            guard let url = URL(string: "https://api.aimlapi.com/models") else {  // Or /v1/models if needed
+                errorMessage = "Invalid URL"
+                showErrorAlert = true
+                return
+            }
+            
+            var request = URLRequest(url: url)
+            request.httpMethod = "GET"
+            request.addValue("Bearer \(appState.settings.aimlapiKey)", forHTTPHeaderField: "Authorization")
+            
+            do {
+                let (data, _) = try await URLSession.shared.data(for: request)
+                let response = try JSONDecoder().decode(AIMLModelsResponse.self, from: data)
+                
+                // Filter for image models (adjust keywords based on actual IDs)
+                let imageModels = response.data.filter { model in
+                    let lowerID = model.id.lowercased()
+                    return lowerID.contains("image") || lowerID.contains("t2i") || lowerID.contains("i2i") ||
+                           lowerID.contains("diffusion") || lowerID.contains("seedream") || lowerID.contains("flux") ||
+                           lowerID.contains("edit") || lowerID.contains("generation")  // Add more as needed
+                }.map { $0.id }.sorted()
+                
+                await MainActor.run {
+                    availableModels = imageModels
+                    if !imageModels.isEmpty && appState.settings.selectedAIMLModel.isEmpty {
+                        appState.settings.selectedAIMLModel = imageModels.first!  // Default to first
+                    }
+                    if imageModels.isEmpty {
+                        errorMessage = "No image models found"
+                        showErrorAlert = true
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    errorMessage = "Fetch error: \(error.localizedDescription)"
+                    showErrorAlert = true
+                }
+            }
         }
     }
 }

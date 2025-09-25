@@ -1,4 +1,3 @@
-//HelperViews.swift
 import SwiftUI
 #if os(macOS)
 import AppKit
@@ -176,11 +175,13 @@ struct HelpView: View {
                         comfyUIHelpContent
                     case .grok:
                         grokHelpContent  // Added: Help for Grok mode
+                    case .aimlapi:
+                        aimlHelpContent  // New: Help for AI/ML API mode
                     }
                 }
                 .padding()
             }
-            .navigationTitle(mode == .gemini ? "Gemini Help" : (mode == .comfyUI ? "ComfyUI Help" : "Grok Help"))
+            .navigationTitle(mode == .gemini ? "Gemini Help" : (mode == .comfyUI ? "ComfyUI Help" : (mode == .grok ? "Grok Help" : "AI/ML API Help")))
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -192,7 +193,7 @@ struct HelpView: View {
         }
 #else
         VStack(spacing: 0) {
-            Text(mode == .gemini ? "Gemini Help" : (mode == .comfyUI ? "ComfyUI Help" : "Grok Help"))
+            Text(mode == .gemini ? "Gemini Help" : (mode == .comfyUI ? "ComfyUI Help" : (mode == .grok ? "Grok Help" : "AI/ML API Help")))
                 .font(.title)
                 .padding()
             
@@ -205,6 +206,8 @@ struct HelpView: View {
                         comfyUIHelpContent
                     case .grok:
                         grokHelpContent  // Added: Help for Grok mode
+                    case .aimlapi:
+                        aimlHelpContent  // New: Help for AI/ML API mode
                     }
                 }
                 .padding()
@@ -305,6 +308,43 @@ struct HelpView: View {
                 Text("5. **Output & History**")
                     .font(.headline)
                 Text("- Save or copy generated images directly.\n- View past generations in History for reuse.")
+            }
+            .padding()
+            .background(Color.gray.opacity(0.1))
+            .cornerRadius(12)
+        }
+    }
+    
+    // New: Help content for AI/ML API mode
+    private var aimlHelpContent: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("AI/ML API Mode Guide")
+                .font(.title.bold())
+            
+            VStack(alignment: .leading, spacing: 12) {
+                Text("1. **API Key Setup**")
+                    .font(.headline)
+                Text("Sign up at aimlapi.com and obtain your API key from the dashboard. Paste it into the AI/ML API Key field. Use the 'Test API' button to verify connectivity.")
+                
+                Text("2. **Model Selection**")
+                    .font(.headline)
+                Text("Click 'Fetch Models' to retrieve available text-to-image (t2i) and image-to-image (i2i) models from the API. Select one from the dropdown, such as Stable Diffusion, Imagen 4, Flux-Pro, DALL·E 2, or Seedream variants for high-quality generation.")
+                
+                Text("3. **Prompting Tips**")
+                    .font(.headline)
+                Text("- Be descriptive: Include details on style, mood, composition, and specifics (e.g., 'A photorealistic portrait of a cyberpunk samurai in a neon-lit city, high detail, 4K').\n- For better results: Use modifiers like 'in the style of [artist]', 'photorealistic', or 'cinematic lighting'.\n- Experiment: Some models like Flux-Pro excel in text rendering and complex scenes.")
+                
+                Text("4. **Input Images (for i2i Models)**")
+                    .font(.headline)
+                Text("For image-to-image or edit models, upload up to 10 reference images. The app will send them as base64 data. Annotate with Markup tools for precise edits. Ensure the selected model supports i2i (e.g., contains 'edit' or 'i2i' in name).")
+                
+                Text("5. **Advanced Parameters & Troubleshooting**")
+                    .font(.headline)
+                Text("- Safety: Enabled by default to filter inappropriate content.\n- Output: Images returned as base64 or URLs; saved automatically.\n- Issues: If generation fails, check API key, model compatibility with inputs, or prompt length (max 4000 chars). Use batch mode for multiple prompts.")
+                
+                Text("6. **Output & History**")
+                    .font(.headline)
+                Text("- View, save, or copy generated images.\n- Access past generations in the History sidebar for reuse.")
             }
             .padding()
             .background(Color.gray.opacity(0.1))

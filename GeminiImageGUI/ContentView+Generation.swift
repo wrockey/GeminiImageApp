@@ -357,6 +357,7 @@ extension ContentView {
             webSocketTask?.cancel(with: .goingAway, reason: nil)
             webSocketTask = nil
             progress = 0.0
+
         case .grok:
             guard let url = URL(string: "https://api.x.ai/v1/images/generations") else {
                 throw GenerationError.invalidURL
@@ -404,18 +405,112 @@ extension ContentView {
                     }
                 }
             }
-            
-            appState.ui.responseText = textOutput.isEmpty ? "No text output." : textOutput
-            appState.ui.outputImage = savedImage
-            
-            if savedImage == nil {
-                appState.ui.responseText += "No image generated."
+        case .aimlapi:
+                    guard let url = URL(string: "https://api.aimlapi.com/v1/images/generations") else {
+                        throw GenerationError.invalidURL
+                    }
+                    
+                    let selectedAIMLModel = appState.settings.selectedAIMLModel
+                    var bodyDict: [String: Any] = [
+                        "model": selectedAIMLModel,
+                        "prompt": appState.prompt,
+                        "num_images": 1,
+                        "sync_mode": true,  // Wait for response
+                        "enable_safety_checker": true,
+                        "image_size": "square"
+                    ]
+                    
+                    // Optional: Add seed, image_size (e.g., for models requiring it)
+                    bodyDict["seed"] = Int(Date().timeIntervalSince1970)
+//                    bodyDict["image_size"] = "1024x1024"  // Default; consider making configurable
+                    
+                    // Image handling for i2i/edit models
+                    if !appState.ui.imageSlots.isEmpty && selectedAIMLModel.contains("edit") {
+                        var imageUrls: [String] = []
+                        for slot in appState.ui.imageSlots {
+                            if let image = slot.image, let pngData = image.platformPngData() {
+                                let safeData = stripExif(from: pngData) ?? pngData
+                                let base64 = safeData.base64EncodedString()
+                                imageUrls.append("data:image/png;base64,\(base64)")
+                            }
+                        }
+                        if !imageUrls.isEmpty {
+                            bodyDict["image_urls"] = imageUrls  // Up to 10
+                        } else {
+                            throw GenerationError.noOutputImage  // Require images for edit models
+                        }
+                    } else if appState.ui.imageSlots.isEmpty && selectedAIMLModel.contains("edit") {
+                        appState.ui.responseText += "Edit model selected without images; treating as t2i if possible.\n"
+                    } else if !appState.ui.imageSlots.isEmpty && !selectedAIMLModel.contains("edit") {
+                        throw GenerationError.apiError("Text-to-image model selected with input images; select an edit/i2i model.")
+                    }
+            //print bodyDict
+            do {
+                let jsonData = try JSONSerialization.data(withJSONObject: bodyDict, options: .prettyPrinted)
+                if let jsonString = String(data: jsonData, encoding: .utf8) {
+                    print("bodyDict as JSON: \(jsonString)")
+                }
+            } catch {
+                print("Failed to serialize bodyDict: \(error)")
             }
+                    
+                    var request = URLRequest(url: url)
+                    request.httpMethod = "POST"
+                    request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+                    request.addValue("Bearer \(appState.settings.aimlapiKey)", forHTTPHeaderField: "Authorization")
+                    
+                    do {
+                        request.httpBody = try JSONSerialization.data(withJSONObject: bodyDict)
+                    } catch {
+                        throw GenerationError.encodingFailed(error.localizedDescription)
+                    }
+                    
+                    try Task.checkCancellation()
+                    let (data, _) = try await URLSession.shared.data(for: request)
+                    print(String(data: data, encoding: .utf8) ?? "No data")  // Add for debugging, like in .gemini
+                    
+                    let response = try JSONDecoder().decode(GrokImageResponse.self, from: data)  // Compatible; should decode without issues
+                    
+                    // Complete parsing (copied/adapted from .grok)
+                    var textOutput = ""
+                    var savedImage: PlatformImage? = nil
+                    var savedPath: String? = nil
+                    
+                    if let item = response.data.first {
+                        if let revised = item.revised_prompt {
+                            textOutput += "Revised prompt: \(revised)\n"
+                        }
+                        
+                        if let b64 = item.b64_json, let imgData = Data(base64Encoded: b64) {
+                            savedImage = PlatformImage(platformData: imgData)
+                            savedPath = saveGeneratedImage(data: imgData)
+                            if let saved = savedPath {
+                                textOutput += "Image saved to \(saved)\n"
+                            }
+                        } else if let imageUrl = item.url, let url = URL(string: imageUrl) {
+                            // Fallback: Download from URL if no b64_json (rare, but handles variations)
+                            let (imgData, _) = try await URLSession.shared.data(from: url)
+                            savedImage = PlatformImage(platformData: imgData)
+                            savedPath = saveGeneratedImage(data: imgData)
+                            if let saved = savedPath {
+                                textOutput += "Image downloaded and saved to \(saved)\n"
+                            }
+                        }
+                    }
+                    
+                    appState.ui.responseText = textOutput.isEmpty ? "No text output." : textOutput
+                    appState.ui.outputImage = savedImage
+                    
+                    if savedImage == nil {
+                        appState.ui.responseText += "No image generated."
+                    }
+                    
+                    let newItem = HistoryItem(prompt: appState.prompt, responseText: appState.ui.responseText, imagePath: savedPath, date: Date(), mode: appState.settings.mode, workflowName: nil)
+                    appState.historyState.history.append(newItem)
+                    appState.historyState.saveHistory()
+                }
             
-            let newItem = HistoryItem(prompt: appState.prompt, responseText: appState.ui.responseText, imagePath: savedPath, date: Date(), mode: appState.settings.mode, workflowName: nil)
-            appState.historyState.history.append(newItem)
-            appState.historyState.saveHistory()
-        }
+
     }
     
     func stopGeneration() {
