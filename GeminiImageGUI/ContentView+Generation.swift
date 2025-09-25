@@ -417,7 +417,7 @@ extension ContentView {
                         "num_images": 1,
                         "sync_mode": true,  // Wait for response
                         "enable_safety_checker": true,
-                        "image_size": "square"
+                        "image_size": appState.settings.selectedImageSize
                     ]
                     
                     // Optional: Add seed, image_size (e.g., for models requiring it)

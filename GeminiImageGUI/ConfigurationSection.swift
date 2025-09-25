@@ -91,6 +91,11 @@ struct ConfigurationSection: View {
             .padding(.bottom, isCompact ? 4 : 8)
             .help("Select the generation mode: Gemini, ComfyUI, or Grok")
             .accessibilityLabel("Generation mode selector")
+            .onChange(of: appState.settings.mode) { newMode in
+                if newMode == .aimlapi && !appState.settings.aimlapiKey.isEmpty {
+                    fetchAvailableModels()
+                }
+            }
             
             switch appState.settings.mode {
             case .gemini:
@@ -373,6 +378,7 @@ struct ConfigurationSection: View {
         VStack(alignment: .leading, spacing: isCompact ? 12 : 16) {
             aimlApiKeyRow
             aimlModelRow  // Dynamic Picker
+            aimlImageSizeRow
         }
     }
     
@@ -388,12 +394,21 @@ struct ConfigurationSection: View {
                     TextField("Enter or paste AI/ML API key", text: $appState.settings.aimlapiKey)
                         .onChange(of: appState.settings.aimlapiKey) { newValue in
                             handleAIMLAPIKeyChange(newValue)
+                            if !newValue.isEmpty {
+                                fetchAvailableModels()
+                            }
                         }
+                        .help("Visible AI/ML API key input")
+
                 } else {
                     SecureField("Enter or paste AI/ML API key", text: $appState.settings.aimlapiKey)
                         .onChange(of: appState.settings.aimlapiKey) { newValue in
                             handleAIMLAPIKeyChange(newValue)
+                            if !newValue.isEmpty {
+                                fetchAvailableModels()
+                            }
                         }
+                        .help("Hidden AI/ML API key input")
                 }
             }
             .textFieldStyle(.roundedBorder)
@@ -402,6 +417,7 @@ struct ConfigurationSection: View {
             .cornerRadius(8)
             .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.4), lineWidth: 1))
             .autocorrectionDisabled()
+            .accessibilityLabel("AI/ML API key input")
             
             // Toggle, paste, test buttons (copy from grokApiKeyRow, rename to AIML)
             // ...
@@ -442,6 +458,28 @@ struct ConfigurationSection: View {
                 .help("Available t2i/i2i models from AI/ML API")
                 .accessibilityLabel("AI/ML model selector")
             }
+        }
+    }
+    @ViewBuilder
+    private var aimlImageSizeRow: some View {
+        HStack(spacing: isCompact ? 8 : 16) {
+            Text("Image Size:")
+                .font(labelFont)
+                .foregroundColor(.secondary)
+                .help("Select the output image aspect ratio")
+                .fixedSize()
+            Picker("", selection: $appState.settings.selectedImageSize) {
+                Text("Square HD").tag("square_hd")
+                Text("Square").tag("square")
+                Text("Portrait 4:3").tag("portrait_4_3")
+                Text("Portrait 16:9").tag("portrait_16_9")
+                Text("Landscape 4:3").tag("landscape_4_3")
+                Text("Landscape 16:9").tag("landscape_16_9")
+            }
+            .pickerStyle(.menu)
+            .frame(width: 200)
+            .help("Choose the size; model-dependent")
+            .accessibilityLabel("Image size selector")
         }
     }
     

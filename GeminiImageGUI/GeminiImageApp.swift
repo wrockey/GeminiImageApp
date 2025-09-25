@@ -34,6 +34,7 @@ class SettingsState: ObservableObject {
     @Published var selectedGrokModel: String = "grok-2-image-1212"  // Added: Default model, options: ["grok-2-image-1212", "aurora"]
     @Published var aimlapiKey: String = KeychainHelper.loadAIMLAPIKey() ?? ""  // New
     @Published var selectedAIMLModel: String = ""  // New: Selected from fetched models
+    @Published var selectedImageSize: String = "square_hd"  // New: Default enum
 }
 
 class GenerationState: ObservableObject {

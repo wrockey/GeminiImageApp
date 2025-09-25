@@ -210,10 +210,10 @@ struct HistoryView: View {
                     .foregroundColor(.secondary)
                     .help("Date: \(dateFormatter.string(from: item.date))")
                 if let mode = item.mode {
-                    Text(mode == .gemini ? "Gemini" : mode == .grok ? appState.settings.selectedGrokModel : (item.workflowName ?? "ComfyUI"))
+                    Text(mode == .gemini ? "Gemini" : mode == .grok ? appState.settings.selectedGrokModel : mode == .aimlapi ? appState.settings.selectedAIMLModel : (item.workflowName ?? "ComfyUI"))
                         .font(.caption)
                         .foregroundColor(.secondary)
-                        .help("Generated with: \(mode == .gemini ? "Gemini" : mode == .grok ? "Grok" : (item.workflowName ?? "ComfyUI"))")
+                        .help("Generated with: \(mode == .gemini ? "Gemini" : mode == .grok ? "Grok" : mode == .aimlapi ? appState.settings.selectedAIMLModel : (item.workflowName ?? "ComfyUI"))")
                 }
             }
             
@@ -590,7 +590,7 @@ struct FullHistoryItemView: View {
                                 .foregroundColor(.gray)
                                 .help("Date the image was generated")
                             if let mode = item.mode {
-                                    Text(mode == .gemini ? "Gemini" : mode == .grok ? appState.settings.selectedGrokModel : (item.workflowName ?? "ComfyUI"))
+                                Text(mode == .gemini ? "Gemini" : mode == .grok ? appState.settings.selectedGrokModel : mode == .aimlapi ? appState.settings.selectedAIMLModel : (item.workflowName ?? "ComfyUI"))
                                     .font(.system(size: 10))
                                     .foregroundColor(.gray)
                                     .help("Generation mode or workflow used")
@@ -765,7 +765,7 @@ struct FullHistoryItemView: View {
                 print("Current prompt: \(item.prompt)")
                 print("Current date: \(dateFormatter.string(from: item.date))")
                if let mode = item.mode {
-                print("Created with: \(mode == .gemini ? "Gemini" : mode == .grok ? appState.settings.selectedGrokModel : item.workflowName ?? "ComfyUI")")
+                   print("Created with: \(mode == .gemini ? "Gemini" : mode == .grok ? appState.settings.selectedGrokModel : mode == .aimlapi ? appState.settings.selectedAIMLModel : item.workflowName ?? "ComfyUI")")
                 }
             } else {
                 print("No item found for selected ID")
