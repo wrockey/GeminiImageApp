@@ -27,11 +27,13 @@ extension ContentView {
         }
         
         // Check if prompt is safe
-        if !ContentView.isPromptSafe(appState.prompt) {
-            errorMessage = "Prompt contains inappropriate content. Please revise and try again."
-            showErrorAlert = true
-            return
-        }
+        let (isSafe, offendingPhrases) = ContentView.isPromptSafe(appState.prompt)
+                if !isSafe {
+                    let phrasesList = offendingPhrases.joined(separator: ", ")
+                    errorMessage = "Prompt contains inappropriate content. Offending phrase(s): \(phrasesList). Please revise and try again."
+                    showErrorAlert = true
+                    return
+                }
         
         isLoading = true
         errorMessage = nil

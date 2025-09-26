@@ -112,14 +112,24 @@ extension ContentView {
             return
         }
         
-        // New: Check each prompt in batch for safety
-        for prompt in appState.batchPrompts {
-            if !ContentView.isPromptSafe(prompt) {
-                errorMessage = "One or more prompts contain inappropriate content. Please revise."
-                showErrorAlert = true
-                return
-            }
-        }
+        // Check each prompt in batch for safety
+                var offendingPrompts: [(prompt: String, phrases: [String])] = []
+                for prompt in appState.batchPrompts {
+                    let (isSafe, offendingPhrases) = ContentView.isPromptSafe(prompt)
+                    if !isSafe {
+                        offendingPrompts.append((prompt: prompt, phrases: offendingPhrases))
+                    }
+                }
+                
+                if !offendingPrompts.isEmpty {
+                    let errorDetails = offendingPrompts.map { promptInfo in
+                        let phrasesList = promptInfo.phrases.joined(separator: ", ")
+                        return "Prompt '\(promptInfo.prompt)' contains: \(phrasesList)"
+                    }.joined(separator: "\n")
+                    errorMessage = "One or more prompts contain inappropriate content:\n\(errorDetails).\nPlease revise and try again."
+                    showErrorAlert = true
+                    return
+                }
         
         let start = batchStartIndex
         let end = batchEndIndex
