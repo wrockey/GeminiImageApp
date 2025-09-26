@@ -440,15 +440,30 @@ extension ContentView {
             }
             
             let selectedAIMLModel = appState.settings.selectedAIMLModel
-            var bodyDict: [String: Any] = [
-                "model": selectedAIMLModel,
-                "prompt": appState.prompt,
-                "num_images": 1,
-                "sync_mode": true,
-                "enable_safety_checker": true,
-                "image_size": appState.settings.selectedImageSize
-            ]
-            
+            var bodyDict: [String: Any]
+            if appState.settings.supportsCustomResolution {
+                bodyDict = [
+                    "model": selectedAIMLModel,
+                    "prompt": appState.prompt,
+                    "num_images": 1,
+                    "sync_mode": true,
+                    "enable_safety_checker": true,
+                    "image_size": [
+                        "width": appState.settings.selectedImageWidth,
+                        "height": appState.settings.selectedImageHeight
+                    ]
+                ]
+            }
+            else {
+                bodyDict = [
+                    "model": selectedAIMLModel,
+                    "prompt": appState.prompt,
+                    "num_images": 1,
+                    "sync_mode": true,
+                    "enable_safety_checker": true,
+                    "image_size": appState.settings.selectedImageSize
+                ]
+            }
             // Optional: Add seed
             bodyDict["seed"] = Int(Date().timeIntervalSince1970)
             

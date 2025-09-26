@@ -35,6 +35,19 @@ class SettingsState: ObservableObject {
     @Published var aimlapiKey: String = KeychainHelper.loadAIMLAPIKey() ?? ""  // New
     @Published var selectedAIMLModel: String = ""  // New: Selected from fetched models
     @Published var selectedImageSize: String = "square_hd"  // New: Default enum
+    @Published var selectedResolutionString : String = "1024x1024"
+    @Published var selectedImageHeight : Int = 1024
+    @Published var selectedImageWidth : Int = 1024
+    var supportsCustomResolution: Bool {
+        let supportingModels = [
+            "bytedance/seedream-v4-text-to-image",
+            "bytedance/seedream-v4-edit",
+            "black-forest-labs/flux-pro",
+            "black-forest-labs/flux-realism"
+            // Add more models here if needed, based on API docs
+        ]
+        return supportingModels.contains(selectedAIMLModel)
+    }
 }
 
 class GenerationState: ObservableObject {
@@ -285,6 +298,8 @@ class AppState: ObservableObject {
     @Published var historyState = HistoryState()
     @Published var ui = UIState()
     @Published var prompt: String = ""
+    
+    
     
     #if os(iOS)
     @Published var showFullHistoryItem: UUID? = nil

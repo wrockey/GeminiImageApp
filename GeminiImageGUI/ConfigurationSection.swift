@@ -379,6 +379,7 @@ struct ConfigurationSection: View {
             aimlApiKeyRow
             aimlModelRow  // Dynamic Picker
             aimlImageSizeRow
+            aimlResolutionRow
         }
     }
     
@@ -462,26 +463,78 @@ struct ConfigurationSection: View {
     }
     @ViewBuilder
     private var aimlImageSizeRow: some View {
-        HStack(spacing: isCompact ? 8 : 16) {
-            Text("Image Size:")
-                .font(labelFont)
-                .foregroundColor(.secondary)
-                .help("Select the output image aspect ratio")
-                .fixedSize()
-            Picker("", selection: $appState.settings.selectedImageSize) {
-                Text("Square HD").tag("square_hd")
-                Text("Square").tag("square")
-                Text("Portrait 4:3").tag("portrait_4_3")
-                Text("Portrait 16:9").tag("portrait_16_9")
-                Text("Landscape 4:3").tag("landscape_4_3")
-                Text("Landscape 16:9").tag("landscape_16_9")
+        if !appState.settings.supportsCustomResolution {
+            HStack(spacing: isCompact ? 8 : 16) {
+                Text("Image Size:")
+                    .font(labelFont)
+                    .foregroundColor(.secondary)
+                    .help("Select the output image aspect ratio")
+                    .fixedSize()
+                Picker("", selection: $appState.settings.selectedImageSize) {
+                    Text("Square HD").tag("square_hd")
+                    Text("Square").tag("square")
+                    Text("Portrait 4:3").tag("portrait_4_3")
+                    Text("Portrait 16:9").tag("portrait_16_9")
+                    Text("Landscape 4:3").tag("landscape_4_3")
+                    Text("Landscape 16:9").tag("landscape_16_9")
+                }
+                .pickerStyle(.menu)
+                .frame(width: 200)
+                .help("Choose the size; model-dependent")
+                .accessibilityLabel("Image size selector")
             }
-            .pickerStyle(.menu)
-            .frame(width: 200)
-            .help("Choose the size; model-dependent")
-            .accessibilityLabel("Image size selector")
+        }
+        else {
+            EmptyView()
         }
     }
+
+    @ViewBuilder
+    private var aimlResolutionRow: some View {
+        if appState.settings.supportsCustomResolution {
+            HStack(spacing: isCompact ? 8 : 16) {
+                Text("Resolution:")
+                    .font(labelFont)
+                    .foregroundColor(.secondary)
+                    .help("Select a common resolution (multiples of 32)")
+                    .fixedSize()
+                Picker("", selection: $appState.settings.selectedResolutionString) {
+                Text("512 x 512").tag("512x512")
+                Text("1024 x 1024").tag("1024x1024")
+                Text("2048 x 2048").tag("2048x2048")
+                Text("1024 x 768 (Landscape 4:3)").tag("1024x768")
+                Text("768 x 1024 (Portrait 4:3)").tag("768x1024")
+                Text("1024 x 576 (Landscape 16:9)").tag("1024x576")
+                Text("576 x 1024 (Portrait 16:9)").tag("576x1024")
+                Text("1536 x 864 (Landscape 16:9 HD)").tag("1536x864")
+                Text("1920 x 1088 (Full HD Landscape 16:9)").tag("1920x1088")
+                Text("1088 x 1920 (Full HD Portrait 16:9)").tag("1088x1920")
+                Text("3840 x 2176 (4K UHD Landscape 16:9)").tag("3840x2176")
+                Text("2176 x 3840 (4K UHD Portrait 16:9)").tag("2176x3840")
+                Text("4096 x 4096 (4K Square)").tag("4096x4096")
+            }
+            .pickerStyle(.menu)
+            .frame(width: 300)  // Increased width to accommodate longer labels
+            .help("Choose resolution; model-dependent, multiples of 32")
+            .accessibilityLabel("Resolution selector")
+            .onChange(of: appState.settings.selectedResolutionString) {newValue in
+                let parts = newValue.split(separator: "x")
+                if parts.count == 2,
+                   let width = Int(parts[0]),
+                   let height = Int(parts[1]) {
+                    appState.settings.selectedImageWidth = width
+                    appState.settings.selectedImageHeight = height
+                }
+            }
+            .onAppear(){
+                if appState.settings.selectedResolutionString.isEmpty {
+                    appState.settings.selectedResolutionString = "1024x1024"
+                }
+            }
+        }
+    } else {
+        EmptyView()
+    }}
     
     @ViewBuilder
     private var comfyUIConfiguration: some View {
