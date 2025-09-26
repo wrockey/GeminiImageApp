@@ -434,6 +434,7 @@ struct FullHistoryItemView: View {
     @State private var showCopiedMessage: Bool = false
     @State private var showAddedMessage: Bool = false
     @State private var previousHistory: [HistoryItem] = []
+    @State private var isFullScreen: Bool = false
     
     private var dateFormatter: DateFormatter {
         let formatter = DateFormatter()
@@ -674,8 +675,8 @@ struct FullHistoryItemView: View {
                     .frame(maxWidth: .infinity)
                 }
             }
-            #if os(iOS)
             .overlay(alignment: .topTrailing) {
+                #if os(iOS)
                 Button(action: {
                     dismiss()
                 }) {
@@ -688,8 +689,23 @@ struct FullHistoryItemView: View {
                 .padding()
                 .help("Close full image view")
                 .accessibilityLabel("Close")
+                #elseif os(macOS)
+                if isFullScreen {
+                    Button(action: {
+                        dismiss()
+                    }) {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 24))
+                            .symbolRenderingMode(.hierarchical)
+                            .foregroundColor(.gray)
+                    }
+                    .buttonStyle(.plain)
+                    .padding()
+                    .help("Close full image view")
+                    .accessibilityLabel("Close")
+                }
+                #endif
             }
-            #endif
         }
         .ignoresSafeArea()
         .alert("Delete History Item", isPresented: $showDeleteAlert) {
@@ -739,6 +755,18 @@ struct FullHistoryItemView: View {
             selectedId = initialId
             previousHistory = history
             previousSelectedId = nil // Initialize previous
+            #if os(macOS)
+            updateWindowSize()
+            if let window = NSApp.windows.last {
+                isFullScreen = window.styleMask.contains(.fullScreen)
+            }
+            NotificationCenter.default.addObserver(forName: NSWindow.didEnterFullScreenNotification, object: nil, queue: .main) { _ in
+                isFullScreen = true
+            }
+            NotificationCenter.default.addObserver(forName: NSWindow.didExitFullScreenNotification, object: nil, queue: .main) { _ in
+                isFullScreen = false
+            }
+            #endif
         }
         .onChange(of: history) { newHistory in
             if let sid = selectedId, !newHistory.contains(where: { $0.id == sid }) {
@@ -857,5 +885,37 @@ struct FullHistoryItemView: View {
             newSlot.selectedPromptIndex = 0
         }
         appState.ui.imageSlots.append(newSlot)
+    }
+    
+    private func updateWindowSize() {
+        #if os(macOS)
+        guard let item = currentItem,
+              let platformImage = loadHistoryImage(for: item),
+              let window = NSApp.windows.last,
+              let screen = NSScreen.main else {
+            return
+        }
+        
+        let bottomHeight: CGFloat = 100  // Approximate height for bottom overlay
+        let minWidth: CGFloat = 400
+        let imageSize = platformImage.size  // Assuming .size for NSImage
+        var desiredSize = CGSize(width: max(imageSize.width, minWidth), height: imageSize.height + bottomHeight)
+        
+        // Account for screen visible area (excluding menu bar, dock, etc.)
+        let screenSize = screen.visibleFrame.size
+        let marginHorizontal: CGFloat = 40  // Small margin for sides
+        let marginVertical: CGFloat = 100   // Margin for top/bottom (menu bar, dock)
+        
+        let maxSize = CGSize(width: screenSize.width - marginHorizontal,
+                             height: screenSize.height - marginVertical)
+        
+        // Calculate scale to fit within max size if needed
+        let scale = min(1.0, min(maxSize.width / desiredSize.width, maxSize.height / desiredSize.height))
+        
+        let windowSize = CGSize(width: desiredSize.width * scale, height: desiredSize.height * scale)
+        
+        window.setContentSize(windowSize)
+        window.center()  // Center the window on the screen
+        #endif
     }
 }

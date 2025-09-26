@@ -83,11 +83,32 @@ struct PopOutView: View {
     
     private func updateWindowSize() {
         #if os(macOS)
-        if let platformImage = appState.ui.outputImage, let window = NSApp.windows.last {
-            let textHeight: CGFloat = 80
-            let size = CGSize(width: max(platformImage.platformSize.width, 400), height: platformImage.platformSize.height + textHeight)
-            window.setContentSize(size)
+        guard let platformImage = appState.ui.outputImage,
+              let window = NSApp.windows.last,
+              let screen = NSScreen.main else {
+            return
         }
+        
+        let textHeight: CGFloat = 80
+        let minWidth: CGFloat = 400
+        let imageSize = platformImage.platformSize
+        var desiredSize = CGSize(width: max(imageSize.width, minWidth), height: imageSize.height + textHeight)
+        
+        // Account for screen visible area (excluding menu bar, dock, etc.)
+        let screenSize = screen.visibleFrame.size
+        let marginHorizontal: CGFloat = 40  // Small margin for sides
+        let marginVertical: CGFloat = 100   // Margin for top/bottom (menu bar, dock)
+        
+        let maxSize = CGSize(width: screenSize.width - marginHorizontal,
+                             height: screenSize.height - marginVertical)
+        
+        // Calculate scale to fit within max size if needed
+        let scale = min(1.0, min(maxSize.width / desiredSize.width, maxSize.height / desiredSize.height))
+        
+        let windowSize = CGSize(width: desiredSize.width * scale, height: desiredSize.height * scale)
+        
+        window.setContentSize(windowSize)
+        window.center()  // Center the window on the screen
         #endif
     }
 }
