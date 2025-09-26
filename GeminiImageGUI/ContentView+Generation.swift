@@ -509,47 +509,79 @@ extension ContentView {
             }
             
             try Task.checkCancellation()
-            let (data, _) = try await URLSession.shared.data(for: request)
+            let (data, urlResponse) = try await URLSession.shared.data(for: request)
             print(String(data: data, encoding: .utf8) ?? "No data")
             
-            let response = try JSONDecoder().decode(GrokImageResponse.self, from: data)
+            guard let httpResponse = urlResponse as? HTTPURLResponse else {
+                await MainActor.run {
+                    appState.ui.responseText = "API Error: Invalid response type"
+                }
+                return
+            }
             
-            var textOutput = ""
-            var savedImage: PlatformImage? = nil
-            var savedPath: String? = nil
-            
-            if let item = response.data.first {
-                if let revised = item.revised_prompt {
-                    textOutput += "Revised prompt: \(revised)\n"
+            if (200...299).contains(httpResponse.statusCode) {
+                let response = try JSONDecoder().decode(GrokImageResponse.self, from: data)
+                
+                var textOutput = ""
+                var savedImage: PlatformImage? = nil
+                var savedPath: String? = nil
+                
+                if let item = response.data.first {
+                    if let revised = item.revised_prompt {
+                        textOutput += "Revised prompt: \(revised)\n"
+                    }
+                    
+                    if let b64 = item.b64_json, let imgData = Data(base64Encoded: b64) {
+                        savedImage = PlatformImage(platformData: imgData)
+                        savedPath = saveGeneratedImage(data: imgData)
+                        if let saved = savedPath {
+                            textOutput += "Image saved to \(saved)\n"
+                        }
+                    } else if let imageUrl = item.url, let url = URL(string: imageUrl) {
+                        // Fallback: Download from URL if no b64_json (rare, but handles variations)
+                        let (imgData, _) = try await URLSession.shared.data(from: url)
+                        savedImage = PlatformImage(platformData: imgData)
+                        savedPath = saveGeneratedImage(data: imgData)
+                        if let saved = savedPath {
+                            textOutput += "Image downloaded and saved to \(saved)\n"
+                        }
+                    }
                 }
                 
-                if let b64 = item.b64_json, let imgData = Data(base64Encoded: b64) {
-                    savedImage = PlatformImage(platformData: imgData)
-                    savedPath = saveGeneratedImage(data: imgData)
-                    if let saved = savedPath {
-                        textOutput += "Image saved to \(saved)\n"
+                appState.ui.responseText = textOutput.isEmpty ? "No text output." : textOutput
+                appState.ui.outputImage = savedImage
+                
+                if savedImage == nil {
+                    appState.ui.responseText += "No image generated."
+                }
+                
+                let newItem = HistoryItem(prompt: appState.prompt, responseText: appState.ui.responseText, imagePath: savedPath, date: Date(), mode: appState.settings.mode, workflowName: nil, modelUsed: appState.settings.selectedAIMLModel)
+                appState.historyState.history.append(newItem)
+                appState.historyState.saveHistory()
+            } else {
+                // Handle API error
+                var errorMessage = "API Error: Status code \(httpResponse.statusCode)"
+                if let errorJson = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                    if let message = errorJson["message"] as? String {
+                        errorMessage = "API Error: \(message)"
                     }
-                } else if let imageUrl = item.url, let url = URL(string: imageUrl) {
-                    // Fallback: Download from URL if no b64_json (rare, but handles variations)
-                    let (imgData, _) = try await URLSession.shared.data(from: url)
-                    savedImage = PlatformImage(platformData: imgData)
-                    savedPath = saveGeneratedImage(data: imgData)
-                    if let saved = savedPath {
-                        textOutput += "Image downloaded and saved to \(saved)\n"
+                    if let meta = errorJson["meta"] as? [String: Any],
+                       let fieldErrors = meta["fieldErrors"] as? [String: [String]] {
+                        let messages = fieldErrors.flatMap { (field, errs) in
+                            errs.map { "\(field): \($0)" }
+                        }.joined(separator: "\n")
+                        if !messages.isEmpty {
+                            errorMessage += "\n\(messages)"
+                        }
+                    } else if let errorStr = errorJson["error"] as? String {
+                        errorMessage = "API Error: \(errorStr)"
                     }
                 }
+                await MainActor.run {
+                    appState.ui.responseText = errorMessage
+                }
+                return
             }
-            
-            appState.ui.responseText = textOutput.isEmpty ? "No text output." : textOutput
-            appState.ui.outputImage = savedImage
-            
-            if savedImage == nil {
-                appState.ui.responseText += "No image generated."
-            }
-            
-            let newItem = HistoryItem(prompt: appState.prompt, responseText: appState.ui.responseText, imagePath: savedPath, date: Date(), mode: appState.settings.mode, workflowName: nil, modelUsed: appState.settings.selectedAIMLModel)
-            appState.historyState.history.append(newItem)
-            appState.historyState.saveHistory()
         }
     }
     
