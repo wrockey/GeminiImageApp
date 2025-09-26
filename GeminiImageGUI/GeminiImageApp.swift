@@ -35,9 +35,9 @@ class SettingsState: ObservableObject {
     @Published var aimlapiKey: String = KeychainHelper.loadAIMLAPIKey() ?? ""  // New
     @Published var selectedAIMLModel: String = ""  // New: Selected from fetched models
     @Published var selectedImageSize: String = "square_hd"  // New: Default enum
-    @Published var selectedResolutionString : String = "1024x1024"
-    @Published var selectedImageHeight : Int = 1024
-    @Published var selectedImageWidth : Int = 1024
+    @Published var selectedResolutionString : String = "2048x2048"
+    @Published var selectedImageHeight : Int = 2048
+    @Published var selectedImageWidth : Int = 2048
     var supportsCustomResolution: Bool {
         let supportingModels = [
             "bytedance/seedream-v4-text-to-image",

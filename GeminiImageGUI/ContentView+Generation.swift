@@ -1,10 +1,11 @@
+//ContentView+Generation.swift
 #if os(iOS)
 import UIKit
 #endif
 #if os(macOS)
 import AppKit
 #endif
-import ImageIO // Required for CGImageSource/Destination APIs in stripExif
+import ImageIO // Still needed if other parts use it, but can remove if not
 
 struct GrokImageResponse: Codable {
     let created: Int?
@@ -74,10 +75,9 @@ extension ContentView {
             var parts: [Part] = [Part(text: appState.prompt, inlineData: nil)]
             
             for slot in appState.ui.imageSlots {
-                if let image = slot.image, let pngData = image.platformPngData() {
-                    let safeData = stripExif(from: pngData) ?? pngData // Strip EXIF before sending
-                    let base64 = safeData.base64EncodedString()
-                    let inline = InlineData(mimeType: "image/png", data: base64)
+                if let image = slot.image, let processed = processImageForUpload(image: image) {
+                    let base64 = processed.data.base64EncodedString()
+                    let inline = InlineData(mimeType: processed.mimeType, data: base64)
                     parts.append(Part(text: nil, inlineData: inline))
                 }
             }
@@ -215,8 +215,7 @@ extension ContentView {
             
             var uploadedFilename: String? = nil
             if !appState.generation.comfyImageNodeID.isEmpty && !appState.ui.imageSlots.isEmpty,
-               let image = appState.ui.imageSlots.first?.image, let pngData = image.platformPngData() {
-                let safeData = stripExif(from: pngData) ?? pngData // Strip EXIF before uploading
+               let image = appState.ui.imageSlots.first?.image, let processed = processImageForUpload(image: image) {
                 var uploadRequest = URLRequest(url: serverURL.appendingPathComponent("upload/image"))
                 uploadRequest.httpMethod = "POST"
                 
@@ -225,9 +224,10 @@ extension ContentView {
                 
                 var body = Data()
                 body.append("--\(boundary)\r\n".data(using: .utf8)!)
-                body.append("Content-Disposition: form-data; name=\"image\"; filename=\"input.png\"\r\n".data(using: .utf8)!)
-                body.append("Content-Type: image/png\r\n\r\n".data(using: .utf8)!)
-                body.append(safeData)
+                let fileExtension = processed.mimeType == "image/jpeg" ? "jpg" : "png"
+                body.append("Content-Disposition: form-data; name=\"image\"; filename=\"input.\(fileExtension)\"\r\n".data(using: .utf8)!)
+                body.append("Content-Type: \(processed.mimeType)\r\n\r\n".data(using: .utf8)!)
+                body.append(processed.data)
                 body.append("\r\n".data(using: .utf8)!)
                 body.append("--\(boundary)\r\n".data(using: .utf8)!)
                 body.append("Content-Disposition: form-data; name=\"type\"\r\n\r\ninput\r\n".data(using: .utf8)!)
@@ -471,10 +471,9 @@ extension ContentView {
             if !appState.ui.imageSlots.isEmpty && selectedAIMLModel.contains("edit") {
                 var imageUrls: [String] = []
                 for slot in appState.ui.imageSlots {
-                    if let image = slot.image, let pngData = image.platformPngData() {
-                        let safeData = stripExif(from: pngData) ?? pngData
-                        let base64 = safeData.base64EncodedString()
-                        imageUrls.append("data:image/png;base64,\(base64)")
+                    if let image = slot.image, let processed = processImageForUpload(image: image) {
+                        let base64 = processed.data.base64EncodedString()
+                        imageUrls.append("data:\(processed.mimeType);base64,\(base64)")
                     }
                 }
                 if !imageUrls.isEmpty {
@@ -612,18 +611,6 @@ extension ContentView {
         }.resume()
     }
     
-    private func stripExif(from imageData: Data) -> Data? {
-        guard let source = CGImageSourceCreateWithData(imageData as CFData, nil),
-              let type = CGImageSourceGetType(source),
-              let destination = CGImageDestinationCreateWithData(NSMutableData() as CFMutableData, type, 1, nil) else {
-            return nil
-        }
-        CGImageDestinationAddImageFromSource(destination, source, 0, nil) // Copies without metadata
-        guard CGImageDestinationFinalize(destination) else { return nil }
-        return (destination as? NSMutableData) as Data?
-    }
-    
-    // Show consent alert for Gemini
     @MainActor
     private func showGeminiConsentAlert() async -> Bool {
         await withCheckedContinuation { continuation in

@@ -528,7 +528,7 @@ struct ConfigurationSection: View {
             }
             .onAppear(){
                 if appState.settings.selectedResolutionString.isEmpty {
-                    appState.settings.selectedResolutionString = "1024x1024"
+                    appState.settings.selectedResolutionString = "2048x2048"
                 }
             }
         }
