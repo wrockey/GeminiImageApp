@@ -1,3 +1,4 @@
+//ContentView.swift
 import SwiftUI
 #if os(macOS)
 import AppKit
@@ -38,6 +39,28 @@ struct IdentifiableData: Identifiable, Codable, Hashable {
     init(data: Data) {
         self.id = UUID()
         self.data = data
+    }
+}
+
+enum PresentedModal: Identifiable {
+    case history
+    case responseSheet
+    case fullHistoryItem(UUID)
+    case markupSlot(UUID)
+    case fullImage(PlatformImage?)
+    case textEditor(IdentifiableData)
+    // Add cases for other modals like onboarding, help, etc., if they conflict
+    // e.g., case onboarding, case help(GenerationMode)
+
+    var id: String {
+        switch self {
+        case .history: return "history"
+        case .responseSheet: return "responseSheet"
+        case .fullHistoryItem(let uuid): return "fullHistoryItem_\(uuid.uuidString)"
+        case .markupSlot(let uuid): return "markupSlot_\(uuid.uuidString)"
+        case .fullImage: return "fullImage"
+        case .textEditor(let data): return "textEditor_\(data.id.uuidString)"
+        }
     }
 }
 
@@ -265,17 +288,17 @@ struct ContentView: View {
                         isTestingApi: $isTestingApi,
                         errorItem: $errorItem,
                         imageScale: $imageScale,
-                        showFullImage: $showFullImage,
+                        showFullImage: .constant(false),
                         isLoading: isLoading,
                         progress: progress,
                         isCancelled: $isCancelled,
                         onSubmit: submitPrompt,
                         onStop: stopGeneration,
                         onPopOut: {
-                            appState.showResponseSheet = true
+                            appState.presentedModal = .responseSheet
                         },
                         onAnnotate: { slotId in
-                            appState.showMarkupSlotId = slotId
+                            appState.presentedModal = .markupSlot(slotId)
                         },
                         onApiKeySelected: handleApiKeySelection,
                         onOutputFolderSelected: handleOutputFolderSelection,
@@ -284,7 +307,7 @@ struct ContentView: View {
                         onBatchSubmit: batchSubmit,
                         onEditBatchFile: {
                             if batchFilePath.isEmpty {
-                                showTextEditorBookmark = IdentifiableData(data: Data())
+                                appState.presentedModal = .textEditor(IdentifiableData(data: Data()))
                             } else if let bookmarkData = UserDefaults.standard.data(forKey: "batchFileBookmark") {
                                 // Validate bookmark before opening editor
                                 do {
@@ -298,18 +321,18 @@ struct ContentView: View {
                                     if resolvedURL.startAccessingSecurityScopedResource() {
                                         defer { resolvedURL.stopAccessingSecurityScopedResource() }
                                         if FileManager.default.fileExists(atPath: resolvedURL.path) {
-                                            showTextEditorBookmark = IdentifiableData(data: bookmarkData)
+                                            appState.presentedModal = .textEditor(IdentifiableData(data: bookmarkData))
                                         } else {
                                             clearBatchFile()
-                                            showTextEditorBookmark = IdentifiableData(data: Data())
+                                            appState.presentedModal = .textEditor(IdentifiableData(data: Data()))
                                         }
                                     } else {
                                         clearBatchFile()
-                                        showTextEditorBookmark = IdentifiableData(data: Data())
+                                        appState.presentedModal = .textEditor(IdentifiableData(data: Data()))
                                     }
                                 } catch {
                                     clearBatchFile()
-                                    showTextEditorBookmark = IdentifiableData(data: Data())
+                                    appState.presentedModal = .textEditor(IdentifiableData(data: Data()))
                                 }
                             } else {
                                 errorItem = AlertError(message: "Failed to access batch file.")
@@ -328,40 +351,71 @@ struct ContentView: View {
             .toolbar {
                 toolbar
             }
-            .fullScreenCover(isPresented: $showHistory) {
-                HistoryView(imageSlots: $appState.ui.imageSlots, columnVisibility: $columnVisibility)
-                    .environmentObject(appState)
-            }
-            .fullScreenCover(isPresented: Binding(get: { appState.showResponseSheet }, set: { appState.showResponseSheet = $0 })) {
-                PopOutView()
-                    .environmentObject(appState)
-            }
-            .sheet(isPresented: Binding(
-                get: { appState.showFullHistoryItem != nil },
-                set: { if !$0 { appState.showFullHistoryItem = nil } }
-            )) {
-                if let id = appState.showFullHistoryItem {
+            // Consolidated single fullScreenCover
+            .fullScreenCover(item: $appState.presentedModal) { modal in
+                switch modal {
+                case .history:
+                    HistoryView(imageSlots: $appState.ui.imageSlots, columnVisibility: $columnVisibility)
+                        .environmentObject(appState)
+                case .responseSheet:
+                    PopOutView()
+                        .environmentObject(appState)
+                case .fullHistoryItem(let id):
                     FullHistoryItemView(initialId: id)
+                        .environmentObject(appState)
+                case .markupSlot(let slotId):
+                    if let index = appState.ui.imageSlots.firstIndex(where: { $0.id == slotId }),
+                       let image = appState.ui.imageSlots[index].image {
+                        let path = appState.ui.imageSlots[index].path
+                        let fileURL = URL(filePath: path)
+                        let lastComponent = fileURL.lastPathComponent
+                        let components = lastComponent.components(separatedBy: ".")
+                        let baseFileName = components.count > 1 ? components.dropLast().joined(separator: ".") : (lastComponent.isEmpty ? "image" : lastComponent)
+                        let fileExtension = components.count > 1 ? components.last! : "png"
+                        MarkupView(image: image, baseFileName: baseFileName, fileExtension: fileExtension) { updatedImage in
+                            appState.ui.imageSlots[index].image = updatedImage
+                        }
+                        .navigationTitle("Annotate Image")
+                    }
+                case .fullImage(let image):
+                    if let image = image {
+                        FullImageView(image: image)
+                    }
+                case .textEditor(let identifiable):
+                    TextEditorView(bookmarkData: identifiable.data, batchFilePath: $batchFilePath)
+                        .presentationDetents([.large])
+                        .presentationDragIndicator(.visible)
                         .environmentObject(appState)
                 }
             }
-            .fullScreenCover(item: $appState.showMarkupSlotId) { slotId in
-                if let index = appState.ui.imageSlots.firstIndex(where: { $0.id == slotId }),
-                   let image = appState.ui.imageSlots[index].image {
-                    let path = appState.ui.imageSlots[index].path
-                    let fileURL = URL(filePath: path)
-                    let lastComponent = fileURL.lastPathComponent
-                    let components = lastComponent.components(separatedBy: ".")
-                    let baseFileName = components.count > 1 ? components.dropLast().joined(separator: ".") : (lastComponent.isEmpty ? "image" : lastComponent)
-                    let fileExtension = components.count > 1 ? components.last! : "png"
-                    MarkupView(image: image, baseFileName: baseFileName, fileExtension: fileExtension) { updatedImage in
-                        appState.ui.imageSlots[index].image = updatedImage
-                    }
-                    .navigationTitle("Annotate Image")
+        }
+        .workflowErrorAlert(appState: appState)
+        .errorAlert(errorItem: $errorItem)
+        .successAlert(showSuccessAlert: $showSuccessAlert, successMessage: successMessage)
+        .onboardingSheet(showOnboarding: $showOnboarding)
+        .helpSheet(showHelp: $showHelp, mode: appState.settings.mode)
+        .selectFolderAlert(isPresented: $showSelectFolderAlert) {
+            print("Showing output folder picker from alert")
+            PlatformFilePicker.presentOpenPanel(allowedTypes: [.folder], allowsMultiple: false, canChooseDirectories: true) { result in
+                handleOutputFolderSelection(result)
+                if !outputPath.isEmpty {
+                    pendingAction?()
+                    pendingAction = nil
                 }
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .batchFileUpdated)) { _ in
+            loadBatchPrompts()
+        }
+        .onAppear {
+            performOnAppear()
+            validateBatchFileBookmark()
+        }
+        .onChange(of: appState.ui.outputImage) { _ in
+            imageScale = 1.0
+        }
     }
+    
     #else
     @ViewBuilder
     private var macOSLayout: some View {
@@ -486,7 +540,7 @@ private var toolbar: some ToolbarContent {
             
             Button(action: {
                 #if os(iOS)
-                showHistory.toggle()
+                appState.presentedModal = .history
                 #else
                 withAnimation(.easeInOut(duration: 0.3)) {
                     columnVisibility = columnVisibility == .all ? .detailOnly : .all

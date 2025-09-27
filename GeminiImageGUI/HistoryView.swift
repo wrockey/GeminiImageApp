@@ -77,12 +77,7 @@ struct HistoryView: View {
         } message: {
             Text("Are you sure you want to clear the history?")
         }
-        #if os(iOS)
-        .fullScreenCover(item: $fullHistoryItemId) { id in
-            FullHistoryItemView(initialId: id)
-                .environmentObject(appState)
-        }
-        #endif
+
         #if os(iOS)
         .overlay {
             if showAddedMessage {
@@ -228,7 +223,7 @@ struct HistoryView: View {
                     // Fallback for older macOS if needed
                 }
                 #else
-                fullHistoryItemId = item.id
+                appState.presentedModal = .fullHistoryItem(item.id)
                 #endif
             }) {
                 Image(systemName: "magnifyingglass.circle.fill")

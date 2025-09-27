@@ -305,6 +305,7 @@ class AppState: ObservableObject {
     @Published var showFullHistoryItem: UUID? = nil
     @Published var showMarkupSlotId: UUID? = nil
     @Published var showResponseSheet: Bool = false
+    @Published var presentedModal: PresentedModal? = nil
     #endif
     
     @Published var batchPrompts: [String] = []
