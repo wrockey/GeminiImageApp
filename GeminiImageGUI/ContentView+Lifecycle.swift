@@ -7,7 +7,7 @@ extension ContentView {
  //     UserDefaults.standard.removeObject(forKey: "hasLaunchedBefore")
         UserDefaults.standard.removeObject(forKey: "hasShownGeminiConsent")  // If testing Gemini consent too
         UserDefaults.standard.removeObject(forKey: "hasShownGrokConsent")
-        UserDefaults.standard.removeObject(forKey: "hasShownAIMLApiConsent")
+        UserDefaults.standard.removeObject(forKey: "hasShownAIMLConsent")
 
     
         // Quick synchronous stuff
