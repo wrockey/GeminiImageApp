@@ -47,7 +47,6 @@ enum PresentedModal: Identifiable {
     case responseSheet
     case fullHistoryItem(UUID)
     case markupSlot(UUID)
-    case fullImage(PlatformImage?)
     case textEditor(IdentifiableData)
     // Add cases for other modals like onboarding, help, etc., if they conflict
     // e.g., case onboarding, case help(GenerationMode)
@@ -58,7 +57,6 @@ enum PresentedModal: Identifiable {
         case .responseSheet: return "responseSheet"
         case .fullHistoryItem(let uuid): return "fullHistoryItem_\(uuid.uuidString)"
         case .markupSlot(let uuid): return "markupSlot_\(uuid.uuidString)"
-        case .fullImage: return "fullImage"
         case .textEditor(let data): return "textEditor_\(data.id.uuidString)"
         }
     }
@@ -75,15 +73,6 @@ extension View {
             Text(appState.generation.workflowError ?? "Unknown error")
         }
         .accessibilityLabel("Workflow Error Alert")
-    }
-    
-    func fullImageSheet(showFullImage: Binding<Bool>, outputImage: PlatformImage?) -> some View {
-        sheet(isPresented: showFullImage) {
-            if let outputImage = outputImage {
-                FullImageView(image: outputImage)
-            }
-        }
-        .accessibilityLabel("Full Image View Sheet")
     }
     
     func errorAlert(errorItem: Binding<AlertError?>) -> some View {
@@ -169,7 +158,6 @@ struct ContentView: View {
     @State var showOnboarding: Bool = false
     @State var imageScale: CGFloat = 1.0
     @State var isTestingApi: Bool = false
-    @State var showFullImage: Bool = false
     @State var showAnnotationSheet: Bool = false
     @State var selectedSlotId: UUID?
     @State var batchFilePath: String = ""
@@ -208,7 +196,6 @@ struct ContentView: View {
         #if os(iOS)
         iOSLayout
             .workflowErrorAlert(appState: appState)
-            .fullImageSheet(showFullImage: $showFullImage, outputImage: appState.ui.outputImage)
             .errorAlert(errorItem: $errorItem)
             .successAlert(showSuccessAlert: $showSuccessAlert, successMessage: successMessage)
             .onboardingSheet(showOnboarding: $showOnboarding)
@@ -242,7 +229,6 @@ struct ContentView: View {
         #else
         macOSLayout
             .workflowErrorAlert(appState: appState)
-            .fullImageSheet(showFullImage: $showFullImage, outputImage: appState.ui.outputImage)
             .errorAlert(errorItem: $errorItem)
             .successAlert(showSuccessAlert: $showSuccessAlert, successMessage: successMessage)
             .onboardingSheet(showOnboarding: $showOnboarding)
@@ -288,7 +274,6 @@ struct ContentView: View {
                         isTestingApi: $isTestingApi,
                         errorItem: $errorItem,
                         imageScale: $imageScale,
-                        showFullImage: .constant(false),
                         isLoading: isLoading,
                         progress: progress,
                         isCancelled: $isCancelled,
@@ -377,10 +362,6 @@ struct ContentView: View {
                         }
                         .navigationTitle("Annotate Image")
                     }
-                case .fullImage(let image):
-                    if let image = image {
-                        FullImageView(image: image)
-                    }
                 case .textEditor(let identifiable):
                     TextEditorView(bookmarkData: identifiable.data, batchFilePath: $batchFilePath)
                         .presentationDetents([.large])
@@ -436,7 +417,6 @@ struct ContentView: View {
                     isTestingApi: $isTestingApi,
                     errorItem: $errorItem,
                     imageScale: $imageScale,
-                    showFullImage: $showFullImage,
                     isLoading: isLoading,
                     progress: progress,
                     isCancelled: $isCancelled,

@@ -4,7 +4,6 @@ import SwiftUI
 struct ResponseSection: View {
     @EnvironmentObject var appState: AppState
     @Binding var imageScale: CGFloat
-    @Binding var showFullImage: Bool
     @Binding var errorItem: AlertError?
     @Environment(\.colorScheme) var colorScheme
     

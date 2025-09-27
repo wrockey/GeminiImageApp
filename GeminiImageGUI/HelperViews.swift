@@ -375,64 +375,6 @@ struct HelpView: View {
     }
 }
 
-struct FullImageView: View {
-    let image: PlatformImage
-    
-    @Environment(\.dismiss) var dismiss
-    
-    var body: some View {
-        VStack {
-            ScrollView {
-                Image(platformImage: image)
-                    .resizable()
-                    .scaledToFit()
-            }
-            
-            HStack {
-                Button(action: {
-                    PlatformPasteboard.clearContents()
-                    PlatformPasteboard.writeImage(image)
-                }) {
-                    Image(systemName: "doc.on.doc")
-                }
-                .help("Copy to Clipboard")
-                
-                Button(action: {
-                    #if os(macOS)
-                    let panel = NSSavePanel()
-                    panel.allowedContentTypes = [.png]
-                    panel.nameFieldStringValue = "generated_image.png"
-                    
-                    if panel.runModal() == .OK, let url = panel.url {
-                        if let pngData = image.platformPngData() {
-                            try? pngData.write(to: url)
-                        }
-                    }
-                    #elseif os(iOS)
-                    PHPhotoLibrary.requestAuthorization { status in
-                        if status == .authorized {
-                            UIImageWriteToSavedPhotosAlbum(image, nil, nil, nil)
-                        }
-                    }
-                    #endif
-                }) {
-                    Image(systemName: "square.and.arrow.down")
-                }
-                .help("Save Image")
-                
-                Button(action: {
-                    dismiss()
-                }) {
-                    Image(systemName: "xmark")
-                }
-                .help("Close")
-            }
-        }
-        .frame(width: image.platformSize.width, height: image.platformSize.height + 50)
-        .padding()
-    }
-}
-
 struct LoadingView: View {
     let mode: GenerationMode
     let progress: Double

@@ -18,7 +18,6 @@ struct MainFormView: View {
     @Binding var isTestingApi: Bool
     @Binding var errorItem: AlertError?
     @Binding var imageScale: CGFloat
-    @Binding var showFullImage: Bool
     @State private var isUnsafe: Bool = false  // State for safety feedback
     let isLoading: Bool
     let progress: Double
@@ -515,7 +514,6 @@ struct MainFormView: View {
                 DisclosureGroup(isExpanded: $responseExpanded) {
                     ResponseSection(
                         imageScale: $imageScale,
-                        showFullImage: $showFullImage,
                         errorItem: $errorItem
                     )
                 } label: {
