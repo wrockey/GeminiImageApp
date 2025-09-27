@@ -16,8 +16,7 @@ struct MainFormView: View {
     @Binding var apiKeyPath: String
     @Binding var outputPath: String
     @Binding var isTestingApi: Bool
-    @Binding var errorMessage: String?
-    @Binding var showErrorAlert: Bool
+    @Binding var errorItem: AlertError?
     @Binding var imageScale: CGFloat
     @Binding var showFullImage: Bool
     @State private var isUnsafe: Bool = false  // State for safety feedback
@@ -103,8 +102,7 @@ struct MainFormView: View {
                         apiKeyPath: $apiKeyPath,
                         outputPath: $outputPath,
                         isTestingApi: $isTestingApi,
-                        errorMessage: $errorMessage,
-                        showErrorAlert: $showErrorAlert,
+                        errorItem: $errorItem,
                         onApiKeySelected: onApiKeySelected,
                         onOutputFolderSelected: onOutputFolderSelected,
                         onComfyJSONSelected: onComfyJSONSelected
@@ -166,8 +164,7 @@ struct MainFormView: View {
                 DisclosureGroup(isExpanded: $inputImagesExpanded) {
                     InputImagesSection(
                         imageSlots: $appState.ui.imageSlots,
-                        errorMessage: $errorMessage,
-                        showErrorAlert: $showErrorAlert,
+                        errorItem: $errorItem,
                         onAnnotate: onAnnotate
                     )
                 } label: {
@@ -519,8 +516,7 @@ struct MainFormView: View {
                     ResponseSection(
                         imageScale: $imageScale,
                         showFullImage: $showFullImage,
-                        errorMessage: $errorMessage,
-                        showErrorAlert: $showErrorAlert
+                        errorItem: $errorItem
                     )
                 } label: {
                     HStack {

@@ -21,8 +21,7 @@ struct ConfigurationSection: View {
     @Binding var apiKeyPath: String
     @Binding var outputPath: String
     @Binding var isTestingApi: Bool
-    @Binding var errorMessage: String?
-    @Binding var showErrorAlert: Bool
+    @Binding var errorItem: AlertError?
     let onApiKeySelected: (Result<[URL], Error>) -> Void
     let onOutputFolderSelected: (Result<[URL], Error>) -> Void
     let onComfyJSONSelected: (Result<[URL], Error>) -> Void
@@ -62,8 +61,7 @@ struct ConfigurationSection: View {
         apiKeyPath: Binding<String>,
         outputPath: Binding<String>,
         isTestingApi: Binding<Bool>,
-        errorMessage: Binding<String?>,
-        showErrorAlert: Binding<Bool>,
+        errorItem: Binding<AlertError?>,
         onApiKeySelected: @escaping (Result<[URL], Error>) -> Void,
         onOutputFolderSelected: @escaping (Result<[URL], Error>) -> Void,
         onComfyJSONSelected: @escaping (Result<[URL], Error>) -> Void
@@ -72,8 +70,7 @@ struct ConfigurationSection: View {
         _apiKeyPath = apiKeyPath
         _outputPath = outputPath
         _isTestingApi = isTestingApi
-        _errorMessage = errorMessage
-        _showErrorAlert = showErrorAlert
+        self._errorItem = errorItem
         self.onApiKeySelected = onApiKeySelected
         self.onOutputFolderSelected = onOutputFolderSelected
         self.onComfyJSONSelected = onComfyJSONSelected
@@ -125,11 +122,7 @@ struct ConfigurationSection: View {
         } message: {
             Text(serverErrorMessage)
         }
-        .alert("Error", isPresented: $showErrorAlert) {
-            Button("OK") {}
-        } message: {
-            Text(errorMessage ?? "An unknown error occurred.")
-        }
+        .errorAlert(errorItem: $errorItem)
     }
     
     @ViewBuilder
@@ -845,14 +838,13 @@ struct ConfigurationSection: View {
     
     private func testApiKey() {
         isTestingApi = true
-        errorMessage = nil
+        errorItem = nil
         
         Task {
             defer { isTestingApi = false }
             
             guard let url = URL(string: "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image-preview:generateContent") else {
-                errorMessage = "Invalid URL"
-                showErrorAlert = true
+                errorItem = AlertError(message: "Invalid URL")
                 return
             }
             
@@ -866,8 +858,7 @@ struct ConfigurationSection: View {
             do {
                 request.httpBody = try JSONEncoder().encode(requestBody)
             } catch {
-                errorMessage = "Failed to encode test request: \(error.localizedDescription)"
-                showErrorAlert = true
+                errorItem = AlertError(message: "Failed to encode test request: \(error.localizedDescription)")
                 return
             }
             
@@ -877,26 +868,23 @@ struct ConfigurationSection: View {
                     successMessage = "API test successful!"
                     showSuccessAlert = true
                 } else {
-                    errorMessage = "API test failed. Check your key."
-                    showErrorAlert = true
+                    errorItem = AlertError(message: "API test failed. Check your key.")
                 }
             } catch {
-                errorMessage = "Test error: \(error.localizedDescription)"
-                showErrorAlert = true
+                errorItem = AlertError(message: "Test error: \(error.localizedDescription)")
             }
         }
     }
     
     private func testGrokApiKey() {
         isTestingApi = true
-        errorMessage = nil
+        errorItem = nil
         
         Task {
             defer { isTestingApi = false }
             
             guard let url = URL(string: "https://api.x.ai/v1/models") else {
-                errorMessage = "Invalid URL"
-                showErrorAlert = true
+                errorItem = AlertError(message: "Invalid URL")
                 return
             }
             
@@ -910,12 +898,10 @@ struct ConfigurationSection: View {
                     successMessage = "Grok API test successful!"
                     showSuccessAlert = true
                 } else {
-                    errorMessage = "Grok API test failed. Check your key."
-                    showErrorAlert = true
+                    errorItem = AlertError(message: "Grok API test failed. Check your key.")
                 }
             } catch {
-                errorMessage = "Test error: \(error.localizedDescription)"
-                showErrorAlert = true
+                errorItem = AlertError(message: "Test error: \(error.localizedDescription)")
             }
         }
     }
@@ -965,8 +951,7 @@ struct ConfigurationSection: View {
         } else if KeychainHelper.saveAPIKey(newValue) {
             // Optional: Add a saved message if desired
         } else {
-            errorMessage = "Failed to securely store API key."
-            showErrorAlert = true
+            errorItem = AlertError(message: "Failed to securely store API key.")
         }
     }
     
@@ -976,8 +961,7 @@ struct ConfigurationSection: View {
         } else if KeychainHelper.saveGrokAPIKey(newValue) {
             // Optional: Add a saved message if desired
         } else {
-            errorMessage = "Failed to securely store Grok API key."
-            showErrorAlert = true
+            errorItem = AlertError(message: "Failed to securely store Grok API key.")
         }
     }
     
@@ -1015,8 +999,7 @@ struct ConfigurationSection: View {
         } else if KeychainHelper.saveAIMLAPIKey(newValue) {
             // Optional: Add saved message
         } else {
-            errorMessage = "Failed to securely store Seedream API key."
-            showErrorAlert = true
+            errorItem = AlertError(message: "Failed to securely store Seedream API key.")
         }
     }
     
@@ -1036,15 +1019,14 @@ struct ConfigurationSection: View {
     
     private func testAIMLApiKey() {
         isTestingApi = true
-        errorMessage = nil
+        errorItem = nil
         
         Task {
             defer { isTestingApi = false }
             
             let baseURL = "https://api.aimlapi.com/v1/models"
             guard let url = URL(string: "\(baseURL)/models") else {  // Test endpoint (lists models)
-                errorMessage = "Invalid URL"
-                showErrorAlert = true
+                errorItem = AlertError(message: "Invalid URL")
                 return
             }
             
@@ -1055,35 +1037,31 @@ struct ConfigurationSection: View {
             do {
                 let (_, response) = try await URLSession.shared.data(for: request)
                 if let httpResponse = response as? HTTPURLResponse, (200...299).contains(httpResponse.statusCode) {
-                    successMessage = "Seedream API test successful!"
+                    successMessage = "AI/ML API test successful!"
                     showSuccessAlert = true
                 } else {
-                    errorMessage = "Seedream API test failed. Check your key."
-                    showErrorAlert = true
+                    errorItem = AlertError(message: "AI/ML API test failed. Check your key.")
                 }
             } catch {
-                errorMessage = "Test error: \(error.localizedDescription)"
-                showErrorAlert = true
+                errorItem = AlertError(message: "Test error: \(error.localizedDescription)")
             }
         }
     }
     // New fetch function (add after testAIMLApiKey)
     private func fetchAvailableModels() {
         guard !appState.settings.aimlapiKey.isEmpty else {
-            errorMessage = "Enter API key first"
-            showErrorAlert = true
+            errorItem = AlertError(message: "Enter API key first")
             return
         }
         
         isFetchingModels = true
-        errorMessage = nil
+        errorItem = nil
         
         Task {
             defer { isFetchingModels = false }
             
             guard let url = URL(string: "https://api.aimlapi.com/models") else {  // Or /v1/models if needed
-                errorMessage = "Invalid URL"
-                showErrorAlert = true
+                errorItem = AlertError(message: "Invalid URL")
                 return
             }
             
@@ -1111,14 +1089,12 @@ struct ConfigurationSection: View {
                         appState.settings.selectedAIMLModel = imageModels.first!  // Default to first
                     }
                     if imageModels.isEmpty {
-                        errorMessage = "No image models found"
-                        showErrorAlert = true
+                        errorItem = AlertError(message: "No image models found")
                     }
                 }
             } catch {
                 await MainActor.run {
-                    errorMessage = "Fetch error: \(error.localizedDescription)"
-                    showErrorAlert = true
+                    errorItem = AlertError(message: "Fetch error: \(error.localizedDescription)")
                 }
             }
         }

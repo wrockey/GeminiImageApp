@@ -7,9 +7,9 @@ extension ContentView {
         switch result {
         case .success(let urls):
             guard let url = urls.first else {
-                errorMessage = "No file selected."
-                showErrorAlert = true
+                errorItem = AlertError(message: "No file selected.")
                 return
+
             }
             do {
                 #if os(macOS)
@@ -45,8 +45,7 @@ extension ContentView {
                 UserDefaults.standard.set(bookmarkData, forKey: "batchFileBookmark")
             } catch {
                 print("Bookmark error: \(error)")
-                errorMessage = "Failed to save bookmark for batch file: \(error.localizedDescription)"
-                showErrorAlert = true
+                errorItem = AlertError(message: "Failed to save bookmark for batch file: \(error.localizedDescription)")
                 return
             }
             var loadError: NSError?
@@ -67,19 +66,16 @@ extension ContentView {
                 }
             }
             if let loadError = loadError {
-                errorMessage = "Failed to load batch file: \(loadError.localizedDescription)"
-                showErrorAlert = true
+                errorItem = AlertError(message: "Failed to load batch file: \(loadError.localizedDescription)")
                 return
             }
             if let innerLoadError = innerLoadError {
-                errorMessage = "Failed to load batch file: \(innerLoadError.localizedDescription)"
-                showErrorAlert = true
+                errorItem = AlertError(message: "Failed to load batch file: \(innerLoadError.localizedDescription)")
                 return
             }
         case .failure(let error):
             print("Selection error: \(error)")
-            errorMessage = "Failed to select batch file: \(error.localizedDescription)"
-            showErrorAlert = true
+            errorItem = AlertError(message: "Failed to select batch file: \(error.localizedDescription)")
         }
     }
 
@@ -100,8 +96,7 @@ extension ContentView {
             appState.batchFileURL = resolvedURL
             batchFilePath = resolvedURL.path
         } catch {
-            errorMessage = "Failed to load batch file: \(error.localizedDescription)"
-            showErrorAlert = true
+            errorItem = AlertError(message: "Failed to load batch file: \(error.localizedDescription)")
         }
     }
 
@@ -126,16 +121,14 @@ extension ContentView {
                         let phrasesList = promptInfo.phrases.joined(separator: ", ")
                         return "Prompt '\(promptInfo.prompt)' contains: \(phrasesList)"
                     }.joined(separator: "\n")
-                    errorMessage = "One or more prompts contain inappropriate content:\n\(errorDetails).\nPlease revise and try again."
-                    showErrorAlert = true
+                    errorItem = AlertError(message: "One or more prompts contain inappropriate content:\n\(errorDetails).\nPlease revise and try again.")
                     return
                 }
         
         let start = batchStartIndex
         let end = batchEndIndex
         guard start <= end else {
-            errorMessage = "Starting prompt must be less than or equal to ending prompt."
-            showErrorAlert = true
+            errorItem = AlertError(message: "Starting prompt must be less than or equal to ending prompt.")
             return
         }
         var failures: [(Int, String, String)] = [] // (index, prompt, errorDesc)
@@ -173,8 +166,7 @@ extension ContentView {
                     showSuccessAlert = true
                 } else {
                     let failedText = failures.map { "\($0.0): \($0.1) - \($0.2)" }.joined(separator: "\n")
-                    errorMessage = "Failed to generate the following prompts:\n\(failedText)"
-                    showErrorAlert = true
+                    errorItem = AlertError(message: "Failed to generate the following prompts:\n\(failedText)")
                 }
             }
         }

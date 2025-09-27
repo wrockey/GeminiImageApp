@@ -57,8 +57,7 @@ extension ContentView {
                 UserDefaults.standard.removeObject(forKey: "outputDirBookmark")
                 appState.settings.outputDirectory = nil
                 DispatchQueue.main.async {
-                    self.errorMessage = "Output directory bookmark is stale. Please reselect the folder."
-                    self.showErrorAlert = true
+                    self.errorItem = AlertError(message: "Output directory bookmark is stale. Please reselect the folder.")
                 }
             } else {
                 if FileManager.default.fileExists(atPath: resolvedURL.path) {
@@ -79,8 +78,7 @@ extension ContentView {
                 errorMsg = "Failed to resolve output directory: \(err.localizedDescription)"
             }
             DispatchQueue.main.async {
-                self.errorMessage = errorMsg
-                self.showErrorAlert = true
+                self.errorItem = AlertError(message: errorMsg)
             }
             UserDefaults.standard.removeObject(forKey: "outputDirBookmark")
             appState.settings.outputDirectory = nil
@@ -265,8 +263,7 @@ extension ContentView {
                 errorMsg = "Failed to resolve or access ComfyUI JSON: \(err.localizedDescription)"
             }
             DispatchQueue.main.async {
-                self.errorMessage = errorMsg
-                self.showErrorAlert = true
+                self.errorItem = AlertError(message: errorMsg)
             }
             UserDefaults.standard.removeObject(forKey: "comfyJSONBookmark")
             appState.settings.comfyJSONURL = nil
@@ -358,8 +355,7 @@ extension ContentView {
                 errorMsg = "Failed to resolve or access batch file: \(err.localizedDescription)"
             }
             DispatchQueue.main.async {
-                self.errorMessage = errorMsg
-                self.showErrorAlert = true
+                self.errorItem = AlertError(message: errorMsg)
             }
             UserDefaults.standard.removeObject(forKey: "batchFileBookmark")
             appState.batchFileURL = nil
@@ -379,7 +375,7 @@ extension ContentView {
         isCancelled = false
         webSocketTask?.cancel(with: .goingAway, reason: nil)
         webSocketTask = nil
-        errorMessage = nil
+        errorItem = nil
         apiKeyPath = ""
         outputPath = ""
         batchFilePath = ""

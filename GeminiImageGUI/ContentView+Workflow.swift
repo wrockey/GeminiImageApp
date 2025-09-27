@@ -6,8 +6,7 @@ extension ContentView {
         switch result {
         case .success(let urls):
             guard let url = urls.first else {
-                errorMessage = "No file selected."
-                showErrorAlert = true
+                errorItem = AlertError(message: "No file selected.")
                 return
             }
             do {
@@ -47,8 +46,7 @@ extension ContentView {
                 UserDefaults.standard.set(bookmarkData, forKey: "comfyJSONBookmark")
             } catch {
                 print("Bookmark error: \(error)")
-                errorMessage = "Failed to save bookmark for file: \(error.localizedDescription)"
-                showErrorAlert = true
+                errorItem = AlertError(message: "Failed to save bookmark for file: \(error.localizedDescription)")
                 return
             }
             var loadError: NSError?
@@ -84,18 +82,15 @@ extension ContentView {
                 }
             }
             if let loadError = loadError {
-                errorMessage = "Failed to load workflow: \(loadError.localizedDescription)"
-                showErrorAlert = true
+                errorItem = AlertError(message: "Failed to load workflow: \(loadError.localizedDescription)")
                 return
             }
             if let innerLoadError = innerLoadError {
-                errorMessage = "Failed to load workflow: \(innerLoadError.localizedDescription)"
-                showErrorAlert = true
+                errorItem = AlertError(message: "Failed to load workflow: \(innerLoadError.localizedDescription)")
                 return
             }
             guard let json = json else {
-                errorMessage = "Invalid workflow."
-                showErrorAlert = true
+                errorItem = AlertError(message: "Invalid workflow.")
                 return
             }
             
@@ -162,8 +157,7 @@ extension ContentView {
 
             // Now use workflowToUse instead of json
             if workflowToUse.isEmpty {
-                errorMessage = "Invalid or empty workflow after processing."
-                showErrorAlert = true
+                errorItem = AlertError(message: "Invalid or empty workflow after processing.")
                 return
             }
 
@@ -182,24 +176,20 @@ extension ContentView {
                     }
                 }
                 if let nodeError = nodeError {
-                    errorMessage = "Failed to load workflow nodes: \(nodeError.localizedDescription)"
-                    showErrorAlert = true
+                    errorItem = AlertError(message: "Failed to load workflow nodes: \(nodeError.localizedDescription)")
                     return
                 }
                 if let innerNodeError = innerNodeError {
-                    errorMessage = "Failed to load workflow nodes: \(innerNodeError.localizedDescription)"
-                    showErrorAlert = true
+                    errorItem = AlertError(message: "Failed to load workflow nodes: \(innerNodeError.localizedDescription)")
                     return
                 }
                 if let error = appState.generation.workflowError {
-                    errorMessage = error
-                    showErrorAlert = true
+                    errorItem = AlertError(message: error)
                 }
             
         case .failure(let error):
             print("Selection error: \(error)")
-            errorMessage = "Failed to select workflow file: \(error.localizedDescription)"
-            showErrorAlert = true
+            errorItem = AlertError(message: "Failed to select workflow file: \(error.localizedDescription)")
         }
     }
 }

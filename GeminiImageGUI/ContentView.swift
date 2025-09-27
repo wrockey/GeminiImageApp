@@ -63,11 +63,13 @@ extension View {
         .accessibilityLabel("Full Image View Sheet")
     }
     
-    func errorAlert(showErrorAlert: Binding<Bool>, errorMessage: String?) -> some View {
-        alert("Error", isPresented: showErrorAlert) {
-            Button("OK") {}
-        } message: {
-            Text(errorMessage ?? "Unknown error")
+    func errorAlert(errorItem: Binding<AlertError?>) -> some View {
+        alert(item: errorItem) { error in
+            Alert(
+                title: Text("Error"),
+                message: Text(error.message),
+                dismissButton: .default(Text("OK"))
+            )
         }
         .accessibilityLabel("Error Alert")
     }
@@ -125,6 +127,11 @@ enum GenerationError: Error {
     case invalidImageNode
 }
 
+struct AlertError: Identifiable {
+    let id = UUID()
+    let message: String
+}
+
 struct ContentView: View {
     @EnvironmentObject var appState: AppState
     @Environment(\.colorScheme) var colorScheme
@@ -132,8 +139,7 @@ struct ContentView: View {
     @State var progress: Double = 0.0
     @State var webSocketTask: URLSessionWebSocketTask? = nil
     @State var isCancelled: Bool = false
-    @State var errorMessage: String? = nil
-    @State var showErrorAlert: Bool = false
+    @State var errorItem: AlertError? = nil
     @State var showApiKey: Bool = false
     @State var apiKeyPath: String = ""
     @State var outputPath: String = ""
@@ -180,7 +186,7 @@ struct ContentView: View {
         iOSLayout
             .workflowErrorAlert(appState: appState)
             .fullImageSheet(showFullImage: $showFullImage, outputImage: appState.ui.outputImage)
-            .errorAlert(showErrorAlert: $showErrorAlert, errorMessage: errorMessage)
+            .errorAlert(errorItem: $errorItem)
             .successAlert(showSuccessAlert: $showSuccessAlert, successMessage: successMessage)
             .onboardingSheet(showOnboarding: $showOnboarding)
             .helpSheet(showHelp: $showHelp, mode: appState.settings.mode)
@@ -214,7 +220,7 @@ struct ContentView: View {
         macOSLayout
             .workflowErrorAlert(appState: appState)
             .fullImageSheet(showFullImage: $showFullImage, outputImage: appState.ui.outputImage)
-            .errorAlert(showErrorAlert: $showErrorAlert, errorMessage: errorMessage)
+            .errorAlert(errorItem: $errorItem)
             .successAlert(showSuccessAlert: $showSuccessAlert, successMessage: successMessage)
             .onboardingSheet(showOnboarding: $showOnboarding)
             .helpSheet(showHelp: $showHelp, mode: appState.settings.mode)
@@ -257,8 +263,7 @@ struct ContentView: View {
                         apiKeyPath: $apiKeyPath,
                         outputPath: $outputPath,
                         isTestingApi: $isTestingApi,
-                        errorMessage: $errorMessage,
-                        showErrorAlert: $showErrorAlert,
+                        errorItem: $errorItem,
                         imageScale: $imageScale,
                         showFullImage: $showFullImage,
                         isLoading: isLoading,
@@ -307,8 +312,7 @@ struct ContentView: View {
                                     showTextEditorBookmark = IdentifiableData(data: Data())
                                 }
                             } else {
-                                errorMessage = "Failed to access batch file."
-                                showErrorAlert = true
+                                errorItem = AlertError(message: "Failed to access batch file.")
                             }
                         },
                         batchFilePath: $batchFilePath,
@@ -376,8 +380,7 @@ struct ContentView: View {
                     apiKeyPath: $apiKeyPath,
                     outputPath: $outputPath,
                     isTestingApi: $isTestingApi,
-                    errorMessage: $errorMessage,
-                    showErrorAlert: $showErrorAlert,
+                    errorItem: $errorItem,
                     imageScale: $imageScale,
                     showFullImage: $showFullImage,
                     isLoading: isLoading,
@@ -426,8 +429,7 @@ struct ContentView: View {
                                 openWindow(id: "text-editor", value: Data())
                             }
                         } else {
-                            errorMessage = "Failed to access batch file."
-                            showErrorAlert = true
+                            errorItem = AlertError(message: "Failed to access batch file.")
                         }
                     },
                     batchFilePath: $batchFilePath,

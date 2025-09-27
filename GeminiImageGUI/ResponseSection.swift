@@ -5,8 +5,7 @@ struct ResponseSection: View {
     @EnvironmentObject var appState: AppState
     @Binding var imageScale: CGFloat
     @Binding var showFullImage: Bool
-    @Binding var errorMessage: String?
-    @Binding var showErrorAlert: Bool
+    @Binding var errorItem: AlertError?
     @Environment(\.colorScheme) var colorScheme
     
     @State private var finalScale: CGFloat = 1.0
@@ -242,16 +241,14 @@ struct ResponseSection: View {
                 do {
                     try pngData.write(to: url)
                 } catch {
-                    errorMessage = "Failed to save image: \(error.localizedDescription)"
-                    showErrorAlert = true
+                    errorItem = AlertError(message: "Failed to save image: \(error.localizedDescription)")
                 }
             }
         }
 #elseif os(iOS)
         // iOS share sheet for saving to Photos/Files
         guard let pngData = image.pngData() else {
-            errorMessage = "Failed to prepare image for saving."
-            showErrorAlert = true
+            errorItem = AlertError(message: "Failed to prepare image for saving.")
             return
         }
         
@@ -267,8 +264,7 @@ struct ResponseSection: View {
         if let topVC = UIApplication.shared.windows.first(where: { $0.isKeyWindow })?.rootViewController {
             topVC.present(activityVC, animated: true)
         } else {
-            errorMessage = "Unable to present save dialog."
-            showErrorAlert = true
+            errorItem = AlertError(message: "Unable to present save dialog.")
         }
 #endif
     }

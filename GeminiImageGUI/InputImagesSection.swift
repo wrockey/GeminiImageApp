@@ -258,8 +258,7 @@ func parsePromptNodes(from url: URL) -> [NodeInfo] {
 
 struct InputImagesSection: View {
     @Binding var imageSlots: [ImageSlot]
-    @Binding var errorMessage: String?
-    @Binding var showErrorAlert: Bool
+    @Binding var errorItem: AlertError?
     let onAnnotate: (UUID) -> Void
     @EnvironmentObject var appState: AppState
     
@@ -325,8 +324,7 @@ struct InputImagesSection: View {
                         ForEach($imageSlots) { $slot in
                             ImageSlotItemView(
                                 slot: $slot,
-                                errorMessage: $errorMessage,
-                                showErrorAlert: $showErrorAlert,
+                                errorItem: $errorItem,
                                 onAnnotate: onAnnotate,
                                 onRemove: removeImageSlot,
                                 showCopiedMessage: $showCopiedMessage,
@@ -386,8 +384,7 @@ struct InputImagesSection: View {
 
 struct ImageSlotItemView: View {
     @Binding var slot: ImageSlot
-    @Binding var errorMessage: String?
-    @Binding var showErrorAlert: Bool
+    @Binding var errorItem: AlertError?
     let onAnnotate: (UUID) -> Void
     let onRemove: (UUID) -> Void  // Added for remove
     @Binding var showCopiedMessage: Bool
@@ -543,8 +540,7 @@ struct ImageSlotItemView: View {
                             onAnnotate(slot.id)
                         } else {
                             print("DEBUG: Annotate tapped but no image in slot \(slot.id)")
-                            errorMessage = "No image loaded to annotate."
-                            showErrorAlert = true
+                            errorItem = AlertError(message: "No image loaded to annotate.")
                         }
                     } label: {
                         Image(systemName: "square.and.pencil")
@@ -564,8 +560,7 @@ struct ImageSlotItemView: View {
                         onAnnotate(slot.id)
                     } else {
                         print("DEBUG: Annotate tapped but no image in slot \(slot.id)")
-                        errorMessage = "No image loaded to annotate."
-                        showErrorAlert = true
+                        errorItem = AlertError(message: "No image loaded to annotate.")
                     }
                 } label: {
                     Image(systemName: "square.and.pencil")
@@ -655,8 +650,7 @@ struct ImageSlotItemView: View {
                 guard let url = urls.first else { return }
                 loadImageFromURL(url)
             case .failure(let error):
-                errorMessage = "Failed to select image: \(error.localizedDescription)"
-                showErrorAlert = true
+                errorItem = AlertError(message: "Failed to select image: \(error.localizedDescription)")
             }
         }
     }
@@ -667,8 +661,7 @@ struct ImageSlotItemView: View {
         result.itemProvider.loadDataRepresentation(forTypeIdentifier: UTType.image.identifier) { data, error in
             if let error = error {
                 DispatchQueue.main.async {
-                    self.errorMessage = "Failed to load image: \(error.localizedDescription)"
-                    self.showErrorAlert = true
+                    self.errorItem = AlertError(message: "Failed to load image: \(error.localizedDescription)")
                 }
                 return
             }
@@ -717,8 +710,7 @@ struct ImageSlotItemView: View {
         #endif
         
         guard let pastedImage = image else {
-            errorMessage = "No image data in clipboard"
-            showErrorAlert = true
+            errorItem = AlertError(message: "No image data in clipboard")
             return
         }
         
@@ -765,8 +757,7 @@ struct ImageSlotItemView: View {
             provider.loadDataRepresentation(forTypeIdentifier: UTType.image.identifier) { data, error in
                 if let error = error {
                     DispatchQueue.main.async {
-                        self.errorMessage = "Drop error: \(error.localizedDescription)"
-                        self.showErrorAlert = true
+                        self.errorItem = AlertError(message: "Drop error: \(error.localizedDescription)")
                     }
                     return
                 }
@@ -817,12 +808,10 @@ struct ImageSlotItemView: View {
                     slot.selectedPromptIndex = 0
                 }
             } else {
-                errorMessage = "Failed to load image."
-                showErrorAlert = true
+                errorItem = AlertError(message: "Failed to load image.")
             }
         } catch {
-            errorMessage = "Failed to access image: \(error.localizedDescription)"
-            showErrorAlert = true
+            errorItem = AlertError(message: "Failed to access image: \(error.localizedDescription)")
         }
     }
     

@@ -30,13 +30,12 @@ extension ContentView {
         let (isSafe, offendingPhrases) = ContentView.isPromptSafe(appState.prompt)
                 if !isSafe {
                     let phrasesList = offendingPhrases.joined(separator: ", ")
-                    errorMessage = "Prompt contains inappropriate content. Offending phrase(s): \(phrasesList). Please revise and try again."
-                    showErrorAlert = true
+                    errorItem = AlertError(message: "Prompt contains inappropriate content. Offending phrase(s): \(phrasesList). Please revise and try again.")
                     return
                 }
         
         isLoading = true
-        errorMessage = nil
+        errorItem = nil
         appState.ui.responseText = ""
         appState.ui.outputImage = nil
         
@@ -53,8 +52,7 @@ extension ContentView {
                 // Handle cancellation
             } catch {
                 DispatchQueue.main.async {
-                    errorMessage = "API error: \(error.localizedDescription)"
-                    showErrorAlert = true
+                    errorItem = AlertError(message: "API error: \(error.localizedDescription)")
                 }
             }
         }
@@ -193,8 +191,7 @@ extension ContentView {
                             let nsError = error as NSError
                             print("WebSocket error caught: domain=\(nsError.domain), code=\(nsError.code), desc=\(error.localizedDescription), isCancelled=\(isCancelled), isComplete=\(isComplete)")
                             if !((isCancelled || isComplete) && nsError.domain == NSPOSIXErrorDomain && nsError.code == 57) {
-                                errorMessage = "WebSocket error: \(error.localizedDescription)"
-                                showErrorAlert = true
+                                errorItem = AlertError(message: "WebSocket error: \(error.localizedDescription)")
                             }
                         }
                         break
@@ -603,11 +600,9 @@ extension ContentView {
         URLSession.shared.dataTask(with: request) { _, response, error in
             DispatchQueue.main.async {
                 if let error = error {
-                    errorMessage = "Stop error: \(error.localizedDescription)"
-                    showErrorAlert = true
+                    errorItem = AlertError(message: "Stop error: \(error.localizedDescription)")
                 } else if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 {
-                    errorMessage = "Generation stopped."
-                    showErrorAlert = true
+                    errorItem = AlertError(message: "Generation stopped.")
                 }
             }
         }.resume()
