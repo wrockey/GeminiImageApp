@@ -1,4 +1,3 @@
-//ContentView+Generation.swift
 #if os(iOS)
 import UIKit
 #endif
@@ -140,6 +139,7 @@ extension ContentView {
             appState.historyState.history.append(newItem)
             appState.historyState.saveHistory()
         case .comfyUI:
+            // Existing ComfyUI logic (unchanged, as it's not AI/ML specific)
             guard let workflow = appState.generation.comfyWorkflow else {
                 throw GenerationError.noWorkflow
             }
@@ -449,127 +449,115 @@ extension ContentView {
                 UserDefaults.standard.set(true, forKey: "hasShownAIMLConsent")
             }
             
+            guard let model = appState.currentAIMLModel else {
+                throw GenerationError.apiError("Invalid model selected.")
+            }
+            
+            // Validate images
+            if model.isI2I && appState.ui.imageSlots.isEmpty {
+                throw GenerationError.apiError("Image required for image-to-image model.")
+            }
+            if appState.ui.imageSlots.count > model.maxInputImages {
+                throw GenerationError.apiError("Too many images for model (max: \(model.maxInputImages)).")
+            }
+            if !appState.ui.imageSlots.isEmpty && !model.isI2I {
+                throw GenerationError.apiError("Text-to-image model selected with input images; select an i2i model.")
+            }
+            
             guard let url = URL(string: "https://api.aimlapi.com/v1/images/generations") else {
                 throw GenerationError.invalidURL
             }
             
-            let selectedAIMLModel = appState.settings.selectedAIMLModel
-            var bodyDict: [String: Any]
-            let isEditModel = selectedAIMLModel.contains("edit") || selectedAIMLModel.contains("image-to-image")
+            var bodyDict: [String: Any] = [
+                "model": appState.settings.selectedAIMLModel,
+                "prompt": appState.prompt,
+                "num_images": appState.settings.aimlAdvancedParams.numImages ?? 1,
+                "sync_mode": true,
+                "enable_safety_checker": appState.settings.aimlAdvancedParams.enableSafetyChecker ?? true
+            ]
             
-            if selectedAIMLModel == "alibaba/qwen-image-edit" {
-                // Existing special case for Qwen
-                guard !appState.ui.imageSlots.isEmpty,
-                      let slot = appState.ui.imageSlots.first,
-                      let image = slot.image,
-                      let processed = processImageForUpload(image: image, format: "jpeg") else {
-                    throw GenerationError.apiError("Image required for edit model.")
+            // Inject advanced params if supported
+            if let strength = appState.settings.aimlAdvancedParams.strength, model.supportedParams.contains(.strength) {
+                bodyDict["strength"] = strength
+            }
+            if let steps = appState.settings.aimlAdvancedParams.numInferenceSteps, model.supportedParams.contains(.numInferenceSteps) {
+                bodyDict["num_inference_steps"] = steps
+            }
+            if let guidance = appState.settings.aimlAdvancedParams.guidanceScale, model.supportedParams.contains(.guidanceScale) {
+                bodyDict["guidance_scale"] = guidance
+            }
+            if let negative = appState.settings.aimlAdvancedParams.negativePrompt, model.supportedParams.contains(.negativePrompt) {
+                bodyDict["negative_prompt"] = negative
+            }
+            if let seed = appState.settings.aimlAdvancedParams.seed, model.supportedParams.contains(.seed) {
+                bodyDict["seed"] = seed
+            }
+            // Model-specific, e.g., watermark
+            if let watermark = appState.settings.aimlAdvancedParams.watermark, model.supportedParams.contains(.watermark) {
+                bodyDict["watermark"] = watermark
+            }
+            
+            // Image handling with ImgBB preference
+            var imageInputs: [String] = []
+            let useImgBB = appState.preferImgBBForImages && model.acceptsPublicURL
+            
+            for slot in appState.ui.imageSlots {
+                guard let image = slot.image, let processed = processImageForUpload(image: image, originalData: slot.originalData, format: "jpeg") else { continue }
+                
+                if useImgBB {
+                    guard !appState.settings.imgbbApiKey.isEmpty else {
+                        throw GenerationError.apiError("ImgBB API key required for public image upload.")
+                    }
+                    
+                    guard let uploadURL = URL(string: "https://api.imgbb.com/1/upload?key=\(appState.settings.imgbbApiKey)&expiration=600") else {
+                        throw GenerationError.invalidURL
+                    }
+                    
+                    var uploadRequest = URLRequest(url: uploadURL)
+                    uploadRequest.httpMethod = "POST"
+                    
+                    let boundary = "Boundary-\(UUID().uuidString)"
+                    uploadRequest.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+                    
+                    var body = Data()
+                    body.append("--\(boundary)\r\n".data(using: .utf8)!)
+                    body.append("Content-Disposition: form-data; name=\"image\"\r\n\r\n".data(using: .utf8)!)
+                    body.append(processed.data.base64EncodedString().data(using: .utf8)!)
+                    body.append("\r\n--\(boundary)--\r\n".data(using: .utf8)!)
+                    
+                    uploadRequest.httpBody = body
+                    
+                    let (uploadData, _) = try await URLSession.shared.data(for: uploadRequest)
+                    let uploadResponse = try JSONDecoder().decode(ImgBBResponse.self, from: uploadData)
+                    
+                    guard let imagePublicUrl = uploadResponse.data?.url else {
+                        throw GenerationError.apiError("Failed to upload image to public host.")
+                    }
+                    imageInputs.append(imagePublicUrl)
+                } else if model.acceptsBase64 {
+                    let base64 = processed.data.base64EncodedString()
+                    imageInputs.append("data:\(processed.mimeType);base64,\(base64)")
+                } else {
+                    throw GenerationError.apiError("Model does not support image format.")
                 }
-                let base64 = processed.data.base64EncodedString()
-                let imageDataUrl = "data:\(processed.mimeType);base64,\(base64)"
-                
-                bodyDict = [
-                    "model": selectedAIMLModel,
-                    "prompt": appState.prompt,
-                    "image": imageDataUrl  // Base64 data URL; alternatively, use a public HTTP URL if available
-                    // Optionally add: "negative_prompt": "", "watermark": false
-                ]
-            } else if selectedAIMLModel.contains("flux") && selectedAIMLModel.contains("image-to-image") {
-                // Special case for Flux i2i models (e.g., flux/srpo/image-to-image)
-                guard !appState.ui.imageSlots.isEmpty,
-                      let slot = appState.ui.imageSlots.first,
-                      let image = slot.image,
-                      let processed = processImageForUpload(image: image, format: "jpeg") else {
-                    throw GenerationError.apiError("Image required for image-to-image model.")
+            }
+            
+            if model.isI2I && !imageInputs.isEmpty {
+                if model.acceptsMultiImages {
+                    bodyDict[model.imageInputParam] = imageInputs
+                } else {
+                    bodyDict[model.imageInputParam] = imageInputs.first!
                 }
-                
-                // Upload to ImgBB to get public URL (requires imgbbApiKey in settings)
-                guard !appState.settings.imgbbApiKey.isEmpty else {
-                    throw GenerationError.apiError("ImgBB API key required for public image upload in Flux i2i models.")
-                }
-                
-                guard let uploadURL = URL(string: "https://api.imgbb.com/1/upload?key=\(appState.settings.imgbbApiKey)&expiration=120") else {
-                    throw GenerationError.invalidURL
-                }
-                
-                var uploadRequest = URLRequest(url: uploadURL)
-                uploadRequest.httpMethod = "POST"
-                
-                let boundary = "Boundary-\(UUID().uuidString)"
-                uploadRequest.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
-                
-                var body = Data()
-                body.append("--\(boundary)\r\n".data(using: .utf8)!)
-                body.append("Content-Disposition: form-data; name=\"image\"\r\n\r\n".data(using: .utf8)!)
-                body.append(processed.data.base64EncodedString().data(using: .utf8)!)
-                body.append("\r\n--\(boundary)--\r\n".data(using: .utf8)!)
-                
-                uploadRequest.httpBody = body
-                
-                let (uploadData, _) = try await URLSession.shared.data(for: uploadRequest)
-                let uploadResponse = try JSONDecoder().decode(ImgBBResponse.self, from: uploadData)  // Define struct below
-                
-                guard let imagePublicUrl = uploadResponse.data?.url else {
-                    throw GenerationError.apiError("Failed to upload image to public host.")
-                }
-                
-                bodyDict = [
-                    "model": selectedAIMLModel,
-                    "prompt": appState.prompt + ". Preserve the original composition, layout, colors, and all elements of the input image exactly. Only enhance the faces and eyes to be photorealistic and lifelike.",
-                    "image_url": imagePublicUrl,
-                    "strength": 0.8,  // Adjusted to better retain input
-                    "enable_safety_checker": true,
-                    "num_inference_steps": 50,
-                    "guidance_scale": 5,  // Lowered for less aggressive prompt application
-                    "num_images": 1,
-                    "seed": Int(Date().timeIntervalSince1970)
+            }
+            
+            // Resolution/size
+            if model.supportsCustomResolution {
+                bodyDict["image_size"] = [
+                    "width": appState.settings.selectedImageWidth,
+                    "height": appState.settings.selectedImageHeight
                 ]
             } else {
-                // Existing general case for other models
-                if appState.settings.supportsCustomResolution {
-                    bodyDict = [
-                        "model": selectedAIMLModel,
-                        "prompt": appState.prompt,
-                        "num_images": 1,
-                        "sync_mode": true,
-                        "enable_safety_checker": true,
-                        "image_size": [
-                            "width": appState.settings.selectedImageWidth,
-                            "height": appState.settings.selectedImageHeight
-                        ]
-                    ]
-                } else {
-                    bodyDict = [
-                        "model": selectedAIMLModel,
-                        "prompt": appState.prompt,
-                        "num_images": 1,
-                        "sync_mode": true,
-                        "enable_safety_checker": true,
-                        "image_size": appState.settings.selectedImageSize
-                    ]
-                }
-                // Optional: Add seed
-                bodyDict["seed"] = Int(Date().timeIntervalSince1970)
-                
-                // Image handling for edit/i2i models
-                if !appState.ui.imageSlots.isEmpty && isEditModel {
-                    var imageUrls: [String] = []
-                    for slot in appState.ui.imageSlots {
-                        if let image = slot.image, let processed = processImageForUpload(image: image, format: "jpeg") {
-                            let base64 = processed.data.base64EncodedString()
-                            imageUrls.append("data:\(processed.mimeType);base64,\(base64)")
-                        }
-                    }
-                    if !imageUrls.isEmpty {
-                        bodyDict["image_urls"] = imageUrls // Up to 10
-                    } else {
-                        throw GenerationError.noOutputImage // Require images for edit models
-                    }
-                } else if appState.ui.imageSlots.isEmpty && isEditModel {
-                    appState.ui.responseText += "Edit model selected without images; treating as t2i if possible.\n"
-                } else if !appState.ui.imageSlots.isEmpty && !isEditModel {
-                    throw GenerationError.apiError("Text-to-image model selected with input images; select an edit/i2i model.")
-                }
+                bodyDict["image_size"] = appState.settings.selectedImageSize
             }
             
             do {
@@ -622,7 +610,6 @@ extension ContentView {
                             textOutput += "Image saved to \(saved)\n"
                         }
                     } else if let imageUrl = item.url, let url = URL(string: imageUrl) {
-                        // Fallback: Download from URL if no b64_json (rare, but handles variations)
                         let (imgData, _) = try await URLSession.shared.data(from: url)
                         savedImage = PlatformImage(platformData: imgData)
                         savedPath = saveGeneratedImage(data: imgData)

@@ -8,7 +8,7 @@ import UIKit
 import PencilKit
 #endif
 
-enum GenerationMode: String, Codable {
+enum GenerationMode: String, Codable, CaseIterable {
     case gemini
     case comfyUI
     case grok  // Added for Grok API
@@ -39,6 +39,7 @@ class SettingsState: ObservableObject {
     @Published var selectedResolutionString : String = "2048x2048"
     @Published var selectedImageHeight : Int = 2048
     @Published var selectedImageWidth : Int = 2048
+    @Published var aimlAdvancedParams: ModelParameters = ModelParameters()
     var supportsCustomResolution: Bool {
         let supportingModels = [
             "bytedance/seedream-v4-text-to-image",
@@ -299,7 +300,39 @@ class AppState: ObservableObject {
     @Published var historyState = HistoryState()
     @Published var ui = UIState()
     @Published var prompt: String = ""
-    
+    var currentAIMLModel: AIMLModel? {
+            ModelRegistry.modelFor(id: settings.selectedAIMLModel)
+        }
+        
+        var canAddImages: Bool {
+            switch settings.mode {
+            case .gemini:
+                return true  // Supports up to 4 images for i2i
+            case .aimlapi:
+                return currentAIMLModel?.isI2I ?? false
+            case .comfyUI:
+                return true  // Assuming it supports (based on your code with comfyImageNodeID)
+            case .grok:
+                return false  // No image support
+            }
+        }
+        
+        var maxImageSlots: Int {
+            switch settings.mode {
+            case .gemini:
+                return 4  // Gemini limit
+            case .aimlapi:
+                return currentAIMLModel?.maxInputImages ?? 0
+            case .comfyUI:
+                return 1  // Assuming single for your existing code; adjust if multi
+            case .grok:
+                return 0
+            }
+        }
+        
+        var preferImgBBForImages: Bool {
+            !settings.imgbbApiKey.isEmpty && (currentAIMLModel?.acceptsPublicURL ?? true)
+        }
     
     
     #if os(iOS)

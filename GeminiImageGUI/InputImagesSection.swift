@@ -281,13 +281,13 @@ struct InputImagesSection: View {
     }
     
     var body: some View {
-        if appState.settings.mode == .grok {
-            Text("Input images not supported in Grok mode.")
+        if appState.settings.mode == .grok || !appState.canAddImages {
+            Text("Input images not supported in this mode.")
                 .foregroundColor(.secondary)
                 .font(.system(size: 14))
                 .padding()
                 .frame(maxWidth: .infinity, alignment: .center)
-                .accessibilityLabel("Input images not supported in Grok mode")
+                .accessibilityLabel("Input images not supported in this mode")
         } else {
             ZStack {
                 VStack(spacing: 20) {
@@ -302,7 +302,8 @@ struct InputImagesSection: View {
                         .help("Add a new image slot") // Tooltip
                         .accessibilityLabel("Add image slot")
                         .accessibilityHint("Adds a new slot for uploading or pasting an image.")
-    
+                        .disabled(imageSlots.count >= appState.maxImageSlots)
+                        
                         Button(action: { showClearConfirmation = true }) {
                             Image(systemName: "trash.circle.fill")
                                 .font(.system(size: 24))
@@ -316,7 +317,7 @@ struct InputImagesSection: View {
                     }
                     
                     if imageSlots.isEmpty {
-                        Text("Add images for reference (optional)")
+                        Text("Add up to \(appState.maxImageSlots) images for reference (optional)")
                             .foregroundColor(.secondary)
                             .font(.system(size: 14))
                             .accessibilityLabel("Add images for reference (optional)")
@@ -357,7 +358,11 @@ struct InputImagesSection: View {
     }
 
     private func addImageSlot() {
-        imageSlots.append(ImageSlot())
+        if imageSlots.count < appState.maxImageSlots {
+            imageSlots.append(ImageSlot())
+        } else {
+            errorItem = AlertError(message: "Maximum number of image slots reached for this model (\(appState.maxImageSlots)).")
+        }
     }
     
     private func clearImageSlots() {

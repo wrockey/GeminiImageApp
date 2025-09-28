@@ -4,18 +4,18 @@ import AppKit
 #elseif os(iOS)
 import UIKit
 #endif
- 
+
 // New struct for response parsing (add at top or in separate file)
 struct AIMLModelsResponse: Codable {
     let object: String
-    let data: [AIMLModel]
+    let data: [AIMLModelEntry]
 }
- 
-struct AIMLModel: Codable {
+
+struct AIMLModelEntry: Codable {
     let id: String
     // Add other fields if needed: type, info, features
 }
- 
+
 struct ConfigurationSection: View {
     @Binding var showApiKey: Bool
     @Binding var apiKeyPath: String
@@ -36,11 +36,13 @@ struct ConfigurationSection: View {
     @State private var showServerErrorAlert: Bool = false
     @State private var serverErrorMessage: String = ""
     @State private var isTestingServer: Bool = false
-    @State private var showGrokApiKey: Bool = false  // Added: For Grok key visibility toggle
-    @State private var showAIMLApiKey: Bool = false  // Added: For AI/ML key visibility toggle
-    @State private var showImgBBApiKey: Bool = false  // Added: For ImgBB key visibility toggle
-    @State private var availableModels: [String] = []  // New: Fetched image models
-    @State private var isFetchingModels: Bool = false  // New: Loading state
+    @State private var showGrokApiKey: Bool = false
+    @State private var showAIMLApiKey: Bool = false
+    @State private var showImgBBApiKey: Bool = false
+    @State private var availableModels: [String] = []
+    @State private var isFetchingModels: Bool = false
+    @State private var showAdvanced: Bool = false
+    @State private var showHelp: Bool = false
     
     private var isCompact: Bool {
         sizeClass == .compact
@@ -78,23 +80,17 @@ struct ConfigurationSection: View {
         self.onComfyJSONSelected = onComfyJSONSelected
     }
     
-    var body: some View {
+    private var mainContent: some View {
         VStack(spacing: isCompact ? 12 : 16) {
             Picker("Mode", selection: $appState.settings.mode) {
-                Text("Gemini").tag(GenerationMode.gemini)
-                Text("ComfyUI").tag(GenerationMode.comfyUI)
-                Text("Grok").tag(GenerationMode.grok)
-                Text("AI/ML").tag(GenerationMode.aimlapi)
+                ForEach(GenerationMode.allCases, id: \.self) { mode in
+                    Text(mode.rawValue.capitalized).tag(mode)
+                }
             }
             .pickerStyle(.segmented)
             .padding(.bottom, isCompact ? 4 : 8)
-            .help("Select the generation mode: Gemini, ComfyUI, or Grok")
+            .help("Select the generation mode")
             .accessibilityLabel("Generation mode selector")
-            .onChange(of: appState.settings.mode) { newMode in
-                if newMode == .aimlapi && !appState.settings.aimlapiKey.isEmpty {
-                    fetchAvailableModels()
-                }
-            }
             
             switch appState.settings.mode {
             case .gemini:
@@ -102,29 +98,53 @@ struct ConfigurationSection: View {
             case .comfyUI:
                 comfyUIConfiguration
             case .grok:
-                grokConfiguration  // Added: New case for Grok
+                grokConfiguration
             case .aimlapi:
-                aimlConfiguration  // New
+                aimlConfiguration
             }
             
             outputFolderSection
         }
-        .alert("Success", isPresented: $showSuccessAlert) {
-            Button("OK") {}
-        } message: {
-            Text(successMessage)
-        }
-        .alert("Server Available", isPresented: $showServerSuccessAlert) {
-            Button("OK") {}
-        } message: {
-            Text("The ComfyUI server is reachable and responding.")
-        }
-        .alert("Server Error", isPresented: $showServerErrorAlert) {
-            Button("OK") {}
-        } message: {
-            Text(serverErrorMessage)
-        }
-        .errorAlert(errorItem: $errorItem)
+    }
+    
+    var body: some View {
+        mainContent
+            .onChange(of: appState.settings.mode) { newMode in
+                if newMode == .aimlapi && !appState.settings.aimlapiKey.isEmpty {
+                    fetchAvailableModels()
+                }
+            }
+            .onChange(of: appState.settings.selectedAIMLModel) { _ in
+                if !appState.canAddImages {
+                    appState.ui.imageSlots.removeAll()
+                }
+                // Reset advanced params to defaults
+                appState.settings.aimlAdvancedParams = ModelParameters()
+            }
+            .alert("Success", isPresented: $showSuccessAlert) {
+                Button("OK") {}
+            } message: {
+                Text(successMessage)
+            }
+            .alert("Server Available", isPresented: $showServerSuccessAlert) {
+                Button("OK") {}
+            } message: {
+                Text("The ComfyUI server is reachable and responding.")
+            }
+            .alert("Server Error", isPresented: $showServerErrorAlert) {
+                Button("OK") {}
+            } message: {
+                Text(serverErrorMessage)
+            }
+            .errorAlert(errorItem: $errorItem)
+            .sheet(isPresented: $showAdvanced) {
+                if let model = appState.currentAIMLModel {
+                    AdvancedAIMLSettingsView(model: model, params: $appState.settings.aimlAdvancedParams)
+                }
+            }
+            .sheet(isPresented: $showHelp) {
+                HelpView(mode: appState.settings.mode)
+            }
     }
     
     @ViewBuilder
@@ -274,7 +294,6 @@ struct ConfigurationSection: View {
         }
     }
     
-    // Added: Grok configuration (similar to Gemini)
     @ViewBuilder
     private var grokConfiguration: some View {
         VStack(alignment: .leading, spacing: isCompact ? 12 : 16) {  // Align to left
@@ -368,14 +387,33 @@ struct ConfigurationSection: View {
             .accessibilityLabel("Grok model selector")
         }
     }
+    
     @ViewBuilder
     private var aimlConfiguration: some View {
         VStack(alignment: .leading, spacing: isCompact ? 12 : 16) {
             aimlApiKeyRow
-            aimlImgBBApiKeyRow  // New: Added ImgBB API key row
-            aimlModelRow  // Dynamic Picker
-            aimlImageSizeRow
-            aimlResolutionRow
+            aimlImgBBApiKeyRow
+            aimlModelRow
+            if appState.currentAIMLModel?.supportsCustomResolution ?? false {
+                aimlResolutionRow
+            } else {
+                aimlImageSizeRow
+            }
+            Button("Advanced Settings") {
+                showAdvanced = true
+            }
+            .disabled(appState.currentAIMLModel == nil)
+            .help("Configure model-specific parameters")
+            
+            if appState.preferImgBBForImages {
+                Text("Using ImgBB for image uploads (public URLs).")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            } else if let model = appState.currentAIMLModel, model.isI2I {
+                Text("Using base64 for images; add ImgBB key for public URLs (recommended for large images).")
+                    .font(.caption)
+                    .foregroundColor(.orange)
+            }
         }
     }
     
@@ -396,7 +434,6 @@ struct ConfigurationSection: View {
                             }
                         }
                         .help("Visible AI/ML API key input")
-                    
                 } else {
                     SecureField("Enter or paste AI/ML API key", text: $appState.settings.aimlapiKey)
                         .onChange(of: appState.settings.aimlapiKey) { newValue in
@@ -459,14 +496,13 @@ struct ConfigurationSection: View {
         }
     }
     
-    // New: ImgBB API key row (similar to AI/ML, but without fetch/test buttons for simplicity)
     @ViewBuilder
     private var aimlImgBBApiKeyRow: some View {
         HStack(spacing: isCompact ? 8 : 16) {
             Text("ImgBB API Key:")
                 .font(labelFont)
                 .foregroundColor(.secondary)
-                .help("Enter your ImgBB API key for image uploads (required for some models)")
+                .help("Enter your ImgBB API key for image uploads (required for some models, enables public URLs for all i2i)")
             Group {
                 if showImgBBApiKey {
                     TextField("Enter or paste ImgBB API key", text: $appState.settings.imgbbApiKey)
@@ -537,80 +573,72 @@ struct ConfigurationSection: View {
             }
         }
     }
+    
     @ViewBuilder
     private var aimlImageSizeRow: some View {
-        if !appState.settings.supportsCustomResolution {
-            HStack(spacing: isCompact ? 8 : 16) {
-                Text("Image Size:")
-                    .font(labelFont)
-                    .foregroundColor(.secondary)
-                    .help("Select the output image aspect ratio")
-                    .fixedSize()
-                Picker("", selection: $appState.settings.selectedImageSize) {
-                    Text("Square HD").tag("square_hd")
-                    Text("Square").tag("square")
-                    Text("Portrait 4:3").tag("portrait_4_3")
-                    Text("Portrait 16:9").tag("portrait_16_9")
-                    Text("Landscape 4:3").tag("landscape_4_3")
-                    Text("Landscape 16:9").tag("landscape_16_9")
-                }
-                .pickerStyle(.menu)
-                .frame(width: 200)
-                .help("Choose the size; model-dependent")
-                .accessibilityLabel("Image size selector")
+        HStack(spacing: isCompact ? 8 : 16) {
+            Text("Image Size:")
+                .font(labelFont)
+                .foregroundColor(.secondary)
+                .help("Select the output image aspect ratio")
+                .fixedSize()
+            Picker("", selection: $appState.settings.selectedImageSize) {
+                Text("Square HD").tag("square_hd")
+                Text("Square").tag("square")
+                Text("Portrait 4:3").tag("portrait_4_3")
+                Text("Portrait 16:9").tag("portrait_16_9")
+                Text("Landscape 4:3").tag("landscape_4_3")
+                Text("Landscape 16:9").tag("landscape_16_9")
             }
-        }
-        else {
-            EmptyView()
+            .pickerStyle(.menu)
+            .frame(width: 200)
+            .help("Choose the size; model-dependent")
+            .accessibilityLabel("Image size selector")
         }
     }
     
     @ViewBuilder
     private var aimlResolutionRow: some View {
-        if appState.settings.supportsCustomResolution {
-            HStack(spacing: isCompact ? 8 : 16) {
-                Text("Resolution:")
-                    .font(labelFont)
-                    .foregroundColor(.secondary)
-                    .help("Select a common resolution (multiples of 32)")
-                    .fixedSize()
-                Picker("", selection: $appState.settings.selectedResolutionString) {
-                    Text("512 x 512").tag("512x512")
-                    Text("1024 x 1024").tag("1024x1024")
-                    Text("2048 x 2048").tag("2048x2048")
-                    Text("1024 x 768 (Landscape 4:3)").tag("1024x768")
-                    Text("768 x 1024 (Portrait 4:3)").tag("768x1024")
-                    Text("1024 x 576 (Landscape 16:9)").tag("1024x576")
-                    Text("576 x 1024 (Portrait 16:9)").tag("576x1024")
-                    Text("1536 x 864 (Landscape 16:9 HD)").tag("1536x864")
-                    Text("1920 x 1088 (Full HD Landscape 16:9)").tag("1920x1088")
-                    Text("1088 x 1920 (Full HD Portrait 16:9)").tag("1088x1920")
-                    Text("3840 x 2176 (4K UHD Landscape 16:9)").tag("3840x2176")
-                    Text("2176 x 3840 (4K UHD Portrait 16:9)").tag("2176x3840")
-                    Text("4096 x 4096 (4K Square)").tag("4096x4096")
-                }
-                .pickerStyle(.menu)
-                .frame(width: 300)  // Increased width to accommodate longer labels
-                .help("Choose resolution; model-dependent, multiples of 32")
-                .accessibilityLabel("Resolution selector")
-                .onChange(of: appState.settings.selectedResolutionString) {newValue in
-                    let parts = newValue.split(separator: "x")
-                    let trimmedParts = parts.map { $0.trimmingCharacters(in: .whitespaces) }
-                    if trimmedParts.count == 2,
-                       let width = Int(trimmedParts[0]),
-                       let height = Int(trimmedParts[1]) {
-                        appState.settings.selectedImageWidth = width
-                        appState.settings.selectedImageHeight = height
-                    }
-                }
-                .onAppear {
-                    if appState.settings.selectedResolutionString.isEmpty {
-                        appState.settings.selectedResolutionString = "2048x2048"
-                    }
+        HStack(spacing: isCompact ? 8 : 16) {
+            Text("Resolution:")
+                .font(labelFont)
+                .foregroundColor(.secondary)
+                .help("Select a common resolution (multiples of 32)")
+                .fixedSize()
+            Picker("", selection: $appState.settings.selectedResolutionString) {
+                Text("512 x 512").tag("512x512")
+                Text("1024 x 1024").tag("1024x1024")
+                Text("2048 x 2048").tag("2048x2048")
+                Text("1024 x 768 (Landscape 4:3)").tag("1024x768")
+                Text("768 x 1024 (Portrait 4:3)").tag("768x1024")
+                Text("1024 x 576 (Landscape 16:9)").tag("1024x576")
+                Text("576 x 1024 (Portrait 16:9)").tag("576x1024")
+                Text("1536 x 864 (Landscape 16:9 HD)").tag("1536x864")
+                Text("1920 x 1088 (Full HD Landscape 16:9)").tag("1920x1088")
+                Text("1088 x 1920 (Full HD Portrait 16:9)").tag("1088x1920")
+                Text("3840 x 2176 (4K UHD Landscape 16:9)").tag("3840x2176")
+                Text("2176 x 3840 (4K UHD Portrait 16:9)").tag("2176x3840")
+                Text("4096 x 4096 (4K Square)").tag("4096x4096")
+            }
+            .pickerStyle(.menu)
+            .frame(width: 300)  // Increased width to accommodate longer labels
+            .help("Choose resolution; model-dependent, multiples of 32")
+            .accessibilityLabel("Resolution selector")
+            .onChange(of: appState.settings.selectedResolutionString) { newValue in
+                let parts = newValue.split(separator: "x")
+                let trimmedParts = parts.map { $0.trimmingCharacters(in: .whitespaces) }
+                if trimmedParts.count == 2,
+                   let width = Int(trimmedParts[0]),
+                   let height = Int(trimmedParts[1]) {
+                    appState.settings.selectedImageWidth = width
+                    appState.settings.selectedImageHeight = height
                 }
             }
-        } else {
-            EmptyView()
+            .onAppear {
+                if appState.settings.selectedResolutionString.isEmpty {
+                    appState.settings.selectedResolutionString = "2048x2048"
+                }
+            }
         }
     }
     
@@ -643,7 +671,6 @@ struct ConfigurationSection: View {
             }
         }
     }
-    
     @ViewBuilder
     private var comfyServerURLRow: some View {
         if isCompact {
@@ -1158,8 +1185,8 @@ struct ConfigurationSection: View {
             appState.settings.imgbbApiKey = text
         }
     }
-    // New fetch function (add after testAIMLApiKey)
     private func fetchAvailableModels() {
+        // Existing... but filter with ModelRegistry if needed
         guard !appState.settings.aimlapiKey.isEmpty else {
             errorItem = AlertError(message: "Enter API key first")
             return
@@ -1171,7 +1198,7 @@ struct ConfigurationSection: View {
         Task {
             defer { isFetchingModels = false }
             
-            guard let url = URL(string: "https://api.aimlapi.com/models") else {  // Or /v1/models if needed
+            guard let url = URL(string: "https://api.aimlapi.com/models") else {
                 errorItem = AlertError(message: "Invalid URL")
                 return
             }
@@ -1184,20 +1211,20 @@ struct ConfigurationSection: View {
                 let (data, _) = try await URLSession.shared.data(for: request)
                 let response = try JSONDecoder().decode(AIMLModelsResponse.self, from: data)
                 
-                // Filter for image models (adjust keywords based on actual IDs)
-                let imageModels = response.data.filter { model in
-                    let lowerID = model.id.lowercased()
+                // Filter for image models (adjust keywords)
+                let imageModels = response.data.filter { entry in
+                    let lowerID = entry.id.lowercased()
                     return !lowerID.contains("video") && (
                         lowerID.contains("image") || lowerID.contains("t2i") || lowerID.contains("i2i") ||
                         lowerID.contains("diffusion") || lowerID.contains("seedream") || lowerID.contains("flux") ||
-                        lowerID.contains("edit") || lowerID.contains("generation") || lowerID.contains("dall") // No comma here
+                        lowerID.contains("edit") || lowerID.contains("generation") || lowerID.contains("dall")
                     )
                 }.map { $0.id }.sorted()
                 
                 await MainActor.run {
                     availableModels = imageModels
                     if !imageModels.isEmpty && appState.settings.selectedAIMLModel.isEmpty {
-                        appState.settings.selectedAIMLModel = imageModels.first!  // Default to first
+                        appState.settings.selectedAIMLModel = imageModels.first!
                     }
                     if imageModels.isEmpty {
                         errorItem = AlertError(message: "No image models found")
