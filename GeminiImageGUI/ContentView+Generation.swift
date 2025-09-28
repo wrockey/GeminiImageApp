@@ -41,11 +41,11 @@ extension ContentView {
         
         // Check if prompt is safe
         let (isSafe, offendingPhrases) = ContentView.isPromptSafe(appState.prompt)
-                if !isSafe {
-                    let phrasesList = offendingPhrases.joined(separator: ", ")
-                    errorItem = AlertError(message: "Prompt contains inappropriate content. Offending phrase(s): \(phrasesList). Please revise and try again.")
-                    return
-                }
+        if !isSafe {
+            let phrasesList = offendingPhrases.joined(separator: ", ")
+            errorItem = AlertError(message: "Prompt contains inappropriate content. Offending phrase(s): \(phrasesList). Please revise and try again.")
+            return
+        }
         
         isLoading = true
         errorItem = nil
@@ -229,7 +229,7 @@ extension ContentView {
             if !appState.generation.comfyImageNodeID.isEmpty && !appState.ui.imageSlots.isEmpty,
                let slot = appState.ui.imageSlots.first,
                let image = slot.image,
-                let processed = processImageForUpload(image: image, originalData: slot.originalData, format: "png") {
+               let processed = processImageForUpload(image: image, originalData: slot.originalData, format: "png") {
                 var uploadRequest = URLRequest(url: serverURL.appendingPathComponent("upload/image"))
                 uploadRequest.httpMethod = "POST"
                 
@@ -462,7 +462,7 @@ extension ContentView {
                 guard !appState.ui.imageSlots.isEmpty,
                       let slot = appState.ui.imageSlots.first,
                       let image = slot.image,
-                      let processed = processImageForUpload(image: image, originalData: slot.originalData, format: "png") else {
+                      let processed = processImageForUpload(image: image, format: "jpeg") else {
                     throw GenerationError.apiError("Image required for edit model.")
                 }
                 let base64 = processed.data.base64EncodedString()
@@ -479,8 +479,7 @@ extension ContentView {
                 guard !appState.ui.imageSlots.isEmpty,
                       let slot = appState.ui.imageSlots.first,
                       let image = slot.image,
-//                      let processed = processImageForUpload(image: image, originalData: slot.originalData, format: "png") else {
-                    let processed = processImageForUpload(image: image, format: "jpeg") else {
+                      let processed = processImageForUpload(image: image, format: "jpeg") else {
                     throw GenerationError.apiError("Image required for image-to-image model.")
                 }
                 
@@ -518,10 +517,10 @@ extension ContentView {
                     "model": selectedAIMLModel,
                     "prompt": appState.prompt + ". Preserve the original composition, layout, colors, and all elements of the input image exactly. Only enhance the faces and eyes to be photorealistic and lifelike.",
                     "image_url": imagePublicUrl,
-                    "strength": 0.4,  // Adjusted to better retain input
+                    "strength": 0.8,  // Adjusted to better retain input
                     "enable_safety_checker": true,
                     "num_inference_steps": 50,
-                    "guidance_scale": 3.5,  // Lowered for less aggressive prompt application
+                    "guidance_scale": 5,  // Lowered for less aggressive prompt application
                     "num_images": 1,
                     "seed": Int(Date().timeIntervalSince1970)
                 ]
@@ -556,7 +555,7 @@ extension ContentView {
                 if !appState.ui.imageSlots.isEmpty && isEditModel {
                     var imageUrls: [String] = []
                     for slot in appState.ui.imageSlots {
-                        if let image = slot.image, let processed = processImageForUpload(image: image, originalData: slot.originalData, format: "png") {
+                        if let image = slot.image, let processed = processImageForUpload(image: image, format: "jpeg") {
                             let base64 = processed.data.base64EncodedString()
                             imageUrls.append("data:\(processed.mimeType);base64,\(base64)")
                         }
