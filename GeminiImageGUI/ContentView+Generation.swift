@@ -18,6 +18,19 @@ struct GrokImageData: Codable {
     let revised_prompt: String?
 }
 
+struct ImgBBResponse: Codable {
+    let data: ImgBBData?
+    let success: Bool
+    let status: Int
+}
+
+struct ImgBBData: Codable {
+    let id: String
+    let title: String?
+    let url: String?  // Public URL to use
+    // Other fields if needed
+}
+
 extension ContentView {
     func submitPrompt() {
         if outputPath.isEmpty {
@@ -214,7 +227,9 @@ extension ContentView {
             
             var uploadedFilename: String? = nil
             if !appState.generation.comfyImageNodeID.isEmpty && !appState.ui.imageSlots.isEmpty,
-               let image = appState.ui.imageSlots.first?.image, let processed = processImageForUpload(image: image) {
+               let slot = appState.ui.imageSlots.first,
+               let image = slot.image,
+                let processed = processImageForUpload(image: image, originalData: slot.originalData, format: "png") {
                 var uploadRequest = URLRequest(url: serverURL.appendingPathComponent("upload/image"))
                 uploadRequest.httpMethod = "POST"
                 
@@ -440,50 +455,122 @@ extension ContentView {
             
             let selectedAIMLModel = appState.settings.selectedAIMLModel
             var bodyDict: [String: Any]
-            if appState.settings.supportsCustomResolution {
-                bodyDict = [
-                    "model": selectedAIMLModel,
-                    "prompt": appState.prompt,
-                    "num_images": 1,
-                    "sync_mode": true,
-                    "enable_safety_checker": true,
-                    "image_size": [
-                        "width": appState.settings.selectedImageWidth,
-                        "height": appState.settings.selectedImageHeight
-                    ]
-                ]
-            }
-            else {
-                bodyDict = [
-                    "model": selectedAIMLModel,
-                    "prompt": appState.prompt,
-                    "num_images": 1,
-                    "sync_mode": true,
-                    "enable_safety_checker": true,
-                    "image_size": appState.settings.selectedImageSize
-                ]
-            }
-            // Optional: Add seed
-            bodyDict["seed"] = Int(Date().timeIntervalSince1970)
+            let isEditModel = selectedAIMLModel.contains("edit") || selectedAIMLModel.contains("image-to-image")
             
-            // Image handling for i2i/edit models
-            if !appState.ui.imageSlots.isEmpty && selectedAIMLModel.contains("edit") {
-                var imageUrls: [String] = []
-                for slot in appState.ui.imageSlots {
-                    if let image = slot.image, let processed = processImageForUpload(image: image) {
-                        let base64 = processed.data.base64EncodedString()
-                        imageUrls.append("data:\(processed.mimeType);base64,\(base64)")
-                    }
+            if selectedAIMLModel == "alibaba/qwen-image-edit" {
+                // Existing special case for Qwen
+                guard !appState.ui.imageSlots.isEmpty,
+                      let slot = appState.ui.imageSlots.first,
+                      let image = slot.image,
+                      let processed = processImageForUpload(image: image, originalData: slot.originalData, format: "png") else {
+                    throw GenerationError.apiError("Image required for edit model.")
                 }
-                if !imageUrls.isEmpty {
-                    bodyDict["image_urls"] = imageUrls // Up to 10
+                let base64 = processed.data.base64EncodedString()
+                let imageDataUrl = "data:\(processed.mimeType);base64,\(base64)"
+                
+                bodyDict = [
+                    "model": selectedAIMLModel,
+                    "prompt": appState.prompt,
+                    "image": imageDataUrl  // Base64 data URL; alternatively, use a public HTTP URL if available
+                    // Optionally add: "negative_prompt": "", "watermark": false
+                ]
+            } else if selectedAIMLModel.contains("flux") && selectedAIMLModel.contains("image-to-image") {
+                // Special case for Flux i2i models (e.g., flux/srpo/image-to-image)
+                guard !appState.ui.imageSlots.isEmpty,
+                      let slot = appState.ui.imageSlots.first,
+                      let image = slot.image,
+//                      let processed = processImageForUpload(image: image, originalData: slot.originalData, format: "png") else {
+                    let processed = processImageForUpload(image: image, format: "jpeg") else {
+                    throw GenerationError.apiError("Image required for image-to-image model.")
+                }
+                
+                // Upload to ImgBB to get public URL (requires imgbbApiKey in settings)
+                guard !appState.settings.imgbbApiKey.isEmpty else {
+                    throw GenerationError.apiError("ImgBB API key required for public image upload in Flux i2i models.")
+                }
+                
+                guard let uploadURL = URL(string: "https://api.imgbb.com/1/upload?key=\(appState.settings.imgbbApiKey)&expiration=120") else {
+                    throw GenerationError.invalidURL
+                }
+                
+                var uploadRequest = URLRequest(url: uploadURL)
+                uploadRequest.httpMethod = "POST"
+                
+                let boundary = "Boundary-\(UUID().uuidString)"
+                uploadRequest.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+                
+                var body = Data()
+                body.append("--\(boundary)\r\n".data(using: .utf8)!)
+                body.append("Content-Disposition: form-data; name=\"image\"\r\n\r\n".data(using: .utf8)!)
+                body.append(processed.data.base64EncodedString().data(using: .utf8)!)
+                body.append("\r\n--\(boundary)--\r\n".data(using: .utf8)!)
+                
+                uploadRequest.httpBody = body
+                
+                let (uploadData, _) = try await URLSession.shared.data(for: uploadRequest)
+                let uploadResponse = try JSONDecoder().decode(ImgBBResponse.self, from: uploadData)  // Define struct below
+                
+                guard let imagePublicUrl = uploadResponse.data?.url else {
+                    throw GenerationError.apiError("Failed to upload image to public host.")
+                }
+                
+                bodyDict = [
+                    "model": selectedAIMLModel,
+                    "prompt": appState.prompt + ". Preserve the original composition, layout, colors, and all elements of the input image exactly. Only enhance the faces and eyes to be photorealistic and lifelike.",
+                    "image_url": imagePublicUrl,
+                    "strength": 0.4,  // Adjusted to better retain input
+                    "enable_safety_checker": true,
+                    "num_inference_steps": 50,
+                    "guidance_scale": 3.5,  // Lowered for less aggressive prompt application
+                    "num_images": 1,
+                    "seed": Int(Date().timeIntervalSince1970)
+                ]
+            } else {
+                // Existing general case for other models
+                if appState.settings.supportsCustomResolution {
+                    bodyDict = [
+                        "model": selectedAIMLModel,
+                        "prompt": appState.prompt,
+                        "num_images": 1,
+                        "sync_mode": true,
+                        "enable_safety_checker": true,
+                        "image_size": [
+                            "width": appState.settings.selectedImageWidth,
+                            "height": appState.settings.selectedImageHeight
+                        ]
+                    ]
                 } else {
-                    throw GenerationError.noOutputImage // Require images for edit models
+                    bodyDict = [
+                        "model": selectedAIMLModel,
+                        "prompt": appState.prompt,
+                        "num_images": 1,
+                        "sync_mode": true,
+                        "enable_safety_checker": true,
+                        "image_size": appState.settings.selectedImageSize
+                    ]
                 }
-            } else if appState.ui.imageSlots.isEmpty && selectedAIMLModel.contains("edit") {
-                appState.ui.responseText += "Edit model selected without images; treating as t2i if possible.\n"
-            } else if !appState.ui.imageSlots.isEmpty && !selectedAIMLModel.contains("edit") {
-                throw GenerationError.apiError("Text-to-image model selected with input images; select an edit/i2i model.")
+                // Optional: Add seed
+                bodyDict["seed"] = Int(Date().timeIntervalSince1970)
+                
+                // Image handling for edit/i2i models
+                if !appState.ui.imageSlots.isEmpty && isEditModel {
+                    var imageUrls: [String] = []
+                    for slot in appState.ui.imageSlots {
+                        if let image = slot.image, let processed = processImageForUpload(image: image, originalData: slot.originalData, format: "png") {
+                            let base64 = processed.data.base64EncodedString()
+                            imageUrls.append("data:\(processed.mimeType);base64,\(base64)")
+                        }
+                    }
+                    if !imageUrls.isEmpty {
+                        bodyDict["image_urls"] = imageUrls // Up to 10
+                    } else {
+                        throw GenerationError.noOutputImage // Require images for edit models
+                    }
+                } else if appState.ui.imageSlots.isEmpty && isEditModel {
+                    appState.ui.responseText += "Edit model selected without images; treating as t2i if possible.\n"
+                } else if !appState.ui.imageSlots.isEmpty && !isEditModel {
+                    throw GenerationError.apiError("Text-to-image model selected with input images; select an edit/i2i model.")
+                }
             }
             
             do {

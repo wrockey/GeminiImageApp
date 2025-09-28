@@ -671,14 +671,17 @@ struct ImageSlotItemView: View {
                 self.slot.image = platformImage
                 self.slot.path = "Selected from Photos"
                 
+                var origData: Data? = nil
                 // Extract prompts if PNG (check signature and parse from original data)
                 if isPNGData(data) {
+                    origData = data
                     let promptNodes = parsePromptNodes(from: data)
                     if !promptNodes.isEmpty {
                         self.slot.promptNodes = promptNodes.sorted { $0.id < $1.id }
                         self.slot.selectedPromptIndex = 0
                     }
                 }
+                self.slot.originalData = origData
             }
         }
     }
@@ -717,11 +720,14 @@ struct ImageSlotItemView: View {
         slot.image = pastedImage
         slot.path = "Pasted from Clipboard"
         
-        // Extract prompts if PNG data available
+        var origData: Data? = nil
         var promptNodes: [NodeInfo] = []
         if let data = pngData, isPNGData(data) {
+            origData = data
             promptNodes = parsePromptNodes(from: data)
         }
+        
+        slot.originalData = origData
         
         if !promptNodes.isEmpty {
             slot.promptNodes = promptNodes.sorted { $0.id < $1.id }
@@ -740,68 +746,75 @@ struct ImageSlotItemView: View {
     }
     
     // New: Handle drop (macOS only)
-    #if os(macOS)
-    private func handleDrop(providers: [NSItemProvider]) -> Bool {
-        guard let provider = providers.first else { return false }
+#if os(macOS)
+private func handleDrop(providers: [NSItemProvider]) -> Bool {
+    guard let provider = providers.first else { return false }
+    
+    // First, try loading as URL (for file drags)
+    provider.loadObject(ofClass: URL.self) { reading, error in
+        if let url = reading as? URL, error == nil {
+            DispatchQueue.main.async {
+                self.loadImageFromURL(url)
+            }
+            return
+        }
         
-        // First, try loading as URL (for file drags)
-        provider.loadObject(ofClass: URL.self) { reading, error in
-            if let url = reading as? URL, error == nil {
+        // Fallback: Load as raw image data (for direct image drags, e.g., from Photos or browsers)
+        provider.loadDataRepresentation(forTypeIdentifier: UTType.image.identifier) { data, error in
+            if let error = error {
                 DispatchQueue.main.async {
-                    self.loadImageFromURL(url)
+                    self.errorItem = AlertError(message: "Drop error: \(error.localizedDescription)")
                 }
                 return
             }
             
-            // Fallback: Load as raw image data (for direct image drags, e.g., from Photos or browsers)
-            provider.loadDataRepresentation(forTypeIdentifier: UTType.image.identifier) { data, error in
-                if let error = error {
-                    DispatchQueue.main.async {
-                        self.errorItem = AlertError(message: "Drop error: \(error.localizedDescription)")
-                    }
-                    return
-                }
+            guard let data = data else { return }
+            
+            guard let nsImage = NSImage(data: data) else { return }
+            
+            DispatchQueue.main.async {
+                self.slot.image = nsImage
+                self.slot.path = "Dropped Image"
                 
-                guard let data = data else { return }
-                
-                guard let nsImage = NSImage(data: data) else { return }
-                
-                DispatchQueue.main.async {
-                    self.slot.image = nsImage
-                    self.slot.path = "Dropped Image"
-                }
-                
+                var origData: Data? = nil
                 // Attempt to extract prompts if PNG (check signature and parse from original data)
                 if isPNGData(data) {
+                    origData = data
                     let promptNodes = parsePromptNodes(from: data)
                     if !promptNodes.isEmpty {
-                        DispatchQueue.main.async {
-                            self.slot.promptNodes = promptNodes.sorted { $0.id < $1.id }
-                            self.slot.selectedPromptIndex = 0
-                        }
+                        self.slot.promptNodes = promptNodes.sorted { $0.id < $1.id }
+                        self.slot.selectedPromptIndex = 0
                     }
                 }
+                self.slot.originalData = origData
             }
         }
-        
-        return true
     }
-    #endif
     
+    return true
+}
+#endif
     private func loadImageFromURL(_ url: URL) {
         do {
-            let (image, promptNodes) = try withSecureAccess(to: url) {
-                let img = PlatformImage(contentsOf: url)
+            let (image, promptNodes, originalData) = try withSecureAccess(to: url) {
+                var img: PlatformImage? = nil
                 var nodes: [NodeInfo] = []
+                var origData: Data? = nil
                 if url.pathExtension.lowercased() == "png" {
-                    nodes = parsePromptNodes(from: url)
+                    let data = try Data(contentsOf: url)
+                    origData = data
+                    nodes = parsePromptNodes(from: data)
+                    img = PlatformImage(data: data)
+                } else {
+                    img = PlatformImage(contentsOf: url)
                 }
-                return (img, nodes)
+                return (img, nodes, origData)
             }
             
             if let img = image {
                 slot.image = img
                 slot.path = url.path
+                slot.originalData = originalData
                 
                 if !promptNodes.isEmpty {
                     slot.promptNodes = promptNodes.sorted { $0.id < $1.id }
@@ -815,12 +828,7 @@ struct ImageSlotItemView: View {
         }
     }
     
-    // Helper to check if data is PNG
-    private func isPNGData(_ data: Data) -> Bool {
-        guard data.count >= 8 else { return false }
-        let signature = data.subdata(in: 0..<8)
-        return signature == Data([137, 80, 78, 71, 13, 10, 26, 10])
-    }
+
 }
 
 // Added: Wrapper for PHPickerViewController

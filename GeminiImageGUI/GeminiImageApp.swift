@@ -33,6 +33,7 @@ class SettingsState: ObservableObject {
     @Published var grokApiKey: String = KeychainHelper.loadGrokAPIKey() ?? ""  // Added: Grok API key from Keychain
     @Published var selectedGrokModel: String = "grok-2-image-1212"  // Added: Default model, options: ["grok-2-image-1212", "aurora"]
     @Published var aimlapiKey: String = KeychainHelper.loadAIMLAPIKey() ?? ""  // New
+    @Published var imgbbApiKey: String = KeychainHelper.loadImgBBAPIKey() ?? ""  // New: ImgBB API key from Keychain
     @Published var selectedAIMLModel: String = ""  // New: Selected from fetched models
     @Published var selectedImageSize: String = "square_hd"  // New: Default enum
     @Published var selectedResolutionString : String = "2048x2048"
@@ -342,6 +343,7 @@ struct ImageSlot: Identifiable {
     var image: PlatformImage? = nil
     var promptNodes: [NodeInfo] = []
     var selectedPromptIndex: Int = 0
+    var originalData: Data? = nil
 }
 
 struct HistoryItem: Identifiable, Codable, Equatable {
@@ -495,6 +497,7 @@ struct GeminiImageApp: App {
             } else {
                 ContentView()
                     .environmentObject(appState)
+                    .environmentObject(appState)
                     .sheet(isPresented: Binding(get: { appState.showResponseSheet }, set: { appState.showResponseSheet = $0 })) {
                         PopOutView()
                             .environmentObject(appState)
@@ -534,3 +537,5 @@ struct MarkupWindowView: View {
         }
     }
 }
+
+

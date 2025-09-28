@@ -4,18 +4,18 @@ import AppKit
 #elseif os(iOS)
 import UIKit
 #endif
-
+ 
 // New struct for response parsing (add at top or in separate file)
 struct AIMLModelsResponse: Codable {
     let object: String
     let data: [AIMLModel]
 }
-
+ 
 struct AIMLModel: Codable {
     let id: String
     // Add other fields if needed: type, info, features
 }
-
+ 
 struct ConfigurationSection: View {
     @Binding var showApiKey: Bool
     @Binding var apiKeyPath: String
@@ -37,6 +37,8 @@ struct ConfigurationSection: View {
     @State private var serverErrorMessage: String = ""
     @State private var isTestingServer: Bool = false
     @State private var showGrokApiKey: Bool = false  // Added: For Grok key visibility toggle
+    @State private var showAIMLApiKey: Bool = false  // Added: For AI/ML key visibility toggle
+    @State private var showImgBBApiKey: Bool = false  // Added: For ImgBB key visibility toggle
     @State private var availableModels: [String] = []  // New: Fetched image models
     @State private var isFetchingModels: Bool = false  // New: Loading state
     
@@ -370,6 +372,7 @@ struct ConfigurationSection: View {
     private var aimlConfiguration: some View {
         VStack(alignment: .leading, spacing: isCompact ? 12 : 16) {
             aimlApiKeyRow
+            aimlImgBBApiKeyRow  // New: Added ImgBB API key row
             aimlModelRow  // Dynamic Picker
             aimlImageSizeRow
             aimlResolutionRow
@@ -384,7 +387,7 @@ struct ConfigurationSection: View {
                 .foregroundColor(.secondary)
                 .help("Enter your aimlapi.com API key")
             Group {
-                if showGrokApiKey {  // Reuse toggle if needed; or add @State showAIMLApiKey
+                if showAIMLApiKey {
                     TextField("Enter or paste AI/ML API key", text: $appState.settings.aimlapiKey)
                         .onChange(of: appState.settings.aimlapiKey) { newValue in
                             handleAIMLAPIKeyChange(newValue)
@@ -393,7 +396,7 @@ struct ConfigurationSection: View {
                             }
                         }
                         .help("Visible AI/ML API key input")
-
+                    
                 } else {
                     SecureField("Enter or paste AI/ML API key", text: $appState.settings.aimlapiKey)
                         .onChange(of: appState.settings.aimlapiKey) { newValue in
@@ -413,8 +416,36 @@ struct ConfigurationSection: View {
             .autocorrectionDisabled()
             .accessibilityLabel("AI/ML API key input")
             
-            // Toggle, paste, test buttons (copy from grokApiKeyRow, rename to AIML)
-            // ...
+            Toggle(isOn: $showAIMLApiKey) {
+                Image(systemName: showAIMLApiKey ? "eye.slash" : "eye")
+                    .symbolRenderingMode(.hierarchical)
+            }
+            .toggleStyle(.button)
+            .help("Toggle AI/ML API Key Visibility")
+            .accessibilityLabel("Toggle AI/ML API key visibility")
+            
+            Button(action: {
+                pasteToAIMLApiKey()
+            }) {
+                Image(systemName: "doc.on.clipboard")
+                    .font(.system(size: isCompact ? 14 : 16))
+                    .foregroundColor(.blue)
+            }
+            .buttonStyle(.borderless)
+            .help("Paste AI/ML API key from clipboard")
+            .accessibilityLabel("Paste AI/ML API key")
+            
+            Button(action: {
+                testAIMLApiKey()
+            }) {
+                Image(systemName: "checkmark.circle")
+                    .font(.system(size: isCompact ? 14 : 16))
+                    .foregroundColor(.blue)
+            }
+            .buttonStyle(.borderless)
+            .disabled(appState.settings.aimlapiKey.isEmpty || isTestingApi)
+            .help("Test the entered AI/ML API key")
+            .accessibilityLabel("Test AI/ML API key")
             
             Button(action: {
                 fetchAvailableModels()
@@ -425,6 +456,58 @@ struct ConfigurationSection: View {
             .buttonStyle(.bordered)
             .disabled(appState.settings.aimlapiKey.isEmpty || isFetchingModels)
             .help("Fetch available image models from AI/ML API")
+        }
+    }
+    
+    // New: ImgBB API key row (similar to AI/ML, but without fetch/test buttons for simplicity)
+    @ViewBuilder
+    private var aimlImgBBApiKeyRow: some View {
+        HStack(spacing: isCompact ? 8 : 16) {
+            Text("ImgBB API Key:")
+                .font(labelFont)
+                .foregroundColor(.secondary)
+                .help("Enter your ImgBB API key for image uploads (required for some models)")
+            Group {
+                if showImgBBApiKey {
+                    TextField("Enter or paste ImgBB API key", text: $appState.settings.imgbbApiKey)
+                        .onChange(of: appState.settings.imgbbApiKey) { newValue in
+                            handleImgBBAPIKeyChange(newValue)
+                        }
+                        .help("Visible ImgBB API key input")
+                } else {
+                    SecureField("Enter or paste ImgBB API key", text: $appState.settings.imgbbApiKey)
+                        .onChange(of: appState.settings.imgbbApiKey) { newValue in
+                            handleImgBBAPIKeyChange(newValue)
+                        }
+                        .help("Hidden ImgBB API key input")
+                }
+            }
+            .textFieldStyle(.roundedBorder)
+            .font(textFont)
+            .background(Color.black.opacity(0.1))
+            .cornerRadius(8)
+            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.4), lineWidth: 1))
+            .autocorrectionDisabled()
+            .accessibilityLabel("ImgBB API key input")
+            
+            Toggle(isOn: $showImgBBApiKey) {
+                Image(systemName: showImgBBApiKey ? "eye.slash" : "eye")
+                    .symbolRenderingMode(.hierarchical)
+            }
+            .toggleStyle(.button)
+            .help("Toggle ImgBB API Key Visibility")
+            .accessibilityLabel("Toggle ImgBB API key visibility")
+            
+            Button(action: {
+                pasteToImgBBApiKey()
+            }) {
+                Image(systemName: "doc.on.clipboard")
+                    .font(.system(size: isCompact ? 14 : 16))
+                    .foregroundColor(.blue)
+            }
+            .buttonStyle(.borderless)
+            .help("Paste ImgBB API key from clipboard")
+            .accessibilityLabel("Paste ImgBB API key")
         }
     }
     
@@ -481,7 +564,7 @@ struct ConfigurationSection: View {
             EmptyView()
         }
     }
-
+    
     @ViewBuilder
     private var aimlResolutionRow: some View {
         if appState.settings.supportsCustomResolution {
@@ -492,42 +575,44 @@ struct ConfigurationSection: View {
                     .help("Select a common resolution (multiples of 32)")
                     .fixedSize()
                 Picker("", selection: $appState.settings.selectedResolutionString) {
-                Text("512 x 512").tag("512x512")
-                Text("1024 x 1024").tag("1024x1024")
-                Text("2048 x 2048").tag("2048x2048")
-                Text("1024 x 768 (Landscape 4:3)").tag("1024x768")
-                Text("768 x 1024 (Portrait 4:3)").tag("768x1024")
-                Text("1024 x 576 (Landscape 16:9)").tag("1024x576")
-                Text("576 x 1024 (Portrait 16:9)").tag("576x1024")
-                Text("1536 x 864 (Landscape 16:9 HD)").tag("1536x864")
-                Text("1920 x 1088 (Full HD Landscape 16:9)").tag("1920x1088")
-                Text("1088 x 1920 (Full HD Portrait 16:9)").tag("1088x1920")
-                Text("3840 x 2176 (4K UHD Landscape 16:9)").tag("3840x2176")
-                Text("2176 x 3840 (4K UHD Portrait 16:9)").tag("2176x3840")
-                Text("4096 x 4096 (4K Square)").tag("4096x4096")
-            }
-            .pickerStyle(.menu)
-            .frame(width: 300)  // Increased width to accommodate longer labels
-            .help("Choose resolution; model-dependent, multiples of 32")
-            .accessibilityLabel("Resolution selector")
-            .onChange(of: appState.settings.selectedResolutionString) {newValue in
-                let parts = newValue.split(separator: "x")
-                if parts.count == 2,
-                   let width = Int(parts[0]),
-                   let height = Int(parts[1]) {
-                    appState.settings.selectedImageWidth = width
-                    appState.settings.selectedImageHeight = height
+                    Text("512 x 512").tag("512x512")
+                    Text("1024 x 1024").tag("1024x1024")
+                    Text("2048 x 2048").tag("2048x2048")
+                    Text("1024 x 768 (Landscape 4:3)").tag("1024x768")
+                    Text("768 x 1024 (Portrait 4:3)").tag("768x1024")
+                    Text("1024 x 576 (Landscape 16:9)").tag("1024x576")
+                    Text("576 x 1024 (Portrait 16:9)").tag("576x1024")
+                    Text("1536 x 864 (Landscape 16:9 HD)").tag("1536x864")
+                    Text("1920 x 1088 (Full HD Landscape 16:9)").tag("1920x1088")
+                    Text("1088 x 1920 (Full HD Portrait 16:9)").tag("1088x1920")
+                    Text("3840 x 2176 (4K UHD Landscape 16:9)").tag("3840x2176")
+                    Text("2176 x 3840 (4K UHD Portrait 16:9)").tag("2176x3840")
+                    Text("4096 x 4096 (4K Square)").tag("4096x4096")
+                }
+                .pickerStyle(.menu)
+                .frame(width: 300)  // Increased width to accommodate longer labels
+                .help("Choose resolution; model-dependent, multiples of 32")
+                .accessibilityLabel("Resolution selector")
+                .onChange(of: appState.settings.selectedResolutionString) {newValue in
+                    let parts = newValue.split(separator: "x")
+                    let trimmedParts = parts.map { $0.trimmingCharacters(in: .whitespaces) }
+                    if trimmedParts.count == 2,
+                       let width = Int(trimmedParts[0]),
+                       let height = Int(trimmedParts[1]) {
+                        appState.settings.selectedImageWidth = width
+                        appState.settings.selectedImageHeight = height
+                    }
+                }
+                .onAppear {
+                    if appState.settings.selectedResolutionString.isEmpty {
+                        appState.settings.selectedResolutionString = "2048x2048"
+                    }
                 }
             }
-            .onAppear(){
-                if appState.settings.selectedResolutionString.isEmpty {
-                    appState.settings.selectedResolutionString = "2048x2048"
-                }
-            }
+        } else {
+            EmptyView()
         }
-    } else {
-        EmptyView()
-    }}
+    }
     
     @ViewBuilder
     private var comfyUIConfiguration: some View {
@@ -999,7 +1084,7 @@ struct ConfigurationSection: View {
         } else if KeychainHelper.saveAIMLAPIKey(newValue) {
             // Optional: Add saved message
         } else {
-            errorItem = AlertError(message: "Failed to securely store Seedream API key.")
+            errorItem = AlertError(message: "Failed to securely store AI/ML API key.")
         }
     }
     
@@ -1047,6 +1132,32 @@ struct ConfigurationSection: View {
             }
         }
     }
+    
+    // New: Handle ImgBB API key change
+    private func handleImgBBAPIKeyChange(_ newValue: String) {
+        if newValue.isEmpty {
+            KeychainHelper.deleteImgBBAPIKey()
+        } else if KeychainHelper.saveImgBBAPIKey(newValue) {
+            // Optional: Add saved message
+        } else {
+            errorItem = AlertError(message: "Failed to securely store ImgBB API key.")
+        }
+    }
+    
+    // New: Paste to ImgBB API key
+    private func pasteToImgBBApiKey() {
+        var pastedText: String? = nil
+#if os(macOS)
+        let pasteboard = NSPasteboard.general
+        pastedText = pasteboard.string(forType: .string)
+#elseif os(iOS)
+        pastedText = UIPasteboard.general.string
+#endif
+        
+        if let text = pastedText {
+            appState.settings.imgbbApiKey = text
+        }
+    }
     // New fetch function (add after testAIMLApiKey)
     private func fetchAvailableModels() {
         guard !appState.settings.aimlapiKey.isEmpty else {
@@ -1077,10 +1188,10 @@ struct ConfigurationSection: View {
                 let imageModels = response.data.filter { model in
                     let lowerID = model.id.lowercased()
                     return !lowerID.contains("video") && (
-                            lowerID.contains("image") || lowerID.contains("t2i") || lowerID.contains("i2i") ||
-                            lowerID.contains("diffusion") || lowerID.contains("seedream") || lowerID.contains("flux") ||
-                            lowerID.contains("edit") || lowerID.contains("generation") || lowerID.contains("dall") // No comma here
-                        )
+                        lowerID.contains("image") || lowerID.contains("t2i") || lowerID.contains("i2i") ||
+                        lowerID.contains("diffusion") || lowerID.contains("seedream") || lowerID.contains("flux") ||
+                        lowerID.contains("edit") || lowerID.contains("generation") || lowerID.contains("dall") // No comma here
+                    )
                 }.map { $0.id }.sorted()
                 
                 await MainActor.run {

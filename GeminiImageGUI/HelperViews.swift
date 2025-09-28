@@ -426,3 +426,10 @@ struct SubmitButtonView: View {
         .shadow(color: .black.opacity(0.1), radius: 1)
     }
 }
+
+// Helper to check if data is PNG
+func isPNGData(_ data: Data) -> Bool {
+    guard data.count >= 8 else { return false }
+    let signature = data.subdata(in: 0..<8)
+    return signature == Data([137, 80, 78, 71, 13, 10, 26, 10])
+}
