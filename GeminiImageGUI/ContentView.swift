@@ -48,6 +48,7 @@ enum PresentedModal: Identifiable {
     case fullHistoryItem(UUID)
     case markupSlot(UUID)
     case textEditor(IdentifiableData)
+    case advancedSettings  // New: For advanced AI/ML settings
     // Add cases for other modals like onboarding, help, etc., if they conflict
     // e.g., case onboarding, case help(GenerationMode)
 
@@ -58,6 +59,7 @@ enum PresentedModal: Identifiable {
         case .fullHistoryItem(let uuid): return "fullHistoryItem_\(uuid.uuidString)"
         case .markupSlot(let uuid): return "markupSlot_\(uuid.uuidString)"
         case .textEditor(let data): return "textEditor_\(data.id.uuidString)"
+        case .advancedSettings: return "advancedSettings"
         }
     }
 }
@@ -352,7 +354,7 @@ struct ContentView: View {
                     if let index = appState.ui.imageSlots.firstIndex(where: { $0.id == slotId }),
                        let image = appState.ui.imageSlots[index].image {
                         let path = appState.ui.imageSlots[index].path
-                        let fileURL = URL(filePath: path)
+                        let fileURL = URL(fileURLWithPath: path)
                         let lastComponent = fileURL.lastPathComponent
                         let components = lastComponent.components(separatedBy: ".")
                         let baseFileName = components.count > 1 ? components.dropLast().joined(separator: ".") : (lastComponent.isEmpty ? "image" : lastComponent)
@@ -367,6 +369,10 @@ struct ContentView: View {
                         .presentationDetents([.large])
                         .presentationDragIndicator(.visible)
                         .environmentObject(appState)
+                case .advancedSettings:
+                    AdvancedAIMLSettingsView(model: appState.currentAIMLModel ?? AIMLModel(id: "", isI2I: false, maxInputImages: 0, supportedParams: [], supportsCustomResolution: false, defaultImageSize: "", imageInputParam: "", acceptsMultiImages: false, acceptsBase64: false, acceptsPublicURL: false, maxWidth: nil, maxHeight: nil), params: $appState.settings.aimlAdvancedParams)
+                        .presentationDetents([.large])  // Full-page like on iOS
+                        .presentationDragIndicator(.visible)
                 }
             }
         }
