@@ -59,6 +59,15 @@ struct AdvancedAIMLSettingsView: View {
                         }
                     }
                 }
+                if model.supportedParams.contains(.enhancePrompt) {
+                                    Section(header: Text("Enhance Prompt")) {
+                                        Toggle("Enable Prompt Enhancement", isOn: Binding(
+                                            get: { params.enhancePrompt ?? true },
+                                            set: { params.enhancePrompt = $0 }
+                                        ))
+                                        .help("Use LLM to rewrite prompt for better quality (default: on)")
+                                    }
+                                }
                 if model.supportedParams.contains(.enableSafetyChecker) {
                     Section(header: Text("Safety Checker")) {
                         Toggle("Enable", isOn: Binding(
@@ -80,7 +89,7 @@ struct AdvancedAIMLSettingsView: View {
             .navigationTitle("Advanced Settings for \(model.id)")
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") { dismiss() }
+                    Button("Save") { dismiss()}
                 }
             }
         }

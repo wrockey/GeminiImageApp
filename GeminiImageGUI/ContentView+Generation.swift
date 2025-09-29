@@ -532,6 +532,9 @@ extension ContentView {
             if let watermark = appState.settings.aimlAdvancedParams.watermark, model.supportedParams.contains(.watermark) {
                 bodyDict["watermark"] = watermark
             }
+            if let enhance = appState.settings.aimlAdvancedParams.enhancePrompt, model.supportedParams.contains(.enhancePrompt) {
+                bodyDict["enhance_prompt"] = enhance
+            }
             
             // Image handling with ImgBB preference
             var imageInputs: [String] = []

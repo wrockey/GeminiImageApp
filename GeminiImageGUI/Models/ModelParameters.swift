@@ -9,5 +9,5 @@ struct ModelParameters: Codable {
     var numImages: Int? = 1
     var enableSafetyChecker: Bool? = true
     var watermark: Bool? = false
-    // Add more model-specific defaults as needed
+    var enhancePrompt: Bool? = true  // New: Default true per docs
 }

@@ -23,9 +23,9 @@ enum AIMLParam: String, CaseIterable {
     case seed
     case numImages
     case enableSafetyChecker
-    case watermark // Model-specific example
-    case enhancePrompt // Added for models like imagen-4-generate
-    // Add more as needed, e.g., .safetyTolerance
+    case watermark
+    case enhancePrompt  // New: For prompt enhancement in Google Imagen models
+    // Add more as needed
 }
 
 struct ModelRegistry {
@@ -152,21 +152,21 @@ struct ModelRegistry {
                 maxWidth: nil,
                 maxHeight: nil
             )
-        case "imagen-4-generate":
-            return AIMLModel(
-                id: id,
-                isI2I: false,
-                maxInputImages: 0,
-                supportedParams: [.enhancePrompt],  // From docs
-                supportsCustomResolution: false,
-                defaultImageSize: "1:1",
-                imageInputParam: "",
-                acceptsMultiImages: false,
-                acceptsBase64: false,
-                acceptsPublicURL: false,
-                maxWidth: nil,
-                maxHeight: nil
-            )
+        case "imagen-4.0-generate-001", "google/imagen-4.0-generate-001":
+                    return AIMLModel(
+                        id: id,
+                        isI2I: false,
+                        maxInputImages: 0,
+                        supportedParams: [.enhancePrompt, .numImages, .enableSafetyChecker],
+                        supportsCustomResolution: false,
+                        defaultImageSize: "1:1",
+                        imageInputParam: "",
+                        acceptsMultiImages: false,
+                        acceptsBase64: false,
+                        acceptsPublicURL: false,
+                        maxWidth: nil,
+                        maxHeight: nil
+                    )
         case "recraft-v3":
             return AIMLModel(
                 id: id,
@@ -197,36 +197,66 @@ struct ModelRegistry {
                 maxWidth: 1440,
                 maxHeight: 1440
             )
-        case "imagen-4-fast-generate":
-            return AIMLModel(
-                id: id,
-                isI2I: false,
-                maxInputImages: 0,
-                supportedParams: [.enhancePrompt],
-                supportsCustomResolution: false,
-                defaultImageSize: "1:1",
-                imageInputParam: "",
-                acceptsMultiImages: false,
-                acceptsBase64: false,
-                acceptsPublicURL: false,
-                maxWidth: nil,
-                maxHeight: nil
-            )
-        case "imagen-4-ultra-generate":
-            return AIMLModel(
-                id: id,
-                isI2I: false,
-                maxInputImages: 0,
-                supportedParams: [.enhancePrompt],
-                supportsCustomResolution: false,
-                defaultImageSize: "1:1",
-                imageInputParam: "",
-                acceptsMultiImages: false,
-                acceptsBase64: false,
-                acceptsPublicURL: false,
-                maxWidth: nil,
-                maxHeight: nil
-            )
+        case "imagen-4.0-fast-generate-001":
+                    return AIMLModel(
+                        id: id,
+                        isI2I: false,
+                        maxInputImages: 0,
+                        supportedParams: [.enhancePrompt, .numImages, .enableSafetyChecker],
+                        supportsCustomResolution: false,
+                        defaultImageSize: "1:1",
+                        imageInputParam: "",
+                        acceptsMultiImages: false,
+                        acceptsBase64: false,
+                        acceptsPublicURL: false,
+                        maxWidth: nil,
+                        maxHeight: nil
+                    )
+        case "imagen-4-ultra-generate-preview-06-06":
+                    return AIMLModel(
+                        id: id,
+                        isI2I: false,
+                        maxInputImages: 0,
+                        supportedParams: [.enhancePrompt, .numImages, .enableSafetyChecker],
+                        supportsCustomResolution: false,
+                        defaultImageSize: "1:1",
+                        imageInputParam: "",
+                        acceptsMultiImages: false,
+                        acceptsBase64: false,
+                        acceptsPublicURL: false,
+                        maxWidth: nil,
+                        maxHeight: nil
+                    )
+        case "google/gemini-2.5-flash-image":
+                    return AIMLModel(
+                        id: id,
+                        isI2I: true,
+                        maxInputImages: 1,
+                        supportedParams: [.numImages, .enableSafetyChecker],
+                        supportsCustomResolution: false,
+                        defaultImageSize: "square_hd",
+                        imageInputParam: "image_urls",
+                        acceptsMultiImages: false,
+                        acceptsBase64: true,
+                        acceptsPublicURL: true,
+                        maxWidth: nil,
+                        maxHeight: nil
+                    )
+                case "google/gemini-2.5-flash-image-edit":
+                    return AIMLModel(
+                        id: id,
+                        isI2I: true,
+                        maxInputImages: 1,
+                        supportedParams: [.numImages, .enableSafetyChecker],
+                        supportsCustomResolution: false,
+                        defaultImageSize: "square_hd",
+                        imageInputParam: "image_urls",
+                        acceptsMultiImages: false,
+                        acceptsBase64: true,
+                        acceptsPublicURL: true,
+                        maxWidth: nil,
+                        maxHeight: nil
+                    )
         case "reve/edit-image":
             return AIMLModel(
                 id: id,
