@@ -429,6 +429,7 @@ struct GenerateContentResponse: Codable {
 
 struct Candidate: Codable {
     let content: ResponseContent
+    let finishReason: String?  // Added for safety checks (e.g., "SAFETY")
 }
 
 struct ResponseContent: Codable {
@@ -471,10 +472,12 @@ struct NewResponseContent: Codable {
 
 struct NewCandidate: Codable {
     let content: NewResponseContent
+    let finishReason: String?  // Added for safety checks (e.g., "SAFETY")
 }
 
 struct NewGenerateContentResponse: Codable {
     let candidates: [NewCandidate]
+    let finishReason: String?  // Added for safety checks (e.g., "SAFETY")
 }
 
 @main

@@ -6,9 +6,16 @@ import AppKit
 #endif
 import ImageIO // Still needed if other parts use it, but can remove if not
 
+struct ErrorDict: Codable {  // New: For Grok/aimlapi error parsing
+    let message: String?
+    let type: String?  // Optional, if API provides (e.g., "policy_violation")
+    let code: Int?     // Optional error code
+}
+
 struct GrokImageResponse: Codable {
     let created: Int?
     let data: [GrokImageData]
+    let error: ErrorDict?  // Updated: Now Codable struct
 }
 
 struct GrokImageData: Codable {
@@ -111,6 +118,20 @@ extension ContentView {
             let (data, _) = try await URLSession.shared.data(for: request)
             print(String(data: data, encoding: .utf8) ?? "No data")
             let response = try JSONDecoder().decode(NewGenerateContentResponse.self, from: data)
+            
+            if let candidate = response.candidates.first, let finishReason = candidate.finishReason, finishReason == "SAFETY" {
+                    DispatchQueue.main.async {
+                        appState.ui.responseText = "Generation blocked for safety reasons. Please revise your prompt."
+                    }
+                    throw GenerationError.apiError("Blocked due to safety violation")
+                }
+            
+            if response.candidates.isEmpty {
+                    DispatchQueue.main.async {
+                        appState.ui.responseText = "Prompt blocked for safety or policy reasons."
+                    }
+                    throw GenerationError.apiError("Prompt blocked")
+                }
             
             var textOutput = ""
             var savedImage: PlatformImage? = nil
@@ -406,6 +427,21 @@ extension ContentView {
             try Task.checkCancellation()
             let (data, _) = try await URLSession.shared.data(for: request)
             let response = try JSONDecoder().decode(GrokImageResponse.self, from: data)
+            if let error = response.error {
+                    var message = error.message ?? "Unknown error"
+                    if message.lowercased().contains("policy") || message.lowercased().contains("safety") || message.lowercased().contains("violation") {
+                        message += " (Likely safety/content violation)"
+                        DispatchQueue.main.async {
+                            appState.ui.responseText = "Generation blocked for content policy violation: \(message)"
+                        }
+                        throw GenerationError.apiError("Blocked due to policy violation")
+                    } else {
+                        DispatchQueue.main.async {
+                            appState.ui.responseText = "API Error: \(message)"
+                        }
+                        throw GenerationError.apiError(message)
+                    }
+                }
             if let revised = response.data.first?.revised_prompt {
                 print("Revised prompt from Grok: \(revised)")
             }
@@ -594,6 +630,17 @@ extension ContentView {
             if (200...299).contains(httpResponse.statusCode) {
                 let response = try JSONDecoder().decode(GrokImageResponse.self, from: data)
                 
+                if let error = response.error {
+                    var message = error.message ?? "Unknown error"
+                    if message.lowercased().contains("safety") || message.lowercased().contains("violation") || message.lowercased().contains("content policy") {
+                        message += " (Likely safety/content violation)"
+                    }
+                    await MainActor.run {
+                        appState.ui.responseText = "API Error: \(message)"
+                    }
+                    throw GenerationError.apiError(message)
+                }
+                
                 var textOutput = ""
                 var savedImage: PlatformImage? = nil
                 var savedPath: String? = nil
@@ -635,6 +682,9 @@ extension ContentView {
                 if let errorJson = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
                     if let message = errorJson["message"] as? String {
                         errorMessage = "API Error: \(message)"
+                        if message.lowercased().contains("safety") || message.lowercased().contains("violation") || message.lowercased().contains("content policy") {
+                            errorMessage += " (Likely safety/content violation)"
+                        }
                     }
                     if let meta = errorJson["meta"] as? [String: Any],
                        let fieldErrors = meta["fieldErrors"] as? [String: [String]] {
@@ -651,7 +701,7 @@ extension ContentView {
                 await MainActor.run {
                     appState.ui.responseText = errorMessage
                 }
-                return
+                throw GenerationError.apiError(errorMessage)
             }
         }
     }
