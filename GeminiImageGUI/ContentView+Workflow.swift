@@ -96,63 +96,10 @@ extension ContentView {
             
             var workflowToUse: [String: Any] = json
 
-            if let nodes = json["nodes"] as? [[String: Any]],
-               let linksRaw = json["links"] as? [[Any]] {
-                
-                // Convert links to map for quick lookup: linkID -> [fromID, fromSlot, toID, toSlot, type]
-                var linkMap: [Int: (Int, Int, Int, Int, String)] = [:]
-                for link in linksRaw {
-                    guard link.count == 6,
-                          let linkID = link[0] as? Int,
-                          let fromID = link[1] as? Int,
-                          let fromSlot = link[2] as? Int,
-                          let toID = link[3] as? Int,
-                          let toSlot = link[4] as? Int,
-                          let type = link[5] as? String else {
-                        continue
-                    }
-                    linkMap[linkID] = (fromID, fromSlot, toID, toSlot, type)
-                }
-                
-                // Build API workflow
-                var apiWorkflow: [String: [String: Any]] = [:]
-                for node in nodes {
-                    guard let id = node["id"] as? Int,
-                          let type = node["type"] as? String else {
-                        continue
-                    }
-                    let idStr = String(id)
-                    
-                    var inputs: [String: Any] = [:]
-                    let widgetsValues = node["widgets_values"] as? [Any] ?? []
-                    var widgetIdx = 0
-                    
-                    if let nodeInputs = node["inputs"] as? [[String: Any]] {
-                        for nodeInput in nodeInputs {
-                            guard let name = nodeInput["name"] as? String else { continue }
-                            
-                            if let linkID = nodeInput["link"] as? Int,
-                               let link = linkMap[linkID] {
-                                let fromIDStr = String(link.0)
-                                let fromSlot = link.1
-                                inputs[name] = [fromIDStr, fromSlot]
-                            } else if widgetIdx < widgetsValues.count {
-                                inputs[name] = widgetsValues[widgetIdx]
-                                widgetIdx += 1
-                            }
-                        }
-                    }
-                    
-                    // Add any remaining widgets_values if needed (e.g., for properties not in inputs)
-                    // But for standard ComfyUI nodes, the above should suffice
-                    
-                    apiWorkflow[idStr] = ["class_type": type, "inputs": inputs]
-                }
-                
-                workflowToUse = apiWorkflow
-                
-                // Optional: Log for debugging
-                print("Converted full workflow to API format with \(apiWorkflow.count) nodes")
+            if let _ = json["nodes"] as? [[String: Any]],
+               let _ = json["links"] as? [[Any]] {
+                errorItem = AlertError(message: "The selected workflow is not in API format. Please export the workflow in API format from ComfyUI and try again.")
+                return
             }
 
             // Now use workflowToUse instead of json
