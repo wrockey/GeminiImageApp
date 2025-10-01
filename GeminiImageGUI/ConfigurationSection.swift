@@ -969,6 +969,8 @@ struct ConfigurationSection: View {
                 .accessibilityLabel("Output node selector")
             }
         }
+        Stepper("Batch Size: \(appState.settings.comfyBatchSize)", value: $appState.settings.comfyBatchSize, in: 1...32)
+                .help("Number of images to generate in one run (uses random seeds for variation)")
     }
     
     private func testApiKey() {

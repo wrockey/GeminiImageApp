@@ -246,7 +246,7 @@ struct ModelRegistry {
                     return AIMLModel(
                         id: id,
                         isI2I: true,
-                        maxInputImages: 1,
+                        maxInputImages: 10,
                         supportedParams: [.numImages, .enableSafetyChecker],
                         supportsCustomResolution: false,
                         defaultImageSize: "square_hd",

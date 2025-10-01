@@ -40,6 +40,7 @@ class SettingsState: ObservableObject {
     @Published var selectedImageHeight : Int = 2048
     @Published var selectedImageWidth : Int = 2048
     @Published var aimlAdvancedParams: ModelParameters = ModelParameters()
+    @Published var comfyBatchSize: Int = 1  // NEW: Batch size for ComfyUI (1-32 recommended)
     var supportsCustomResolution: Bool {
         let supportingModels = [
             "bytedance/seedream-v4-text-to-image",

@@ -139,6 +139,8 @@ enum GenerationError: Error {
     case fetchFailed(String)
     case invalidViewURL
     case invalidImageNode
+    case noSamplerNode
+    
 }
 
 struct AlertError: Identifiable {
