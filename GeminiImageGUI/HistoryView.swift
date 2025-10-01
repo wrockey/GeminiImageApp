@@ -3,18 +3,15 @@ import SwiftUI
 #if os(macOS)
 import AppKit
 #endif
-
 extension UUID: Identifiable {
     public var id: UUID { self }
 }
-
 struct SizePreferenceKey: PreferenceKey {
     static var defaultValue: CGSize = .zero
     static func reduce(value: inout CGSize, nextValue: () -> CGSize) {
         value = nextValue()
     }
 }
-
 struct HistoryView: View {
     @Binding var imageSlots: [ImageSlot]
     @EnvironmentObject var appState: AppState
@@ -25,21 +22,21 @@ struct HistoryView: View {
     @Binding var columnVisibility: NavigationSplitViewVisibility
     @State private var fullHistoryItemId: UUID? = nil
     @State private var showAddedMessage: Bool = false
-    
+   
     #if os(macOS)
     @available(macOS 13.0, *)
     @Environment(\.openWindow) private var openWindow
     #else
     @Environment(\.dismiss) private var dismiss // ADDED: To dismiss the history sheet on iOS
     #endif
-    
+   
     private var dateFormatter: DateFormatter {
         let formatter = DateFormatter()
         formatter.dateStyle = .short
         formatter.timeStyle = .short
         return formatter
     }
-    
+   
     private var filteredHistory: [HistoryItem] {
         if searchText.isEmpty {
             return appState.historyState.history
@@ -50,7 +47,7 @@ struct HistoryView: View {
             }
         }
     }
-    
+   
     var body: some View {
         VStack(alignment: .leading, spacing: 0) { // Reduced spacing to 0 to minimize gaps
             header
@@ -77,7 +74,6 @@ struct HistoryView: View {
         } message: {
             Text("Are you sure you want to clear the history?")
         }
-
         #if os(iOS)
         .overlay {
             if showAddedMessage {
@@ -94,7 +90,7 @@ struct HistoryView: View {
         }
         #endif
     }
-    
+   
     private var header: some View {
         #if os(macOS)
         HStack {
@@ -109,14 +105,14 @@ struct HistoryView: View {
             .buttonStyle(.plain)
             .help("Collapse history sidebar")
             .accessibilityLabel("Collapse history sidebar")
-            
+           
             Text("History")
                 .font(.system(.headline, design: .default, weight: .semibold))
                 .kerning(0.2)
                 .help("View past generated images and prompts")
-            
+           
             Spacer()
-            
+           
             Button(action: {
                 showClearHistoryAlert = true
             }) {
@@ -131,12 +127,11 @@ struct HistoryView: View {
         .padding(.horizontal)
         #else
         HStack(spacing: 8) {
-
             Text("History")
                 .font(.system(size: 24, weight: .semibold, design: .default))
                 .kerning(0.2)
                 .help("View past generated images and prompts")
-            
+           
             Button(action: {
                 showClearHistoryAlert = true
             }) {
@@ -147,9 +142,9 @@ struct HistoryView: View {
             .buttonStyle(.borderless)
             .help("Clear all history")
             .accessibilityLabel("Clear all history")
-            
+           
             Spacer()
-            
+           
             Button(action: {
                 dismiss()
             }) {
@@ -166,7 +161,7 @@ struct HistoryView: View {
         .padding(.vertical, 8) // Reduced vertical padding to minimize space above
         #endif
     }
-    
+   
     private var searchField: some View {
         TextField("Search prompts or dates...", text: $searchText)
             .textFieldStyle(.roundedBorder)
@@ -174,7 +169,7 @@ struct HistoryView: View {
             .help("Search history by prompt text or date")
             .accessibilityLabel("Search prompts or dates")
     }
-    
+   
     private var historyList: some View {
         List {
             if filteredHistory.isEmpty {
@@ -189,9 +184,18 @@ struct HistoryView: View {
         }
         .listStyle(.plain)
     }
-    
+   
     private func itemRow(for item: HistoryItem) -> some View {
-        HStack(spacing: 12) {
+        var creator: String? = nil
+        if let mode = item.mode {
+            creator = mode == .gemini ? "Gemini" : mode == .grok ? item.modelUsed ?? appState.settings.selectedGrokModel : mode == .aimlapi ? item.modelUsed ?? appState.settings.selectedAIMLModel : (item.workflowName ?? "ComfyUI")
+            
+            if let idx = item.indexInBatch, let tot = item.totalInBatch {
+                creator! += " #\(idx + 1) of \(tot)"
+            }
+        }
+        
+        return HStack(spacing: 12) {
             LazyThumbnailView(item: item)
             
             VStack(alignment: .leading, spacing: 4) {
@@ -204,8 +208,7 @@ struct HistoryView: View {
                     .font(.caption)
                     .foregroundColor(.secondary)
                     .help("Date: \(dateFormatter.string(from: item.date))")
-                if let mode = item.mode {
-                    let creator: String = mode == .gemini ? "Gemini" : mode == .grok ? item.modelUsed ?? appState.settings.selectedGrokModel : mode == .aimlapi ? item.modelUsed ?? appState.settings.selectedAIMLModel : (item.workflowName ?? "ComfyUI")
+                if let creator = creator {
                     Text(creator)
                         .font(.caption)
                         .foregroundColor(.secondary)
@@ -277,20 +280,20 @@ struct HistoryView: View {
         }
         .draggable(item.imagePath.map { URL(fileURLWithPath: $0) } ?? URL(string: "")!)
     }
-    
+   
     // New custom view for lazy thumbnail loading
     struct LazyThumbnailView: View {
         let item: HistoryItem
         @State private var thumbnail: PlatformImage? = nil
         @EnvironmentObject var appState: AppState
-        
+       
         private var dateFormatter: DateFormatter {
             let formatter = DateFormatter()
             formatter.dateStyle = .short
             formatter.timeStyle = .short
             return formatter
         }
-        
+       
         var body: some View {
             Group {
                 if let img = thumbnail {
@@ -315,7 +318,7 @@ struct HistoryView: View {
                 }
             }
         }
-        
+       
         private func loadThumbnail() {
             DispatchQueue.global(qos: .background).async {
                 let loadedImage = loadImage(for: item)
@@ -324,7 +327,7 @@ struct HistoryView: View {
                 }
             }
         }
-        
+       
         private func loadImage(for item: HistoryItem) -> PlatformImage? {
             guard let path = item.imagePath else { return nil }
             let fileURL = URL(fileURLWithPath: path)
@@ -340,15 +343,15 @@ struct HistoryView: View {
             }
         }
     }
-    
+   
     private func copyPromptToClipboard(_ prompt: String) {
         PlatformPasteboard.clearContents()
         PlatformPasteboard.writeString(prompt)
     }
-    
+   
     private func deleteHistoryItem(deleteFile: Bool) {
         guard let item = selectedHistoryItem else { return }
-        
+       
         if deleteFile, let path = item.imagePath {
             let fileURL = URL(fileURLWithPath: path)
             let fileManager = FileManager.default
@@ -362,20 +365,20 @@ struct HistoryView: View {
                 }
             }
         }
-        
+       
         if let index = appState.historyState.history.firstIndex(where: { $0.id == item.id }) {
             appState.historyState.history.remove(at: index)
             appState.historyState.saveHistory()
         }
-        
+       
         selectedHistoryItem = nil
     }
-    
+   
     private func clearHistory() {
         appState.historyState.history.removeAll()
         appState.historyState.saveHistory()
     }
-    
+   
     private func loadHistoryImage(for item: HistoryItem) -> PlatformImage? {
         guard let path = item.imagePath else { return nil }
         let fileURL = URL(fileURLWithPath: path)
@@ -390,12 +393,11 @@ struct HistoryView: View {
             return PlatformImage(contentsOfFile: fileURL.path)
         }
     }
-    
     private func addToInputImages(item: HistoryItem) {
         guard let img = loadHistoryImage(for: item), let path = item.imagePath else { return }
         let url = URL(fileURLWithPath: path)
         var promptNodes: [NodeInfo] = []
-        
+       
         if url.pathExtension.lowercased() == "png" {
             if let dir = appState.settings.outputDirectory {
                 do {
@@ -409,7 +411,7 @@ struct HistoryView: View {
                 promptNodes = parsePromptNodes(from: url)
             }
         }
-        
+       
         var newSlot = ImageSlot(path: path, image: img)
         if !promptNodes.isEmpty {
             newSlot.promptNodes = promptNodes.sorted { $0.id < $1.id }
@@ -418,7 +420,6 @@ struct HistoryView: View {
         appState.ui.imageSlots.append(newSlot)
     }
 }
-
 struct FullHistoryItemView: View {
     let initialId: UUID
     @EnvironmentObject var appState: AppState
@@ -430,276 +431,44 @@ struct FullHistoryItemView: View {
     @State private var showAddedMessage: Bool = false
     @State private var previousHistory: [HistoryItem] = []
     @State private var isFullScreen: Bool = false
-    
+   
     private var dateFormatter: DateFormatter {
         let formatter = DateFormatter()
         formatter.dateStyle = .short
         formatter.timeStyle = .short
         return formatter
     }
-    
+   
     private var history: [HistoryItem] {
         appState.historyState.history.sorted(by: { $0.date > $1.date })
     }
-    
+   
     private var currentItem: HistoryItem? {
         history.first { $0.id == selectedId }
     }
-    
+   
     private var currentIndex: Int? {
         history.firstIndex { $0.id == selectedId }
     }
-    
+   
     var body: some View {
         GeometryReader { geometry in
             ZStack {
                 #if os(iOS) || os(macOS)
                 if #available(iOS 17.0, macOS 14.0, *) {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        LazyHStack(spacing: 0) {
-                            ForEach(history) { item in
-                                Group {
-                                    if let img = loadHistoryImage(for: item) {
-                                        Image(platformImage: img)
-                                            .resizable()
-                                            .scaledToFit()
-                                            .shadow(radius: 5)
-                                            .help("Full view of generated image")
-                                            .accessibilityLabel("Image generated with prompt: \(item.prompt)")
-                                    } else {
-                                        Text("No image available")
-                                            .font(.headline)
-                                            .foregroundColor(.secondary)
-                                            .help("No image available for this history item")
-                                    }
-                                }
-                                .frame(width: geometry.size.width, height: geometry.size.height)
-                                .id(item.id) // Ensure scrollPosition tracks correctly
-                            }
-                        }
-                    }
-                    .scrollTargetBehavior(.paging)
-                    .scrollTargetLayout()
-                    .scrollPosition(id: $selectedId)
-                    #if os(macOS)
-                    .focusable()
-                    .onKeyPress { press in
-                        if press.phase == .down {
-                            if press.key == .leftArrow {
-                                if let idx = currentIndex, idx > 0 {
-                                    selectedId = history[idx - 1].id
-                                    return .handled
-                                }
-                            } else if press.key == .rightArrow {
-                                if let idx = currentIndex, idx < history.count - 1 {
-                                    selectedId = history[idx + 1].id
-                                    return .handled
-                                }
-                            }
-                        }
-                        return .ignored
-                    }
-                    #endif
+                    horizontalScrollView(for: geometry)
                 } else {
-                    #if os(iOS)
-                    TabView(selection: $selectedId) {
-                        ForEach(history) { item in
-                            if let img = loadHistoryImage(for: item) {
-                                Image(platformImage: img)
-                                    .resizable()
-                                    .scaledToFit()
-                                    .frame(width: geometry.size.width, height: geometry.size.height)
-                                    .shadow(radius: 5)
-                                    .tag(item.id as UUID?)
-                                    .help("Full view of generated image")
-                                    .accessibilityLabel("Image generated with prompt: \(item.prompt)")
-                            } else {
-                                Text("No image available")
-                                    .font(.headline)
-                                    .foregroundColor(.secondary)
-                                    .tag(item.id as UUID?)
-                                    .help("No image available for this history item")
-                            }
-                        }
-                    }
-                    .tabViewStyle(.page(indexDisplayMode: .never))
-                    .ignoresSafeArea()
-                    #else
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        LazyHStack(spacing: 0) {
-                            ForEach(history) { item in
-                                GeometryReader { proxy in
-                                    if let img = loadHistoryImage(for: item) {
-                                        Image(platformImage: img)
-                                            .resizable()
-                                            .scaledToFit()
-                                            .frame(width: geometry.size.width, height: geometry.size.height)
-                                            .shadow(radius: 5)
-                                            .help("Full view of generated image")
-                                            .accessibilityLabel("Image generated with prompt: \(item.prompt)")
-                                    } else {
-                                        Text("No image available")
-                                            .font(.headline)
-                                            .foregroundColor(.secondary)
-                                            .help("No image available for this history item")
-                                    }
-                                }
-                                .frame(width: geometry.size.width, height: geometry.size.height)
-                            }
-                        }
-                    }
-                    #endif
+                    fallbackHorizontalView(for: geometry)
                 }
                 #endif
-                
             }
             .overlay(alignment: .bottom) {
                 if let item = currentItem {
-                    VStack(spacing: 4) {
-                        VStack(alignment: .center, spacing: 2) {
-                            HStack(alignment: .center) {
-                                Text("Prompt: \(item.prompt)")
-                                    .font(.system(size: 12))
-                                    .multilineTextAlignment(.leading)
-                                    .lineLimit(nil)
-                                    .foregroundColor(.black)
-                                    .help("The prompt used for this image")
-                                    .accessibilityLabel("Prompt: \(item.prompt)")
-                                Button(action: {
-                                    copyPromptToClipboard(item.prompt)
-                                    showCopiedMessage = true
-                                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                                        withAnimation(.easeOut(duration: 0.3)) {
-                                            showCopiedMessage = false
-                                        }
-                                    }
-                                }) {
-                                    Image(systemName: "doc.on.doc")
-                                        .foregroundColor(.blue.opacity(0.8))
-                                        .symbolRenderingMode(.hierarchical)
-                                }
-                                .buttonStyle(.borderless)
-                                .help("Copy prompt to clipboard")
-                                .accessibilityLabel("Copy prompt")
-                            }
-                            Text("Date: \(dateFormatter.string(from: item.date))")
-                                .font(.system(size: 10))
-                                .foregroundColor(.gray)
-                                .help("Date the image was generated")
-                            if let mode = item.mode {
-                                let creator: String = mode == .gemini ? "Gemini" : mode == .grok ? item.modelUsed ?? appState.settings.selectedGrokModel : mode == .aimlapi ? item.modelUsed ?? appState.settings.selectedAIMLModel : (item.workflowName ?? "ComfyUI")
-                                Text("Created with: \(creator)")
-                                    .font(.system(size: 10))
-                                    .foregroundColor(.gray)
-                                    .help("Generation mode or workflow used")
-                            }
-                        }
-                        
-                        HStack {
-                            Button(action: {
-                                if let idx = currentIndex {
-                                    let newIdx = max(0, idx - 1)
-                                    selectedId = history[newIdx].id
-                                }
-                            }) {
-                                Image(systemName: "arrow.left.circle.fill")
-                                    .font(.system(size: 24))
-                                    .symbolRenderingMode(.hierarchical)
-                                    .foregroundColor(.black)
-                            }
-                            .disabled(currentIndex == 0)
-                            .buttonStyle(.plain)
-                            .help("Previous image in history")
-                            .accessibilityLabel("Previous image")
-                            
-                            Spacer()
-                            
-                            Button(action: {
-                                showDeleteAlert = true
-                            }) {
-                                Image(systemName: "trash.circle.fill")
-                                    .font(.system(size: 24))
-                                    .symbolRenderingMode(.hierarchical)
-                                    .foregroundColor(.red.opacity(0.8))
-                            }
-                            .buttonStyle(.plain)
-                            .help("Delete this history item")
-                            .accessibilityLabel("Delete item")
-                            
-                            Spacer()
-                            
-                            Button(action: {
-                                addToInputImages(item: item)
-                                showAddedMessage = true
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                                    withAnimation(.easeOut(duration: 0.3)) {
-                                        showAddedMessage = false
-                                    }
-                                }
-                            }) {
-                                Image(systemName: "plus.circle.fill")
-                                    .font(.system(size: 24))
-                                    .symbolRenderingMode(.hierarchical)
-                                    .foregroundColor(.blue.opacity(0.8))
-                            }
-                            .buttonStyle(.plain)
-                            .help("Add to input images")
-                            .accessibilityLabel("Add to input slot")
-                            
-                            Spacer()
-                            
-                            Button(action: {
-                                if let idx = currentIndex {
-                                    let newIdx = min(history.count - 1, idx + 1)
-                                    selectedId = history[newIdx].id
-                                }
-                            }) {
-                                Image(systemName: "arrow.right.circle.fill")
-                                    .font(.system(size: 24))
-                                    .symbolRenderingMode(.hierarchical)
-                                    .foregroundColor(.black)
-                            }
-                            .disabled(currentIndex == history.count - 1)
-                            .buttonStyle(.plain)
-                            .help("Next image in history")
-                            .accessibilityLabel("Next image")
-                        }
-                    }
-                    .padding(8)
-                    .background(Color.white)
-                    .frame(maxWidth: .infinity)
+                    bottomOverlay(for: item)
                 }
             }
             .overlay(alignment: .topTrailing) {
-                #if os(iOS)
-                Button(action: {
-                    dismiss()
-                }) {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 30))
-                        .symbolRenderingMode(.hierarchical)
-                        .foregroundColor(.gray)
-                }
-                .buttonStyle(.plain)
-                .padding()
-                .help("Close full image view")
-                .accessibilityLabel("Close")
-                #elseif os(macOS)
-                if isFullScreen {
-                    Button(action: {
-                        dismiss()
-                    }) {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 24))
-                            .symbolRenderingMode(.hierarchical)
-                            .foregroundColor(.gray)
-                    }
-                    .buttonStyle(.plain)
-                    .padding()
-                    .help("Close full image view")
-                    .accessibilityLabel("Close")
-                }
-                #endif
+                closeButton
             }
         }
         .ignoresSafeArea()
@@ -799,13 +568,272 @@ struct FullHistoryItemView: View {
             previousSelectedId = newValue // Update previous for next change
         }
     }
-    
-    
+   
+    // NEW: Modern horizontal scroll for iOS 17+/macOS 14+
+    @available(iOS 17.0, macOS 14.0, *)
+    private func horizontalScrollView(for geometry: GeometryProxy) -> some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            LazyHStack(spacing: 0) {
+                ForEach(history) { item in
+                    HistoryImageDisplay(item: item)
+                        .frame(width: geometry.size.width, height: geometry.size.height)
+                        .id(item.id) // Ensure scrollPosition tracks correctly
+                }
+            }
+        }
+        .scrollTargetBehavior(.paging)
+        .scrollTargetLayout()
+        .scrollPosition(id: $selectedId)
+        #if os(macOS)
+        .focusable()
+        .onKeyPress { press in
+            if press.phase == .down {
+                if press.key == .leftArrow {
+                    if let idx = currentIndex, idx > 0 {
+                        selectedId = history[idx - 1].id
+                        return .handled
+                    }
+                } else if press.key == .rightArrow {
+                    if let idx = currentIndex, idx < history.count - 1 {
+                        selectedId = history[idx + 1].id
+                        return .handled
+                    }
+                }
+            }
+            return .ignored
+        }
+        #endif
+    }
+   
+    // NEW: Fallback for older versions
+    private func fallbackHorizontalView(for geometry: GeometryProxy) -> some View {
+        #if os(iOS)
+        TabView(selection: $selectedId) {
+            ForEach(history) { item in
+                HistoryImageDisplay(item: item)
+                    .frame(width: geometry.size.width, height: geometry.size.height)
+                    .tag(item.id as UUID?)
+            }
+        }
+        .tabViewStyle(.page(indexDisplayMode: .never))
+        .ignoresSafeArea()
+        #else
+        ScrollView(.horizontal, showsIndicators: false) {
+            LazyHStack(spacing: 0) {
+                ForEach(history) { item in
+                    HistoryImageDisplay(item: item)
+                        .frame(width: geometry.size.width, height: geometry.size.height)
+                }
+            }
+        }
+        #endif
+    }
+   
+    // NEW: Subview for image/no-image display
+    private struct HistoryImageDisplay: View {
+        let item: HistoryItem
+        @EnvironmentObject var appState: AppState
+       
+        var body: some View {
+            if let img = loadHistoryImage(for: item) {
+                Image(platformImage: img)
+                    .resizable()
+                    .scaledToFit()
+                    .shadow(radius: 5)
+                    .help("Full view of generated image")
+                    .accessibilityLabel("Image generated with prompt: \(item.prompt)")
+            } else {
+                Text("No image available")
+                    .font(.headline)
+                    .foregroundColor(.secondary)
+                    .help("No image available for this history item")
+            }
+        }
+       
+        private func loadHistoryImage(for item: HistoryItem) -> PlatformImage? {
+            guard let path = item.imagePath else { return nil }
+            let fileURL = URL(fileURLWithPath: path)
+            if let dir = appState.settings.outputDirectory {
+                let didStart = dir.startAccessingSecurityScopedResource()
+                let image = PlatformImage(contentsOfFile: fileURL.path)
+                if didStart {
+                    dir.stopAccessingSecurityScopedResource()
+                }
+                return image
+            } else {
+                return PlatformImage(contentsOfFile: fileURL.path)
+            }
+        }
+    }
+   
+    // NEW: Extracted bottom overlay
+    private func bottomOverlay(for item: HistoryItem) -> some View {
+        var creator: String? = nil
+        if let mode = item.mode {
+            creator = mode == .gemini ? "Gemini" : mode == .grok ? item.modelUsed ?? appState.settings.selectedGrokModel : mode == .aimlapi ? item.modelUsed ?? appState.settings.selectedAIMLModel : item.workflowName ?? "ComfyUI"
+            
+            if let idx = item.indexInBatch, let tot = item.totalInBatch {
+                creator! += " #\(idx + 1) of \(tot)"
+            }
+        }
+        
+        return VStack(spacing: 4) {
+            VStack(alignment: .center, spacing: 2) {
+                HStack(alignment: .center) {
+                    Text("Prompt: \(item.prompt)")
+                        .font(.system(size: 12))
+                        .multilineTextAlignment(.leading)
+                        .lineLimit(nil)
+                        .foregroundColor(.black)
+                        .help("The prompt used for this image")
+                        .accessibilityLabel("Prompt: \(item.prompt)")
+                    Button(action: {
+                        copyPromptToClipboard(item.prompt)
+                        showCopiedMessage = true
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                            withAnimation(.easeOut(duration: 0.3)) {
+                                showCopiedMessage = false
+                            }
+                        }
+                    }) {
+                        Image(systemName: "doc.on.doc")
+                            .foregroundColor(.blue.opacity(0.8))
+                            .symbolRenderingMode(.hierarchical)
+                    }
+                    .buttonStyle(.borderless)
+                    .help("Copy prompt to clipboard")
+                    .accessibilityLabel("Copy prompt")
+                }
+                Text("Date: \(dateFormatter.string(from: item.date))")
+                    .font(.system(size: 10))
+                    .foregroundColor(.gray)
+                    .help("Date the image was generated")
+                if let creator = creator {
+                    Text("Created with: \(creator)")
+                        .font(.system(size: 10))
+                        .foregroundColor(.gray)
+                        .help("Generation mode or workflow used")
+                }
+            }
+            
+            HStack {
+                Button(action: {
+                    if let idx = currentIndex {
+                        let newIdx = max(0, idx - 1)
+                        selectedId = history[newIdx].id
+                    }
+                }) {
+                    Image(systemName: "arrow.left.circle.fill")
+                        .font(.system(size: 24))
+                        .symbolRenderingMode(.hierarchical)
+                        .foregroundColor(.black)
+                }
+                .disabled(currentIndex == 0)
+                .buttonStyle(.plain)
+                .help("Previous image in history")
+                .accessibilityLabel("Previous image")
+                
+                Spacer()
+                
+                Button(action: {
+                    showDeleteAlert = true
+                }) {
+                    Image(systemName: "trash.circle.fill")
+                        .font(.system(size: 24))
+                        .symbolRenderingMode(.hierarchical)
+                        .foregroundColor(.red.opacity(0.8))
+                }
+                .buttonStyle(.plain)
+                .help("Delete this history item")
+                .accessibilityLabel("Delete item")
+                
+                Spacer()
+                
+                Button(action: {
+                    addToInputImages(item: item)
+                    showAddedMessage = true
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                        withAnimation(.easeOut(duration: 0.3)) {
+                            showAddedMessage = false
+                        }
+                    }
+                }) {
+                    Image(systemName: "plus.circle.fill")
+                        .font(.system(size: 24))
+                        .symbolRenderingMode(.hierarchical)
+                        .foregroundColor(.blue.opacity(0.8))
+                }
+                .buttonStyle(.plain)
+                .help("Add to input images")
+                .accessibilityLabel("Add to input slot")
+                
+                Spacer()
+                
+                Button(action: {
+                    if let idx = currentIndex {
+                        let newIdx = min(history.count - 1, idx + 1)
+                        selectedId = history[newIdx].id
+                    }
+                }) {
+                    Image(systemName: "arrow.right.circle.fill")
+                        .font(.system(size: 24))
+                        .symbolRenderingMode(.hierarchical)
+                        .foregroundColor(.black)
+                }
+                .disabled(currentIndex == history.count - 1)
+                .buttonStyle(.plain)
+                .help("Next image in history")
+                .accessibilityLabel("Next image")
+            }
+        }
+        .padding(8)
+        .background(Color.white)
+        .frame(maxWidth: .infinity)
+    }
+   
+    // NEW: Extracted close button
+    private var closeButton: some View {
+        #if os(iOS)
+        Button(action: {
+            dismiss()
+        }) {
+            Image(systemName: "xmark.circle.fill")
+                .font(.system(size: 30))
+                .symbolRenderingMode(.hierarchical)
+                .foregroundColor(.gray)
+        }
+        .buttonStyle(.plain)
+        .padding()
+        .help("Close full image view")
+        .accessibilityLabel("Close")
+        #elseif os(macOS)
+        Group {
+            if isFullScreen {
+                Button(action: {
+                    dismiss()
+                }) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 24))
+                        .symbolRenderingMode(.hierarchical)
+                        .foregroundColor(.gray)
+                }
+                .buttonStyle(.plain)
+                .padding()
+                .help("Close full image view")
+                .accessibilityLabel("Close")
+            } else {
+                EmptyView()
+            }
+        }
+        #endif
+    }
+   
+   
     private func deleteHistoryItem(item: HistoryItem, deleteFile: Bool) {
         // Compute sorted history and current index before deletion
         let currentHistory = appState.historyState.history.sorted(by: { $0.date > $1.date })
         guard let oldIdx = currentHistory.firstIndex(where: { $0.id == item.id }) else { return }
-        
+       
         if deleteFile, let path = item.imagePath {
             let fileURL = URL(fileURLWithPath: path)
             let fileManager = FileManager.default
@@ -819,12 +847,12 @@ struct FullHistoryItemView: View {
                 }
             }
         }
-        
+       
         if let index = appState.historyState.history.firstIndex(where: { $0.id == item.id }) {
             appState.historyState.history.remove(at: index)
             appState.historyState.saveHistory()
         }
-        
+       
         // Recompute sorted history after deletion
         let newHistory = appState.historyState.history.sorted(by: { $0.date > $1.date })
         if newHistory.isEmpty {
@@ -834,7 +862,7 @@ struct FullHistoryItemView: View {
             selectedId = newHistory[newIdx].id
         }
     }
-    
+   
     private func loadHistoryImage(for item: HistoryItem) -> PlatformImage? {
         guard let path = item.imagePath else { return nil }
         let fileURL = URL(fileURLWithPath: path)
@@ -849,17 +877,16 @@ struct FullHistoryItemView: View {
             return PlatformImage(contentsOfFile: fileURL.path)
         }
     }
-
     private func copyPromptToClipboard(_ prompt: String) {
         PlatformPasteboard.clearContents()
         PlatformPasteboard.writeString(prompt)
     }
-    
+   
     private func addToInputImages(item: HistoryItem) {
         guard let img = loadHistoryImage(for: item), let path = item.imagePath else { return }
         let url = URL(fileURLWithPath: path)
         var promptNodes: [NodeInfo] = []
-        
+       
         if url.pathExtension.lowercased() == "png" {
             if let dir = appState.settings.outputDirectory {
                 do {
@@ -873,7 +900,7 @@ struct FullHistoryItemView: View {
                 promptNodes = parsePromptNodes(from: url)
             }
         }
-        
+       
         var newSlot = ImageSlot(path: path, image: img)
         if !promptNodes.isEmpty {
             newSlot.promptNodes = promptNodes.sorted { $0.id < $1.id }
@@ -881,7 +908,7 @@ struct FullHistoryItemView: View {
         }
         appState.ui.imageSlots.append(newSlot)
     }
-    
+   
     private func updateWindowSize() {
         #if os(macOS)
         guard let item = currentItem,
@@ -890,27 +917,27 @@ struct FullHistoryItemView: View {
               let screen = NSScreen.main else {
             return
         }
-        
-        let bottomHeight: CGFloat = 100  // Approximate height for bottom overlay
+       
+        let bottomHeight: CGFloat = 100 // Approximate height for bottom overlay
         let minWidth: CGFloat = 400
-        let imageSize = platformImage.size  // Assuming .size for NSImage
+        let imageSize = platformImage.size // Assuming .size for NSImage
         var desiredSize = CGSize(width: max(imageSize.width, minWidth), height: imageSize.height + bottomHeight)
-        
+       
         // Account for screen visible area (excluding menu bar, dock, etc.)
         let screenSize = screen.visibleFrame.size
-        let marginHorizontal: CGFloat = 40  // Small margin for sides
-        let marginVertical: CGFloat = 100   // Margin for top/bottom (menu bar, dock)
-        
+        let marginHorizontal: CGFloat = 40 // Small margin for sides
+        let marginVertical: CGFloat = 100 // Margin for top/bottom (menu bar, dock)
+       
         let maxSize = CGSize(width: screenSize.width - marginHorizontal,
                              height: screenSize.height - marginVertical)
-        
+       
         // Calculate scale to fit within max size if needed
         let scale = min(1.0, min(maxSize.width / desiredSize.width, maxSize.height / desiredSize.height))
-        
+       
         let windowSize = CGSize(width: desiredSize.width * scale, height: desiredSize.height * scale)
-        
+       
         window.setContentSize(windowSize)
-        window.center()  // Center the window on the screen
+        window.center() // Center the window on the screen
         #endif
     }
 }

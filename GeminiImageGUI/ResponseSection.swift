@@ -19,52 +19,16 @@ struct ResponseSection: View {
         .frame(minHeight: 250)  // Slightly taller min height for balance
         .padding(16)  // Outer padding for section spacing
         .cornerRadius(16)
-        .onChange(of: appState.ui.outputImage) { _ in
+        .onChange(of: appState.ui.outputImages) { _ in
             finalScale = 1.0
             imageScale = 1.0
         }
         .alert("Delete Response", isPresented: $showDeleteAlert) {
-            Button("Delete Image from History Only") {
-                appState.ui.responseText = ""
-                appState.ui.outputImage = nil
-                if let latestItem = appState.historyState.history.max(by: { $0.date < $1.date }) {
-                    // remove from history without deleting file
-                    if let index = appState.historyState.history.firstIndex(where: { $0.id == latestItem.id }) {
-                        appState.historyState.history.remove(at: index)
-                        appState.historyState.saveHistory()
-                    }
-                }
+            Button("Delete from History Only") {
+                deleteCurrentImage(deleteFile: false)
             }
-            Button("Delete History and File", role: .destructive) {
-                appState.ui.responseText = ""
-                appState.ui.outputImage = nil
-                if let latestItem = appState.historyState.history.max(by: { $0.date < $1.date }) {
-                    // delete file
-                    if let path = latestItem.imagePath {
-                        let fileURL = URL(fileURLWithPath: path)
-                        let fileManager = FileManager.default
-                        if let dir = appState.settings.outputDirectory {
-                            do {
-                                try withSecureAccess(to: dir) {
-                                    try fileManager.removeItem(at: fileURL)
-                                }
-                            } catch {
-                                // Handle error if needed
-                            }
-                        } else {
-                            do {
-                                try fileManager.removeItem(at: fileURL)
-                            } catch {
-                                // Handle error if needed
-                            }
-                        }
-                    }
-                    // remove from history
-                    if let index = appState.historyState.history.firstIndex(where: { $0.id == latestItem.id }) {
-                        appState.historyState.history.remove(at: index)
-                        appState.historyState.saveHistory()
-                    }
-                }
+            Button("Delete from History and File", role: .destructive) {
+                deleteCurrentImage(deleteFile: true)
             }
             Button("Cancel", role: .cancel) {}
         } message: {
@@ -106,7 +70,9 @@ struct ResponseSection: View {
     
     @ViewBuilder
     private var imageContent: some View {
-        if let platformImage = appState.ui.outputImage {
+        let count = appState.ui.outputImages.count
+        let index = appState.ui.currentOutputIndex
+        if count > 0, let optionalImage = appState.ui.outputImages[safe: index], let platformImage = optionalImage {
             VStack(spacing: 12) {  // Changed to VStack for buttons below image
                 Image(platformImage: platformImage)
                     .resizable()
@@ -141,6 +107,35 @@ struct ResponseSection: View {
                             }
                         }
                     )
+                
+                // +++ NEW: Navigation if multiples
+                if count > 1 {
+                    HStack(spacing: 12) {
+                        Button {
+                            if index > 0 { appState.ui.currentOutputIndex -= 1 }
+                        } label: {
+                            Image(systemName: "chevron.left")
+                        }
+                        .disabled(index == 0)
+                        .buttonStyle(.bordered)
+                        .tint(.blue)
+                        
+                        Text("\(index + 1) of \(count)")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                        
+                        Button {
+                            if index < count - 1 { appState.ui.currentOutputIndex += 1 }
+                        } label: {
+                            Image(systemName: "chevron.right")
+                        }
+                        .disabled(index == count - 1)
+                        .buttonStyle(.bordered)
+                        .tint(.blue)
+                    }
+                    .help("Navigate between generated images")
+                    .accessibilityLabel("Image navigation")
+                }
                 
                 HStack(spacing: 12) {  // HStack for buttons below image
                     Button {
@@ -202,10 +197,11 @@ struct ResponseSection: View {
             .frame(maxWidth: .infinity)
         }
     }
-    
     @ViewBuilder
     private var textContent: some View {
-        if appState.ui.responseText.isEmpty {
+        let index = appState.ui.currentOutputIndex
+        let text = appState.ui.outputTexts[safe: index] ?? ""
+        if text.isEmpty {
             Rectangle()
                 .fill(secondarySystemBackgroundColor)
                 .frame(maxWidth: .infinity, minHeight: 60, maxHeight: 60)  // Small initial height (decreased by ~75% from typical 60)
@@ -214,7 +210,7 @@ struct ResponseSection: View {
                 .help("Placeholder for response text")
                 .accessibilityLabel("No response text")
         } else {
-            Text(appState.ui.responseText)
+            Text(text)
                 .font(.system(.body))
                 .foregroundColor(.primary)
                 .multilineTextAlignment(.leading)
@@ -224,7 +220,7 @@ struct ResponseSection: View {
                 .cornerRadius(12)
                 .shadow(radius: 2)
                 .help("Generated text response")
-                .accessibilityLabel("Response text: \(appState.ui.responseText)")
+                .accessibilityLabel("Response text: \(text)")
         }
     }
     
@@ -267,4 +263,42 @@ struct ResponseSection: View {
         }
 #endif
     }
+    
+    // NEW: Delete handler for current image
+    private func deleteCurrentImage(deleteFile: Bool) {
+        let index = appState.ui.currentOutputIndex
+        if index < appState.ui.outputImages.count, let path = appState.ui.outputPaths[safe: index] {
+            // Delete file if chosen
+            if deleteFile, let fileURL = path.flatMap({ URL(fileURLWithPath: $0) }) {
+                let fileManager = FileManager.default
+                if let dir = appState.settings.outputDirectory {
+                    do {
+                        try withSecureAccess(to: dir) {
+                            try fileManager.removeItem(at: fileURL)
+                        }
+                    } catch { /* log error */ }
+                }
+            }
+            
+            // Find and remove matching history item
+            if let histIndex = appState.historyState.history.firstIndex(where: { $0.imagePath == path }) {
+                appState.historyState.history.remove(at: histIndex)
+                appState.historyState.saveHistory()
+            }
+        }
+        
+        // Remove from UI arrays
+        appState.ui.outputImages.remove(at: index)
+        appState.ui.outputTexts.remove(at: index)
+        appState.ui.outputPaths.remove(at: index)
+        
+        // Adjust index
+        if !appState.ui.outputImages.isEmpty {
+            appState.ui.currentOutputIndex = min(index, appState.ui.outputImages.count - 1)
+        } else {
+            appState.ui.currentOutputIndex = 0
+        }
+    }
 }
+
+

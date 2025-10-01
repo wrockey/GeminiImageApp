@@ -225,7 +225,7 @@ struct ContentView: View {
                 performOnAppear()
                 validateBatchFileBookmark()
             }
-            .onChange(of: appState.ui.outputImage) { _ in
+            .onChange(of: appState.ui.outputImages) { _ in
                 imageScale = 1.0
             }
         #else
@@ -252,7 +252,7 @@ struct ContentView: View {
                 performOnAppear()
                 validateBatchFileBookmark()
             }
-            .onChange(of: appState.ui.outputImage) { _ in
+            .onChange(of: appState.ui.outputImages) { _ in
                 imageScale = 1.0
             }
         #endif
@@ -398,7 +398,7 @@ struct ContentView: View {
             performOnAppear()
             validateBatchFileBookmark()
         }
-        .onChange(of: appState.ui.outputImage) { _ in
+        .onChange(of: appState.ui.outputImages) { _ in
             imageScale = 1.0
         }
     }

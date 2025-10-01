@@ -368,8 +368,10 @@ extension ContentView {
     func resetAppState() {
         appState.prompt = ""
         appState.ui.imageSlots = []
-        appState.ui.responseText = ""
-        appState.ui.outputImage = nil
+        appState.ui.outputImages = []
+        appState.ui.outputTexts = []
+        appState.ui.outputPaths = []
+        appState.ui.currentOutputIndex = 0
         isLoading = false
         progress = 0.0
         isCancelled = false
@@ -379,7 +381,6 @@ extension ContentView {
         apiKeyPath = ""
         outputPath = ""
         batchFilePath = ""
-//        startPrompt = "1"
-//        endPrompt = ""
-    }
-}
+        // startPrompt = "1"  // Commented as in original; remove if unused
+        // endPrompt = ""     // Commented as in original; remove if unused
+    }}

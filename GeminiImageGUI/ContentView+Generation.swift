@@ -55,8 +55,10 @@ extension ContentView {
         
         isLoading = true
         errorItem = nil
-        appState.ui.responseText = ""
-        appState.ui.outputImage = nil
+        appState.ui.outputImages = []
+        appState.ui.outputTexts = []
+        appState.ui.outputPaths = []
+        appState.ui.currentOutputIndex = 0
         
         generationTask = Task {
             defer {
@@ -120,47 +122,66 @@ extension ContentView {
             let response = try JSONDecoder().decode(NewGenerateContentResponse.self, from: data)
             
             if let candidate = response.candidates.first, let finishReason = candidate.finishReason, finishReason == "SAFETY" {
-                    DispatchQueue.main.async {
-                        appState.ui.responseText = "Generation blocked for safety reasons. Please revise your prompt."
+                    await MainActor.run {
+                        appState.ui.outputTexts = ["Generation blocked for safety reasons. Please revise your prompt."]
+                        appState.ui.outputImages = []
+                        appState.ui.outputPaths = []
                     }
                     throw GenerationError.apiError("Blocked due to safety violation")
                 }
             
             if response.candidates.isEmpty {
-                    DispatchQueue.main.async {
-                        appState.ui.responseText = "Prompt blocked for safety or policy reasons."
+                    await MainActor.run {
+                        appState.ui.outputTexts = ["Prompt blocked for safety or policy reasons."]
+                        appState.ui.outputImages = []
+                        appState.ui.outputPaths = []
                     }
                     throw GenerationError.apiError("Prompt blocked")
                 }
             
-            var textOutput = ""
-            var savedImage: PlatformImage? = nil
-            var savedPath: String? = nil
+            var images: [PlatformImage?] = []
+            var texts: [String] = []
+            var paths: [String?] = []
             
             for part in response.candidates.first?.content.parts ?? [] {
+                var textOutput = ""
                 if let text = part.text {
                     textOutput += text + "\n"
                 } else if let inline = part.inlineData, let imgData = Data(base64Encoded: inline.data) {
-                    savedImage = PlatformImage(platformData: imgData)
-                    savedPath = saveGeneratedImage(data: imgData)
-                    if let saved = savedPath {
+                    let image = PlatformImage(platformData: imgData)
+                    let path = saveGeneratedImage(data: imgData)
+                    if let saved = path {
                         textOutput += "Image saved to \(saved)\n"
                     }
+                    images.append(image)
+                    texts.append(textOutput)
+                    paths.append(path)
                 }
             }
             
-            appState.ui.responseText = textOutput.isEmpty ? "No text output." : textOutput
-            appState.ui.outputImage = savedImage
-            
-            if savedImage == nil {
-                appState.ui.responseText += "No image generated."
+            // If no images but text, add empty image with text (optional; adjust if needed)
+            if images.isEmpty && !texts.isEmpty {
+                images.append(nil)
+                paths.append(nil)
             }
             
-            let newItem = HistoryItem(prompt: appState.prompt, responseText: appState.ui.responseText, imagePath: savedPath, date: Date(), mode: appState.settings.mode, workflowName: nil, modelUsed: nil)
-            appState.historyState.history.append(newItem)
+            await MainActor.run {
+                appState.ui.outputImages = images
+                appState.ui.outputTexts = texts
+                appState.ui.outputPaths = paths
+                appState.ui.currentOutputIndex = 0
+            }
+            
+            // Add to history as separate items
+            let batchId = images.count > 1 ? UUID() : nil
+            let total = images.count
+            for i in 0..<total {
+                let newItem = HistoryItem(prompt: appState.prompt, responseText: texts[i], imagePath: paths[i], date: Date(), mode: appState.settings.mode, workflowName: nil, modelUsed: nil, batchId: batchId, indexInBatch: i, totalInBatch: total)
+                appState.historyState.history.append(newItem)
+            }
             appState.historyState.saveHistory()
+            
         case .comfyUI:
-            // Existing ComfyUI logic (unchanged, as it's not AI/ML specific)
             guard let workflow = appState.generation.comfyWorkflow else {
                 throw GenerationError.noWorkflow
             }
@@ -370,12 +391,18 @@ extension ContentView {
                 try Task.checkCancellation()
                 let (viewData, _) = try await URLSession.shared.data(for: viewRequest)
                 if let platformImage = PlatformImage(platformData: viewData) {
-                    appState.ui.outputImage = platformImage
                     let savedPath = saveGeneratedImage(data: viewData)
-                    appState.ui.responseText = "Image generated with ComfyUI. Saved to \(savedPath ?? "unknown")"
+                    await MainActor.run {
+                        appState.ui.outputImages = [platformImage]
+                        appState.ui.outputTexts = ["Image generated with ComfyUI. Saved to \(savedPath ?? "unknown")"]
+                        appState.ui.outputPaths = [savedPath]
+                        appState.ui.currentOutputIndex = 0
+                    }
                     
                     let workflowName = URL(fileURLWithPath: appState.settings.comfyJSONPath).deletingPathExtension().lastPathComponent
-                    let newItem = HistoryItem(prompt: appState.prompt, responseText: appState.ui.responseText, imagePath: savedPath, date: Date(), mode: appState.settings.mode, workflowName: workflowName, modelUsed: nil)
+                    let batchId: UUID? = nil // Single for ComfyUI
+                    let total = 1
+                    let newItem = HistoryItem(prompt: appState.prompt, responseText: appState.ui.outputTexts[0], imagePath: savedPath, date: Date(), mode: appState.settings.mode, workflowName: workflowName, modelUsed: nil, batchId: batchId, indexInBatch: 0, totalInBatch: total)
                     appState.historyState.history.append(newItem)
                     appState.historyState.saveHistory()
                 } else {
@@ -431,48 +458,69 @@ extension ContentView {
                     var message = error.message ?? "Unknown error"
                     if message.lowercased().contains("policy") || message.lowercased().contains("safety") || message.lowercased().contains("violation") {
                         message += " (Likely safety/content violation)"
-                        DispatchQueue.main.async {
-                            appState.ui.responseText = "Generation blocked for content policy violation: \(message)"
+                        await MainActor.run {
+                            appState.ui.outputTexts = ["Generation blocked for content policy violation: \(message)"]
+                            appState.ui.outputImages = []
+                            appState.ui.outputPaths = []
                         }
                         throw GenerationError.apiError("Blocked due to policy violation")
                     } else {
-                        DispatchQueue.main.async {
-                            appState.ui.responseText = "API Error: \(message)"
+                        await MainActor.run {
+                            appState.ui.outputTexts = ["API Error: \(message)"]
+                            appState.ui.outputImages = []
+                            appState.ui.outputPaths = []
                         }
                         throw GenerationError.apiError(message)
                     }
                 }
-            if let revised = response.data.first?.revised_prompt {
-                print("Revised prompt from Grok: \(revised)")
-            }
             
-            var textOutput = ""
-            var savedImage: PlatformImage? = nil
-            var savedPath: String? = nil
+            var images: [PlatformImage?] = []
+            var texts: [String] = []
+            var paths: [String?] = []
             
-            if let item = response.data.first {
+            for (i, item) in response.data.enumerated() {
+                var textOutput = ""
                 if let revised = item.revised_prompt {
                     textOutput += "Revised prompt: \(revised)\n"
                 }
                 
-                if let b64 = item.b64_json, let imgData = Data(base64Encoded: b64) {
-                    savedImage = PlatformImage(platformData: imgData)
-                    savedPath = saveGeneratedImage(data: imgData)
-                    if let saved = savedPath {
+                var imgData: Data?
+                if let b64 = item.b64_json {
+                    imgData = Data(base64Encoded: b64)
+                } else if let imageUrl = item.url, let url = URL(string: imageUrl) {
+                    let (data, _) = try await URLSession.shared.data(from: url)
+                    imgData = data
+                }
+                
+                if let data = imgData {
+                    let image = PlatformImage(platformData: data)
+                    let path = saveGeneratedImage(data: data)
+                    if let saved = path {
                         textOutput += "Image saved to \(saved)\n"
                     }
+                    images.append(image)
+                    texts.append(textOutput)
+                    paths.append(path)
+                } else {
+                    images.append(nil)
+                    paths.append(nil)
+                    texts.append(textOutput.isEmpty ? "No output for item \(i+1)" : textOutput)
                 }
             }
             
-            appState.ui.responseText = textOutput.isEmpty ? "No text output." : textOutput
-            appState.ui.outputImage = savedImage
-            
-            if savedImage == nil {
-                appState.ui.responseText += "No image generated."
+            await MainActor.run {
+                appState.ui.outputImages = images
+                appState.ui.outputTexts = texts
+                appState.ui.outputPaths = paths
+                appState.ui.currentOutputIndex = 0
             }
             
-            let newItem = HistoryItem(prompt: appState.prompt, responseText: appState.ui.responseText, imagePath: savedPath, date: Date(), mode: appState.settings.mode, workflowName: nil, modelUsed: appState.settings.selectedGrokModel)
-            appState.historyState.history.append(newItem)
+            let batchId = images.count > 1 ? UUID() : nil
+            let total = images.count
+            for i in 0..<total {
+                let newItem = HistoryItem(prompt: appState.prompt, responseText: texts[i], imagePath: paths[i], date: Date(), mode: appState.settings.mode, workflowName: nil, modelUsed: appState.settings.selectedGrokModel, batchId: batchId, indexInBatch: i, totalInBatch: total)
+                appState.historyState.history.append(newItem)
+            }
             appState.historyState.saveHistory()
             
         case .aimlapi:
@@ -625,7 +673,7 @@ extension ContentView {
             
             guard let httpResponse = urlResponse as? HTTPURLResponse else {
                 await MainActor.run {
-                    appState.ui.responseText = "API Error: Invalid response type"
+                    appState.ui.outputTexts = ["API Error: Invalid response type"]
                 }
                 return
             }
@@ -636,48 +684,63 @@ extension ContentView {
                 if let error = response.error {
                     var message = error.message ?? "Unknown error"
                     if message.lowercased().contains("safety") || message.lowercased().contains("violation") || message.lowercased().contains("content policy") {
-                        message += " (Likely safety/content violation)"
+                        message += (" (Likely safety/content violation)")
                     }
                     await MainActor.run {
-                        appState.ui.responseText = "API Error: \(message)"
+                        appState.ui.outputTexts = ["API Error: \(message)"]
+                        appState.ui.outputImages = []
+                        appState.ui.outputPaths = []
                     }
                     throw GenerationError.apiError(message)
                 }
                 
-                var textOutput = ""
-                var savedImage: PlatformImage? = nil
-                var savedPath: String? = nil
+                var images: [PlatformImage?] = []
+                var texts: [String] = []
+                var paths: [String?] = []
                 
-                if let item = response.data.first {
+                for (i, item) in response.data.enumerated() {
+                    var textOutput = ""
                     if let revised = item.revised_prompt {
                         textOutput += "Revised prompt: \(revised)\n"
                     }
                     
-                    if let b64 = item.b64_json, let imgData = Data(base64Encoded: b64) {
-                        savedImage = PlatformImage(platformData: imgData)
-                        savedPath = saveGeneratedImage(data: imgData)
-                        if let saved = savedPath {
+                    var imgData: Data?
+                    if let b64 = item.b64_json {
+                        imgData = Data(base64Encoded: b64)
+                    } else if let imageUrl = item.url, let url = URL(string: imageUrl) {
+                        let (data, _) = try await URLSession.shared.data(from: url)
+                        imgData = data
+                    }
+                    
+                    if let data = imgData {
+                        let image = PlatformImage(platformData: data)
+                        let path = saveGeneratedImage(data: data)
+                        if let saved = path {
                             textOutput += "Image saved to \(saved)\n"
                         }
-                    } else if let imageUrl = item.url, let url = URL(string: imageUrl) {
-                        let (imgData, _) = try await URLSession.shared.data(from: url)
-                        savedImage = PlatformImage(platformData: imgData)
-                        savedPath = saveGeneratedImage(data: imgData)
-                        if let saved = savedPath {
-                            textOutput += "Image downloaded and saved to \(saved)\n"
-                        }
+                        images.append(image)
+                        texts.append(textOutput)
+                        paths.append(path)
+                    } else {
+                        images.append(nil)
+                        paths.append(nil)
+                        texts.append(textOutput.isEmpty ? "No output for item \(i+1)" : textOutput)
                     }
                 }
                 
-                appState.ui.responseText = textOutput.isEmpty ? "No text output." : textOutput
-                appState.ui.outputImage = savedImage
-                
-                if savedImage == nil {
-                    appState.ui.responseText += "No image generated."
+                await MainActor.run {
+                    appState.ui.outputImages = images
+                    appState.ui.outputTexts = texts
+                    appState.ui.outputPaths = paths
+                    appState.ui.currentOutputIndex = 0
                 }
                 
-                let newItem = HistoryItem(prompt: appState.prompt, responseText: appState.ui.responseText, imagePath: savedPath, date: Date(), mode: appState.settings.mode, workflowName: nil, modelUsed: appState.settings.selectedAIMLModel)
-                appState.historyState.history.append(newItem)
+                let batchId = images.count > 1 ? UUID() : nil
+                let total = images.count
+                for i in 0..<total {
+                    let newItem = HistoryItem(prompt: appState.prompt, responseText: texts[i], imagePath: paths[i], date: Date(), mode: appState.settings.mode, workflowName: nil, modelUsed: appState.settings.selectedAIMLModel, batchId: batchId, indexInBatch: i, totalInBatch: total)
+                    appState.historyState.history.append(newItem)
+                }
                 appState.historyState.saveHistory()
             } else {
                 // Handle API error
@@ -702,7 +765,9 @@ extension ContentView {
                     }
                 }
                 await MainActor.run {
-                    appState.ui.responseText = errorMessage
+                    appState.ui.outputTexts = [errorMessage]
+                    appState.ui.outputImages = []
+                    appState.ui.outputPaths = []
                 }
                 throw GenerationError.apiError(errorMessage)
             }

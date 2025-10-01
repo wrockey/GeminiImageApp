@@ -230,15 +230,15 @@ struct ModelRegistry {
         case "google/gemini-2.5-flash-image":
                     return AIMLModel(
                         id: id,
-                        isI2I: true,
-                        maxInputImages: 1,
+                        isI2I: false,
+                        maxInputImages: 0,
                         supportedParams: [.numImages, .enableSafetyChecker],
                         supportsCustomResolution: false,
-                        defaultImageSize: "square_hd",
-                        imageInputParam: "image_urls",
+                        defaultImageSize: "Square HD",
+                        imageInputParam: "",
                         acceptsMultiImages: false,
-                        acceptsBase64: true,
-                        acceptsPublicURL: true,
+                        acceptsBase64: false,
+                        acceptsPublicURL: false,
                         maxWidth: nil,
                         maxHeight: nil
                     )
@@ -251,7 +251,7 @@ struct ModelRegistry {
                         supportsCustomResolution: false,
                         defaultImageSize: "square_hd",
                         imageInputParam: "image_urls",
-                        acceptsMultiImages: false,
+                        acceptsMultiImages: true,
                         acceptsBase64: true,
                         acceptsPublicURL: true,
                         maxWidth: nil,

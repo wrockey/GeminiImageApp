@@ -290,8 +290,10 @@ class HistoryState: ObservableObject {
 
 class UIState: ObservableObject {
     @Published var imageSlots: [ImageSlot] = []
-    @Published var responseText: String = ""
-    @Published var outputImage: PlatformImage? = nil
+    @Published var outputImages: [PlatformImage?] = []
+    @Published var outputTexts: [String] = []
+    @Published var outputPaths: [String?] = []
+    @Published var currentOutputIndex: Int = 0
 }
 
 class AppState: ObservableObject {
@@ -388,6 +390,14 @@ struct HistoryItem: Identifiable, Codable, Equatable {
     let mode: GenerationMode?
     let workflowName: String?
     let modelUsed: String?  // New: Store the model used at generation time
+    let batchId: UUID?  // Shared ID for images from same generation
+    let indexInBatch: Int?  // 0-based index
+    let totalInBatch: Int?  // Total in batch
+
+    enum CodingKeys: String, CodingKey {
+        case id, prompt, responseText, imagePath, date, mode, workflowName, modelUsed
+        case batchId, indexInBatch, totalInBatch  // NEW
+    }
 }
 
 struct Part: Codable {
@@ -573,5 +583,3 @@ struct MarkupWindowView: View {
         }
     }
 }
-
-

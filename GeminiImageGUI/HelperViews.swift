@@ -41,17 +41,49 @@ struct PopOutView: View {
     var body: some View {
         ZStack(alignment: .topTrailing) {  // Use ZStack for overlay positioning
             VStack(spacing: 0) {
-                if let platformImage = appState.ui.outputImage {
-                    Image(platformImage: platformImage)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .cornerRadius(12)
-                        .shadow(color: .black.opacity(0.2), radius: 4, x: 0, y: 2)
+                let count = appState.ui.outputImages.count
+                let index = appState.ui.currentOutputIndex
+                if count > 0 {
+                    if let optionalImage = appState.ui.outputImages[safe: index], let platformImage = optionalImage {
+                        Image(platformImage: platformImage)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .cornerRadius(12)
+                            .shadow(color: .black.opacity(0.2), radius: 4, x: 0, y: 2)
+                    } else {
+                        Text("No image available")
+                            .font(.headline)
+                            .foregroundColor(.secondary)
+                            .help("No image available for this output")
+                    }
+                    
+                    // NEW: Navigation if multiples (below image)
+                    if count > 1 {
+                        HStack(spacing: 12) {
+                            Button {
+                                if index > 0 { appState.ui.currentOutputIndex -= 1 }
+                            } label: {
+                                Image(systemName: "chevron.left")
+                            }
+                            .disabled(index == 0)
+                            
+                            Text("\(index + 1) of \(count)")
+                            
+                            Button {
+                                if index < count - 1 { appState.ui.currentOutputIndex += 1 }
+                            } label: {
+                                Image(systemName: "chevron.right")
+                            }
+                            .disabled(index == count - 1)
+                        }
+                        .padding(.top, 8)
+                    }
                 }
                 
                 ScrollView {
-                    TextEditor(text: .constant(appState.ui.responseText))
+                    let text = appState.ui.outputTexts[safe: index] ?? ""
+                    TextEditor(text: .constant(text))
                         .frame(height: 80)
                         .background(colorScheme == .dark ? Color.gray.opacity(0.2) : Color.white)
                         .cornerRadius(12)
@@ -77,14 +109,19 @@ struct PopOutView: View {
         .onAppear {
             updateWindowSize()
         }
-        .onChange(of: appState.ui.outputImage) { _ in
+        .onChange(of: appState.ui.outputImages) { _ in
+            updateWindowSize()
+        }
+        .onChange(of: appState.ui.currentOutputIndex) { _ in
             updateWindowSize()
         }
     }
     
     private func updateWindowSize() {
         #if os(macOS)
-        guard let platformImage = appState.ui.outputImage,
+        let index = appState.ui.currentOutputIndex
+        guard index < appState.ui.outputImages.count,
+              let platformImage = appState.ui.outputImages[index],
               let window = NSApp.windows.last,
               let screen = NSScreen.main else {
             return
@@ -432,4 +469,11 @@ func isPNGData(_ data: Data) -> Bool {
     guard data.count >= 8 else { return false }
     let signature = data.subdata(in: 0..<8)
     return signature == Data([137, 80, 78, 71, 13, 10, 26, 10])
+}
+
+// NEW: Helper for safe array access
+extension Array {
+    subscript(safe index: Index) -> Element? {
+        indices.contains(index) ? self[index] : nil
+    }
 }
