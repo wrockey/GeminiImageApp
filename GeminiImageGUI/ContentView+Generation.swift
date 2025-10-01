@@ -73,7 +73,7 @@ extension ContentView {
                 // Handle cancellation
             } catch {
                 DispatchQueue.main.async {
-                    errorItem = AlertError(message: "API error: \(error.localizedDescription)")
+                    errorItem = AlertError(message: error.localizedDescription)
                 }
             }
         }
@@ -279,7 +279,7 @@ extension ContentView {
                             let nsError = error as NSError
                             print("WebSocket error caught: domain=\(nsError.domain), code=\(nsError.code), desc=\(error.localizedDescription), isCancelled=\(isCancelled), isComplete=\(isComplete)")
                             if !((isCancelled || isComplete) && nsError.domain == NSPOSIXErrorDomain && nsError.code == 57) {
-                                errorItem = AlertError(message: "WebSocket error: \(error.localizedDescription)")
+                                errorItem = AlertError(message: error.localizedDescription)
                             }
                         }
                         break
@@ -744,109 +744,71 @@ extension ContentView {
             }
             
             try Task.checkCancellation()
-            let (data, urlResponse) = try await URLSession.shared.data(for: request)
+            let (data, _) = try await URLSession.shared.data(for: request)
             print(String(data: data, encoding: .utf8) ?? "No data")
+            let response = try JSONDecoder().decode(GrokImageResponse.self, from: data)
             
-            guard let httpResponse = urlResponse as? HTTPURLResponse else {
-                await MainActor.run {
-                    appState.ui.outputTexts = ["API Error: Invalid response type"]
-                }
-                return
-            }
-            
-            if (200...299).contains(httpResponse.statusCode) {
-                let response = try JSONDecoder().decode(GrokImageResponse.self, from: data)
-                
-                if let error = response.error {
-                    var message = error.message ?? "Unknown error"
-                    if message.lowercased().contains("safety") || message.lowercased().contains("violation") || message.lowercased().contains("content policy") {
-                        message += " (Likely safety/content violation)"
-                    }
-                    await MainActor.run {
-                        appState.ui.outputTexts = ["API Error: \(message)"]
-                        appState.ui.outputImages = []
-                        appState.ui.outputPaths = []
-                    }
-                    throw GenerationError.apiError(message)
-                }
-                
-                var images: [PlatformImage?] = []
-                var texts: [String] = []
-                var paths: [String?] = []
-                
-                for (i, item) in response.data.enumerated() {
-                    var textOutput = ""
-                    if let revised = item.revised_prompt {
-                        textOutput += "Revised prompt: \(revised)\n"
-                    }
-                    
-                    var imgData: Data?
-                    if let b64 = item.b64_json {
-                        imgData = Data(base64Encoded: b64)
-                    } else if let imageUrl = item.url, let url = URL(string: imageUrl) {
-                        let (data, _) = try await URLSession.shared.data(from: url)
-                        imgData = data
-                    }
-                    
-                    if let data = imgData {
-                        let image = PlatformImage(platformData: data)
-                        let path = saveGeneratedImage(data: data)
-                        if let saved = path {
-                            textOutput += "Image saved to \(saved)\n"
-                        }
-                        images.append(image)
-                        texts.append(textOutput)
-                        paths.append(path)
-                    } else {
-                        images.append(nil)
-                        paths.append(nil)
-                        texts.append(textOutput.isEmpty ? "No output for item \(i+1)" : textOutput)
-                    }
-                }
-                
-                await MainActor.run {
-                    appState.ui.outputImages = images
-                    appState.ui.outputTexts = texts
-                    appState.ui.outputPaths = paths
-                    appState.ui.currentOutputIndex = 0
-                }
-                
-                let batchId = images.count > 1 ? UUID() : nil
-                let total = images.count
-                for i in 0..<total {
-                    let newItem = HistoryItem(prompt: appState.prompt, responseText: texts[i], imagePath: paths[i], date: Date(), mode: appState.settings.mode, workflowName: nil, modelUsed: appState.settings.selectedAIMLModel, batchId: batchId, indexInBatch: i, totalInBatch: total)
-                    appState.historyState.history.append(newItem)
-                }
-                appState.historyState.saveHistory()
-            } else {
-                // Handle API error
-                var errorMessage = "API Error: Status code \(httpResponse.statusCode)"
-                if let errorJson = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-                    if let message = errorJson["message"] as? String {
-                        errorMessage = "API Error: \(message)"
-                        if message.lowercased().contains("safety") || message.lowercased().contains("violation") || message.lowercased().contains("content policy") {
-                            errorMessage += " (Likely safety/content violation)"
-                        }
-                    }
-                    if let meta = errorJson["meta"] as? [String: Any],
-                       let fieldErrors = meta["fieldErrors"] as? [String: [String]] {
-                        let messages = fieldErrors.flatMap { (field, errs) in
-                            errs.map { "\(field): \($0)" }
-                        }.joined(separator: "\n")
-                        if !messages.isEmpty {
-                            errorMessage += "\n\(messages)"
-                        }
-                    } else if let errorStr = errorJson["error"] as? String {
-                        errorMessage = "API Error: \(errorStr)"
-                    }
+            if let error = response.error {
+                var message = error.message ?? "Unknown error"
+                if message.lowercased().contains("safety") || message.lowercased().contains("violation") || message.lowercased().contains("content policy") {
+                    message += " (Likely safety/content violation)"
                 }
                 await MainActor.run {
-                    appState.ui.outputTexts = [errorMessage]
+                    appState.ui.outputTexts = ["API Error: \(message)"]
                     appState.ui.outputImages = []
                     appState.ui.outputPaths = []
                 }
-                throw GenerationError.apiError(errorMessage)
+                throw GenerationError.apiError(message)
             }
+            
+            var images: [PlatformImage?] = []
+            var texts: [String] = []
+            var paths: [String?] = []
+            
+            for (i, item) in response.data.enumerated() {
+                var textOutput = ""
+                if let revised = item.revised_prompt {
+                    textOutput += "Revised prompt: \(revised)\n"
+                }
+                
+                var imgData: Data?
+                if let b64 = item.b64_json {
+                    imgData = Data(base64Encoded: b64)
+                } else if let imageUrl = item.url, let url = URL(string: imageUrl) {
+                    let (data, _) = try await URLSession.shared.data(from: url)
+                    imgData = data
+                }
+                
+                if let data = imgData {
+                    let image = PlatformImage(platformData: data)
+                    let path = saveGeneratedImage(data: data)
+                    if let saved = path {
+                        textOutput += "Image saved to \(saved)\n"
+                    }
+                    images.append(image)
+                    texts.append(textOutput)
+                    paths.append(path)
+                } else {
+                    images.append(nil)
+                    paths.append(nil)
+                    texts.append(textOutput.isEmpty ? "No output for item \(i+1)" : textOutput)
+                }
+            }
+            
+            await MainActor.run {
+                appState.ui.outputImages = images
+                appState.ui.outputTexts = texts
+                appState.ui.outputPaths = paths
+                appState.ui.currentOutputIndex = 0
+            }
+            
+            let batchId = images.count > 1 ? UUID() : nil
+            let total = images.count
+            for i in 0..<total {
+                let newItem = HistoryItem(prompt: appState.prompt, responseText: texts[i], imagePath: paths[i], date: Date(), mode: appState.settings.mode, workflowName: nil, modelUsed: appState.settings.selectedAIMLModel, batchId: batchId, indexInBatch: i, totalInBatch: total)
+                appState.historyState.history.append(newItem)
+            }
+            appState.historyState.saveHistory()
         }
     }
     

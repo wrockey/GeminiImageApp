@@ -141,6 +141,40 @@ enum GenerationError: Error {
     case invalidImageNode
     case noSamplerNode
     
+    var localizedDescription: String {
+        switch self {
+        case .invalidURL:
+            return "Invalid API URL. Please check your configuration and ensure the endpoint is correct."
+        case .encodingFailed(let details):
+            return "Failed to encode request data: \(details). Verify your input (e.g., prompt or images) and try again."
+        case .apiError(let message):
+            return "API request failed: \(message). Check your API key, network connection, or quota limits."
+        case .noWorkflow:
+            return "No ComfyUI workflow loaded. Please select a valid JSON or PNG workflow file in the configuration section."
+        case .invalidServerURL:
+            return "Invalid ComfyUI server URL. Ensure it starts with http:// or https:// and points to your running server (e.g., http://localhost:8188)."
+        case .invalidWebSocketURL:
+            return "Invalid WebSocket URL for progress updates. Verify your server URL and ensure the ComfyUI server is accessible."
+        case .invalidPromptNode:
+            return "Invalid prompt node in workflow. Select a different prompt node or reload the workflow."
+        case .uploadFailed:
+            return "Failed to upload image to server. Check file size/format (PNG/JPG recommended) and server permissions."
+        case .queueFailed:
+            return "Failed to queue the generation task on the server. Ensure the ComfyUI server is running and not overloaded."
+        case .noOutputImage:
+            return "No output image generated. Verify your workflow has a valid output node (e.g., SaveImage) and try again."
+        case .decodeFailed:
+            return "Failed to decode generated image. The output may be corrupted—check your workflow or server logs."
+        case .fetchFailed(let details):
+            return "Failed to fetch image from server: \(details). Ensure the server is responsive and the output node is configured correctly."
+        case .invalidViewURL:
+            return "Invalid URL for viewing generated image. Check your server configuration."
+        case .invalidImageNode:
+            return "Invalid image input node in workflow. Select a different image node or ensure your workflow supports image inputs."
+        case .noSamplerNode:
+            return "No sampler node (e.g., KSampler) found in workflow. Please use a workflow that includes a sampler for generation."
+        }
+    }
 }
 
 struct AlertError: Identifiable {
@@ -326,7 +360,7 @@ struct ContentView: View {
                                     appState.presentedModal = .textEditor(IdentifiableData(data: Data()))
                                 }
                             } else {
-                                errorItem = AlertError(message: "Failed to access batch file.")
+                                errorItem = AlertError(message: "Failed to access batch file. Please check your file permissions or select a new file.")
                             }
                         },
                         batchFilePath: $batchFilePath,
@@ -474,7 +508,7 @@ struct ContentView: View {
                                 openWindow(id: "text-editor", value: Data())
                             }
                         } else {
-                            errorItem = AlertError(message: "Failed to access batch file.")
+                            errorItem = AlertError(message: "Failed to access batch file. Please check your file permissions or select a new file.")
                         }
                     },
                     batchFilePath: $batchFilePath,
