@@ -1,17 +1,19 @@
-//HistoryView.swift
 import SwiftUI
 #if os(macOS)
 import AppKit
 #endif
+
 extension UUID: Identifiable {
     public var id: UUID { self }
 }
+
 struct SizePreferenceKey: PreferenceKey {
     static var defaultValue: CGSize = .zero
     static func reduce(value: inout CGSize, nextValue: () -> CGSize) {
         value = nextValue()
     }
 }
+
 struct HistoryView: View {
     @Binding var imageSlots: [ImageSlot]
     @EnvironmentObject var appState: AppState
@@ -37,14 +39,11 @@ struct HistoryView: View {
         return formatter
     }
    
-    private var filteredHistory: [HistoryItem] {
+    private var filteredHistory: [HistoryEntry] {
         if searchText.isEmpty {
             return appState.historyState.history
         } else {
-            return appState.historyState.history.filter { item in
-                item.prompt.lowercased().contains(searchText.lowercased()) ||
-                dateFormatter.string(from: item.date).lowercased().contains(searchText.lowercased())
-            }
+            return filterEntries(appState.historyState.history, with: searchText)
         }
     }
    
@@ -114,6 +113,17 @@ struct HistoryView: View {
             Spacer()
            
             Button(action: {
+                appState.historyState.addFolder()
+            }) {
+                Image(systemName: "folder.badge.plus")
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundColor(.blue.opacity(0.8))
+            }
+            .buttonStyle(.borderless)
+            .help("Add new folder")
+            .accessibilityLabel("Add folder")
+
+            Button(action: {
                 showClearHistoryAlert = true
             }) {
                 Image(systemName: "trash")
@@ -131,6 +141,17 @@ struct HistoryView: View {
                 .font(.system(size: 24, weight: .semibold, design: .default))
                 .kerning(0.2)
                 .help("View past generated images and prompts")
+           
+            Button(action: {
+                appState.historyState.addFolder()
+            }) {
+                Image(systemName: "folder.badge.plus")
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundColor(.blue.opacity(0.8))
+            }
+            .buttonStyle(.borderless)
+            .help("Add new folder")
+            .accessibilityLabel("Add folder")
            
             Button(action: {
                 showClearHistoryAlert = true
@@ -177,14 +198,39 @@ struct HistoryView: View {
                     .foregroundColor(.secondary)
                     .help("No generation history available yet")
             } else {
-                ForEach(filteredHistory.sorted(by: { $0.date > $1.date })) { item in
-                    itemRow(for: item)
+                OutlineGroup(filteredHistory, children: \.childrenForOutline) { entry in
+                    entryRow(for: entry)
                 }
             }
         }
         .listStyle(.plain)
     }
    
+    @ViewBuilder
+    private func entryRow(for entry: HistoryEntry) -> some View {
+        switch entry {
+        case .item(let item):
+            itemRow(for: item)
+                .contextMenu {
+                    Button("Delete") {
+                        selectedHistoryItem = item
+                        showDeleteAlert = true
+                    }
+                }
+                .onDrag {
+                    NSItemProvider(object: item.id.uuidString as NSString)
+                }
+        case .folder(let folder):
+            Text(folder.name)
+                .contextMenu {
+                    Button("Delete Folder") {
+                        _ = appState.historyState.findAndRemoveEntry(with: folder.id)
+                    }
+                }
+                .onDrop(of: [.text], delegate: FolderDropDelegate(folder: folder, appState: appState))
+        }
+    }
+
     private func itemRow(for item: HistoryItem) -> some View {
         var creator: String? = nil
         if let mode = item.mode {
@@ -366,10 +412,7 @@ struct HistoryView: View {
             }
         }
        
-        if let index = appState.historyState.history.firstIndex(where: { $0.id == item.id }) {
-            appState.historyState.history.remove(at: index)
-            appState.historyState.saveHistory()
-        }
+        _ = appState.historyState.findAndRemoveEntry(with: item.id)
        
         selectedHistoryItem = nil
     }
@@ -419,7 +462,32 @@ struct HistoryView: View {
         }
         appState.ui.imageSlots.append(newSlot)
     }
+    
+    // Helper to filter entries recursively
+    private func filterEntries(_ entries: [HistoryEntry], with search: String) -> [HistoryEntry] {
+        entries.compactMap { entry in
+            switch entry {
+            case .item(let item):
+                if item.prompt.lowercased().contains(search.lowercased()) ||
+                   dateFormatter.string(from: item.date).lowercased().contains(search.lowercased()) {
+                    return entry
+                } else {
+                    return nil
+                }
+            case .folder(let folder):
+                let filteredChildren = filterEntries(folder.children, with: search)
+                if !filteredChildren.isEmpty || folder.name.lowercased().contains(search.lowercased()) {
+                    var newFolder = folder
+                    newFolder.children = filteredChildren
+                    return .folder(newFolder)
+                } else {
+                    return nil
+                }
+            }
+        }
+    }
 }
+
 struct FullHistoryItemView: View {
     let initialId: UUID
     @EnvironmentObject var appState: AppState
@@ -440,7 +508,7 @@ struct FullHistoryItemView: View {
     }
    
     private var history: [HistoryItem] {
-        appState.historyState.history.sorted(by: { $0.date > $1.date })
+        flattenHistory(appState.historyState.history).sorted(by: { $0.date > $1.date })
     }
    
     private var currentItem: HistoryItem? {
@@ -550,9 +618,6 @@ struct FullHistoryItemView: View {
             previousHistory = newHistory
         }
         .onChange(of: selectedId) { newValue in
-            if #available(iOS 17.0, macOS 14.0, *) {
-                // This branch is not needed since the single-param .onChange works on 17+ too, but for clarity
-            }
             let oldValue = previousSelectedId
             print("Selected ID changed from \(oldValue?.uuidString ?? "nil") to \(newValue?.uuidString ?? "nil")")
             if let item = history.first(where: { $0.id == newValue }) {
@@ -831,7 +896,7 @@ struct FullHistoryItemView: View {
    
     private func deleteHistoryItem(item: HistoryItem, deleteFile: Bool) {
         // Compute sorted history and current index before deletion
-        let currentHistory = appState.historyState.history.sorted(by: { $0.date > $1.date })
+        let currentHistory = flattenHistory(appState.historyState.history).sorted(by: { $0.date > $1.date })
         guard let oldIdx = currentHistory.firstIndex(where: { $0.id == item.id }) else { return }
        
         if deleteFile, let path = item.imagePath {
@@ -848,13 +913,10 @@ struct FullHistoryItemView: View {
             }
         }
        
-        if let index = appState.historyState.history.firstIndex(where: { $0.id == item.id }) {
-            appState.historyState.history.remove(at: index)
-            appState.historyState.saveHistory()
-        }
+        _ = appState.historyState.findAndRemoveEntry(with: item.id)
        
         // Recompute sorted history after deletion
-        let newHistory = appState.historyState.history.sorted(by: { $0.date > $1.date })
+        let newHistory = flattenHistory(appState.historyState.history).sorted(by: { $0.date > $1.date })
         if newHistory.isEmpty {
             selectedId = nil
         } else {
@@ -939,5 +1001,37 @@ struct FullHistoryItemView: View {
         window.setContentSize(windowSize)
         window.center() // Center the window on the screen
         #endif
+    }
+    
+    // Helper to flatten history for FullHistoryItemView
+    private func flattenHistory(_ entries: [HistoryEntry]) -> [HistoryItem] {
+        var items: [HistoryItem] = []
+        for entry in entries {
+            switch entry {
+            case .item(let item):
+                items.append(item)
+            case .folder(let folder):
+                items.append(contentsOf: flattenHistory(folder.children))
+            }
+        }
+        return items
+    }
+}
+
+struct FolderDropDelegate: DropDelegate {
+    let folder: Folder
+    let appState: AppState
+
+    func performDrop(info: DropInfo) -> Bool {
+        guard let item = info.itemProviders(for: [.text]).first else { return false }
+        item.loadObject(ofClass: NSString.self) { (string, _) in
+            if let idString = string as? String, let id = UUID(uuidString: idString),
+               let movedEntry = appState.historyState.findAndRemoveEntry(with: id) {
+                DispatchQueue.main.async {
+                    appState.historyState.addEntry(movedEntry, toFolderWithId: folder.id)
+                }
+            }
+        }
+        return true
     }
 }

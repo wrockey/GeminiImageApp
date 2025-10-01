@@ -177,7 +177,7 @@ extension ContentView {
             let total = images.count
             for i in 0..<total {
                 let newItem = HistoryItem(prompt: appState.prompt, responseText: texts[i], imagePath: paths[i], date: Date(), mode: appState.settings.mode, workflowName: nil, modelUsed: nil, batchId: batchId, indexInBatch: i, totalInBatch: total)
-                appState.historyState.history.append(newItem)
+                appState.historyState.history.append(.item(newItem))
             }
             appState.historyState.saveHistory()
             
@@ -486,7 +486,7 @@ extension ContentView {
             let total = outputImages.count
             for i in 0..<total {
                 let newItem = HistoryItem(prompt: appState.prompt, responseText: outputTexts[i], imagePath: outputPaths[i], date: Date(), mode: appState.settings.mode, workflowName: workflowName, modelUsed: nil, batchId: batchId, indexInBatch: i, totalInBatch: total)
-                appState.historyState.history.append(newItem)
+                appState.historyState.history.append(.item(newItem))
             }
             appState.historyState.saveHistory()
             
@@ -595,7 +595,7 @@ extension ContentView {
             let total = images.count
             for i in 0..<total {
                 let newItem = HistoryItem(prompt: appState.prompt, responseText: texts[i], imagePath: paths[i], date: Date(), mode: appState.settings.mode, workflowName: nil, modelUsed: appState.settings.selectedGrokModel, batchId: batchId, indexInBatch: i, totalInBatch: total)
-                appState.historyState.history.append(newItem)
+                appState.historyState.history.append(.item(newItem))
             }
             appState.historyState.saveHistory()
             
@@ -806,7 +806,7 @@ extension ContentView {
             let total = images.count
             for i in 0..<total {
                 let newItem = HistoryItem(prompt: appState.prompt, responseText: texts[i], imagePath: paths[i], date: Date(), mode: appState.settings.mode, workflowName: nil, modelUsed: appState.settings.selectedAIMLModel, batchId: batchId, indexInBatch: i, totalInBatch: total)
-                appState.historyState.history.append(newItem)
+                appState.historyState.history.append(.item(newItem))
             }
             appState.historyState.saveHistory()
         }

@@ -281,10 +281,7 @@ struct ResponseSection: View {
             }
             
             // Find and remove matching history item
-            if let histIndex = appState.historyState.history.firstIndex(where: { $0.imagePath == path }) {
-                appState.historyState.history.remove(at: histIndex)
-                appState.historyState.saveHistory()
-            }
+            _ = appState.historyState.findAndRemoveEntry(matching: { $0.imagePath == path })
         }
         
         // Remove from UI arrays

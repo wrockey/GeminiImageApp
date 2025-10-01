@@ -273,12 +273,25 @@ class GenerationState: ObservableObject {
 }
 
 class HistoryState: ObservableObject {
-    @Published var history: [HistoryItem] = []
+    @Published var history: [HistoryEntry] = []
     
     func loadHistory() {
-        if let data = UserDefaults.standard.data(forKey: "history"),
-           let loadedHistory = try? JSONDecoder().decode([HistoryItem].self, from: data) {
-            history = loadedHistory
+        if let data = UserDefaults.standard.data(forKey: "history") {
+            do {
+                // Try new format first
+                let loaded = try JSONDecoder().decode([HistoryEntry].self, from: data)
+                history = loaded
+            } catch {
+                // Fallback to old flat [HistoryItem]
+                if let loadedOld = try? JSONDecoder().decode([HistoryItem].self, from: data) {
+                    history = loadedOld.map { .item($0) }
+                    saveHistory() // Immediately save in new format for future compatibility
+                } else {
+                    history = []
+                }
+            }
+        } else {
+            history = []
         }
     }
     
@@ -286,6 +299,87 @@ class HistoryState: ObservableObject {
         if let data = try? JSONEncoder().encode(history) {
             UserDefaults.standard.set(data, forKey: "history")
         }
+    }
+
+    func addFolder() {
+        history.append(.folder(Folder()))
+        saveHistory()
+    }
+
+    func delete(at offsets: IndexSet) {
+        history.remove(atOffsets: offsets)
+        saveHistory()
+    }
+
+    func findAndRemoveEntry(with id: UUID) -> HistoryEntry? {
+        func remove(from entries: inout [HistoryEntry]) -> HistoryEntry? {
+            if let index = entries.firstIndex(where: { $0.id == id }) {
+                return entries.remove(at: index)
+            }
+            for i in entries.indices {
+                if case .folder(var folder) = entries[i] {
+                    if let removed = remove(from: &folder.children) {
+                        entries[i] = .folder(folder)
+                        return removed
+                    }
+                }
+            }
+            return nil
+        }
+        var mutableHistory = history
+        if let removed = remove(from: &mutableHistory) {
+            history = mutableHistory
+            saveHistory()
+            return removed
+        }
+        return nil
+    }
+    func findAndRemoveEntry(matching predicate: (HistoryItem) -> Bool) -> Bool {
+        func remove(from entries: inout [HistoryEntry]) -> Bool {
+            if let index = entries.firstIndex(where: {
+                if case .item(let item) = $0 {
+                    return predicate(item)
+                }
+                return false
+            }) {
+                entries.remove(at: index)
+                return true
+            }
+            for i in entries.indices {
+                if case .folder(var folder) = entries[i] {
+                    if remove(from: &folder.children) {
+                        entries[i] = .folder(folder)
+                        return true
+                    }
+                }
+            }
+            return false
+        }
+        var mutableHistory = history
+        if remove(from: &mutableHistory) {
+            history = mutableHistory
+            saveHistory()
+            return true
+        }
+        return false
+    }
+
+    func addEntry(_ entry: HistoryEntry, toFolderWithId folderId: UUID) {
+        func add(to entries: inout [HistoryEntry]) {
+            for i in entries.indices {
+                if case .folder(var folder) = entries[i], folder.id == folderId {
+                    folder.children.append(entry)
+                    entries[i] = .folder(folder)
+                    return
+                } else if case .folder(var folder) = entries[i] {
+                    add(to: &folder.children)
+                }
+            }
+        }
+        var mutableHistory = history
+        add(to: &mutableHistory)
+        history = mutableHistory
+        saveHistory()
     }
 }
 
@@ -398,6 +492,67 @@ struct HistoryItem: Identifiable, Codable, Equatable {
     enum CodingKeys: String, CodingKey {
         case id, prompt, responseText, imagePath, date, mode, workflowName, modelUsed
         case batchId, indexInBatch, totalInBatch  // NEW
+    }
+}
+
+enum HistoryEntry: Identifiable, Codable {
+    case item(HistoryItem)
+    case folder(Folder)
+
+    var id: UUID {
+        switch self {
+        case .item(let item): return item.id
+        case .folder(let folder): return folder.id
+        }
+    }
+
+    // Custom Codable to handle the enum
+    private enum CodingKeys: String, CodingKey {
+        case type, content
+    }
+
+    private enum EntryType: String, Codable {
+        case item, folder
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let type = try container.decode(EntryType.self, forKey: .type)
+        switch type {
+        case .item:
+            let item = try container.decode(HistoryItem.self, forKey: .content)
+            self = .item(item)
+        case .folder:
+            let folder = try container.decode(Folder.self, forKey: .content)
+            self = .folder(folder)
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        switch self {
+        case .item(let item):
+            try container.encode(EntryType.item, forKey: .type)
+            try container.encode(item, forKey: .content)
+        case .folder(let folder):
+            try container.encode(EntryType.folder, forKey: .type)
+            try container.encode(folder, forKey: .content)
+        }
+    }
+}
+
+struct Folder: Identifiable, Codable {
+    let id: UUID = UUID()
+    var name: String = "New Folder"
+    var children: [HistoryEntry] = []
+}
+
+extension HistoryEntry {
+    var childrenForOutline: [HistoryEntry]? {
+        if case .folder(let folder) = self {
+            return folder.children
+        }
+        return nil
     }
 }
 
