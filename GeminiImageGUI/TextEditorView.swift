@@ -1,4 +1,4 @@
-//TextEditorView.swift
+// TextEditorView.swift
 import SwiftUI
 import UniformTypeIdentifiers
 #if os(macOS)
@@ -6,113 +6,6 @@ import AppKit
 #elseif os(iOS)
 import UIKit
 #endif
-
-#if os(macOS)
-typealias Representable = NSViewRepresentable
-#elseif os(iOS)
-typealias Representable = UIViewRepresentable
-#endif
-
-struct CustomTextEditor: Representable {
-    @Binding var text: String
-    @Binding var platformTextView: (any PlatformTextView)?
-    #if os(macOS)
-    let windowDelegate: TextEditorWindowDelegate?
-    let windowTitle: String
-    #endif
-
-    func makeCoordinator() -> Coordinator {
-        return Coordinator(parent: self)
-    }
-
-    #if os(macOS)
-    func makeNSView(context: Context) -> NSScrollView {
-        let scrollView = NSTextView.scrollableTextView()
-        let textView = scrollView.documentView as! NSTextView
-        textView.font = NSFont.monospacedSystemFont(ofSize: 14, weight: .regular)
-        textView.textColor = .textColor
-        textView.backgroundColor = .textBackgroundColor
-        textView.isEditable = true
-        textView.isSelectable = true
-        textView.allowsUndo = true
-        textView.autoresizingMask = [.width]
-        scrollView.hasHorizontalScroller = true
-        scrollView.autohidesScrollers = true
-        textView.delegate = context.coordinator
-        textView.string = text
-        platformTextView = textView
-        return scrollView
-    }
-
-    func updateNSView(_ nsView: NSScrollView, context: Context) {
-        let textView = nsView.documentView as! NSTextView
-        if textView.string != text {
-            textView.string = text
-        }
-        DispatchQueue.main.async {
-            if let window = nsView.window {
-                if window.firstResponder != textView {
-                    window.makeFirstResponder(textView)
-                }
-                if let windowDelegate = windowDelegate, window.delegate !== windowDelegate {
-                    print("Setting delegate for window: \(window.title), all windows: \(NSApp.windows.map { $0.title })")
-                    windowDelegate.window = window
-                    window.delegate = windowDelegate
-                }
-                if window.title != windowTitle {
-                    window.title = windowTitle
-                }
-            }
-        }
-    }
-    #elseif os(iOS)
-    func makeUIView(context: Context) -> UITextView {
-        let textView = UITextView()
-        textView.font = UIFont.monospacedSystemFont(ofSize: 14, weight: .regular)
-        textView.delegate = context.coordinator
-        textView.textColor = .label
-        textView.backgroundColor = .systemBackground
-        textView.isEditable = true
-        textView.isSelectable = true
-        textView.textContainerInset = UIEdgeInsets(top: 20, left: 10, bottom: 20, right: 10)
-        textView.contentInsetAdjustmentBehavior = .automatic
-        textView.text = text
-        platformTextView = textView
-        return textView
-    }
-
-    func updateUIView(_ uiView: UITextView, context: Context) {
-        if uiView.text != text {
-            uiView.text = text
-        }
-        DispatchQueue.main.async {
-            if !uiView.isFirstResponder {
-                uiView.becomeFirstResponder()
-            }
-        }
-    }
-    #endif
-
-    class Coordinator: NSObject, PlatformTextDelegate {
-        var parent: CustomTextEditor
-        
-        init(parent: CustomTextEditor) {
-            self.parent = parent
-        }
-        
-        #if os(macOS)
-        func textDidChange(_ notification: Notification) {
-            if let textView = notification.object as? NSTextView {
-                parent.text = textView.string
-            }
-        }
-        #elseif os(iOS)
-        func textViewDidChange(_ textView: UITextView) {
-            parent.text = textView.text ?? ""
-        }
-        #endif
-    }
-}
 
 extension Notification.Name {
     static let batchFileUpdated = Notification.Name("batchFileUpdated")

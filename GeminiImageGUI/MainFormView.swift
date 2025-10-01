@@ -18,6 +18,7 @@ struct MainFormView: View {
     @Binding var isTestingApi: Bool
     @Binding var errorItem: AlertError?
     @Binding var imageScale: CGFloat
+    @Binding var promptTextView: (any PlatformTextView)?  // New: From PromptSection
     @State private var isUnsafe: Bool = false  // State for safety feedback
     let isLoading: Bool
     let progress: Double
@@ -117,7 +118,7 @@ struct MainFormView: View {
                 CustomDivider()
                 
                 DisclosureGroup(isExpanded: $promptExpanded) {
-                    PromptSection(prompt: $prompt, isUnsafe: $isUnsafe)
+                        PromptSection(prompt: $prompt, isUnsafe: $isUnsafe, platformTextView: $promptTextView)  // Pass binding
                 } label: {
                     HStack {
                         Text("Prompt")
@@ -143,7 +144,12 @@ struct MainFormView: View {
                         .help("Copy the current prompt to the clipboard")
                         
                         Button(action: {
-                            if !prompt.isEmpty {
+                            if let textView = promptTextView {
+                                let oldPrompt = prompt  // Backup for optional extra undo registration
+                                textView.clear()  // Native clear, which integrates with undoManager automatically
+                                undoManager?.registerUndo(withTarget: appState, selector: #selector(AppState.setPrompt(_:)), object: oldPrompt)  // Optional: Reinforce if needed
+                            } else if !prompt.isEmpty {
+                                // Fallback if native view not available (e.g., during init)
                                 let oldPrompt = prompt
                                 prompt = ""
                                 undoManager?.registerUndo(withTarget: appState, selector: #selector(AppState.setPrompt(_:)), object: oldPrompt)
@@ -556,20 +562,24 @@ struct MainFormView: View {
     }
     
     private func pasteToPrompt() {
-        var pastedText: String? = nil
-        #if os(macOS)
-        let pasteboard = NSPasteboard.general
-        pastedText = pasteboard.string(forType: .string)
-        #elseif os(iOS)
-        pastedText = UIPasteboard.general.string
-        #endif
-        
-        if let text = pastedText {
-            let oldPrompt = prompt
-            prompt = text
-            undoManager?.registerUndo(withTarget: appState, selector: #selector(AppState.setPrompt(_:)), object: oldPrompt)
+            if let textView = promptTextView {
+                textView.paste()  // Native paste with undo
+            } else {
+                // Fallback to your original clipboard logic
+                var pastedText: String? = nil
+                #if os(macOS)
+                let pasteboard = NSPasteboard.general
+                pastedText = pasteboard.string(forType: .string)
+                #elseif os(iOS)
+                pastedText = UIPasteboard.general.string
+                #endif
+                if let text = pastedText {
+                    let oldPrompt = prompt
+                    prompt = text
+                    undoManager?.registerUndo(withTarget: appState, selector: #selector(AppState.setPrompt(_:)), object: oldPrompt)
+                }
+            }
         }
-    }
     
     private func copyPromptToClipboard() {
         #if os(macOS)

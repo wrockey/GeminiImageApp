@@ -1,4 +1,4 @@
-//PlatformAbstractions.swift
+// PlatformAbstractions.swift
 import Foundation
 import SwiftUI
 import UniformTypeIdentifiers
@@ -9,14 +9,14 @@ import AppKit
 #elseif os(iOS)
 import UIKit
 #endif
-
+ 
 // MARK: - Image Abstraction
 #if os(macOS)
 typealias PlatformImage = NSImage
 #elseif os(iOS)
 typealias PlatformImage = UIImage
 #endif
-
+ 
 extension PlatformImage {
     var platformSize: CGSize {
         #if os(macOS)
@@ -61,7 +61,7 @@ extension PlatformImage {
         #endif
     }
 }
-
+ 
 // MARK: - Pasteboard Abstraction
 struct PlatformPasteboard {
     static func clearContents() {
@@ -99,11 +99,11 @@ struct PlatformPasteboard {
         #endif
     }
 }
-
+ 
 // MARK: - File Picker Abstraction
 typealias FilePickerCallback = (Result<[URL], Error>) -> Void
 typealias FileSaveCallback = (Result<URL, Error>) -> Void
-
+ 
 #if os(iOS)
 class FilePickerManager {
     static let shared = FilePickerManager()
@@ -111,7 +111,7 @@ class FilePickerManager {
     var activeDelegates: [any UIDocumentPickerDelegate] = []
 }
 #endif
-
+ 
 struct PlatformFilePicker {
     static func presentOpenPanel(
         allowedTypes: [UTType],
@@ -163,7 +163,7 @@ struct PlatformFilePicker {
         #endif
     }
 }
-
+ 
 // MARK: - File Saver Abstraction
 #if os(iOS)
 class FilePickerDelegate: NSObject, UIDocumentPickerDelegate {
@@ -188,7 +188,7 @@ class FilePickerDelegate: NSObject, UIDocumentPickerDelegate {
     }
 }
 #endif
-
+ 
 struct PlatformFileSaver {
     static func presentSavePanel(
         suggestedName: String,
@@ -257,7 +257,7 @@ struct PlatformFileSaver {
         #endif
     }
 }
-
+ 
 // MARK: - Browser Opener Abstraction
 struct PlatformBrowser {
     static func open(url: URL) {
@@ -268,12 +268,12 @@ struct PlatformBrowser {
         #endif
     }
 }
-
+ 
 // MARK: - Graphics Context Abstraction for Annotation Rendering
 protocol PlatformRenderer {
     func render(image: PlatformImage, strokes: [Stroke], textBoxes: [TextBox], annotationScale: CGFloat, offset: CGPoint) -> PlatformImage?
 }
-
+ 
 struct PlatformRendererFactory {
     static var renderer: PlatformRenderer {
         #if os(macOS)
@@ -283,7 +283,7 @@ struct PlatformRendererFactory {
         #endif
     }
 }
-
+ 
 #if os(macOS)
 struct MacOSRenderer: PlatformRenderer {
     func render(image: PlatformImage, strokes: [Stroke], textBoxes: [TextBox], annotationScale: CGFloat, offset: CGPoint) -> PlatformImage? {
@@ -333,7 +333,7 @@ struct MacOSRenderer: PlatformRenderer {
     }
 }
 #endif
-
+ 
 #if os(iOS)
 struct iOSRenderer: PlatformRenderer {
     func render(image: PlatformImage, strokes: [Stroke], textBoxes: [TextBox], annotationScale: CGFloat, offset: CGPoint) -> PlatformImage? {
@@ -379,7 +379,7 @@ struct iOSRenderer: PlatformRenderer {
     }
 }
 #endif
-
+ 
 extension Color {
     var platformColor: PlatformColor {
         #if os(macOS)
@@ -389,13 +389,13 @@ extension Color {
         #endif
     }
 }
-
+ 
 #if os(macOS)
 typealias PlatformColor = NSColor
 #elseif os(iOS)
 typealias PlatformColor = UIColor
 #endif
-
+ 
 extension Image {
     init(platformImage: PlatformImage) {
         #if os(macOS)
@@ -405,13 +405,13 @@ extension Image {
         #endif
     }
 }
-
+ 
 func withSecureAccess<T>(to url: URL, perform: () throws -> T) throws -> T {
     let didStart = url.startAccessingSecurityScopedResource()
     defer { if didStart { url.stopAccessingSecurityScopedResource() } }
     return try perform()
 }
-
+ 
 extension PlatformImage {
     func platformData(forType ext: String, compressionQuality: CGFloat = 1.0) -> Data? {
         let lower = ext.lowercased()
@@ -429,7 +429,7 @@ extension PlatformImage {
         return nil
     }
 }
-
+ 
 protocol PlatformTextView {
     var string: String { get set }
     var selectedText: String { get }
@@ -437,7 +437,7 @@ protocol PlatformTextView {
     func paste()
     func clear()
 }
-
+ 
 #if os(macOS)
 extension NSTextView: PlatformTextView {
     var selectedText: String {
@@ -496,7 +496,7 @@ extension UITextView: PlatformTextView {
     }
 }
 #endif
-
+ 
 #if os(macOS)
 typealias PlatformTextDelegate = NSTextViewDelegate
 #elseif os(iOS)

@@ -3,7 +3,9 @@ import SwiftUI
 
 struct PromptSection: View {
     @Binding var prompt: String
-    @Binding var isUnsafe: Bool  // New: Binding for safety feedback from parent
+    @Binding var isUnsafe: Bool
+    
+    @State private var platformTextView: (any PlatformTextView)? = nil  // Bind for external control (e.g., paste/clear)
     
     private var backgroundColor: Color {
         #if os(iOS)
@@ -15,10 +17,10 @@ struct PromptSection: View {
     
     var body: some View {
         VStack(spacing: 16) {
-            TextEditor(text: $prompt)
-                .frame(minHeight: 120)  // Slightly reduced for compactness
+            CustomTextEditor(text: $prompt, platformTextView: $platformTextView)
+                .frame(minHeight: 120)
                 .background(backgroundColor)
-                .cornerRadius(12)  // Softer corners
+                .cornerRadius(12)
                 .overlay {
                     if prompt.isEmpty {
                         Text("Enter your prompt for image generation here...")
@@ -27,9 +29,9 @@ struct PromptSection: View {
                             .allowsHitTesting(false)
                     }
                 }
-                .font(.system(size: 16, weight: .regular, design: .default))
+                .font(.system(size: 16, weight: .regular, design: .default))  // Applies if needed; font set in representable
             
-            if isUnsafe {  // New: Red warning text based on binding
+            if isUnsafe {
                 Text("Warning: Prompt may contain inappropriate content.")
                     .foregroundColor(.red)
                     .font(.caption)

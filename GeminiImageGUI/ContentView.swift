@@ -173,6 +173,7 @@ struct ContentView: View {
     @State var showSelectFolderAlert: Bool = false
     @State var pendingAction: (() -> Void)? = nil
     @State var generationTask: Task<Void, Error>? = nil
+    @State var promptTextView: (any PlatformTextView)? = nil
     @AppStorage("hasLaunchedBefore") var hasLaunchedBefore: Bool = false
     @AppStorage("configExpanded") private var configExpanded: Bool = true
     @AppStorage("promptExpanded") private var promptExpanded: Bool = true
@@ -278,6 +279,7 @@ struct ContentView: View {
                         isTestingApi: $isTestingApi,
                         errorItem: $errorItem,
                         imageScale: $imageScale,
+                        promptTextView: $promptTextView,
                         isLoading: isLoading,
                         progress: progress,
                         isCancelled: $isCancelled,
@@ -425,6 +427,7 @@ struct ContentView: View {
                     isTestingApi: $isTestingApi,
                     errorItem: $errorItem,
                     imageScale: $imageScale,
+                    promptTextView: $promptTextView,
                     isLoading: isLoading,
                     progress: progress,
                     isCancelled: $isCancelled,
