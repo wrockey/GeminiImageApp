@@ -5,7 +5,7 @@ struct PromptSection: View {
     @Binding var prompt: String
     @Binding var isUnsafe: Bool
     
-    @State private var platformTextView: (any PlatformTextView)? = nil  // Bind for external control (e.g., paste/clear)
+    @Binding var platformTextView: (any PlatformTextView)?  // Changed to @Binding to receive from parent
     
     private var backgroundColor: Color {
         #if os(iOS)

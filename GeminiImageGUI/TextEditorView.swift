@@ -1,4 +1,3 @@
-// TextEditorView.swift
 import SwiftUI
 import UniformTypeIdentifiers
 #if os(macOS)
