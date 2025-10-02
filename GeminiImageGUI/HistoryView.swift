@@ -211,6 +211,31 @@ struct TreeNodeView: View {
     @Binding var activeEntry: HistoryEntry?
     let entryRowProvider: (HistoryEntry) -> AnyView
     let copyPromptProvider: (String) -> Void
+    let folderId: UUID? // Add folderId to support moves within folders
+    
+    init(
+        entry: HistoryEntry,
+        showDeleteAlert: Binding<Bool>,
+        selectedHistoryItem: Binding<HistoryItem?>,
+        appState: AppState,
+        selectedIDs: Binding<Set<UUID>>,
+        searchText: Binding<String>,
+        activeEntry: Binding<HistoryEntry?>,
+        entryRowProvider: @escaping (HistoryEntry) -> AnyView,
+        copyPromptProvider: @escaping (String) -> Void,
+        folderId: UUID? = nil // Add folderId parameter
+    ) {
+        self.entry = entry
+        self._showDeleteAlert = showDeleteAlert
+        self._selectedHistoryItem = selectedHistoryItem
+        self.appState = appState
+        self._selectedIDs = selectedIDs
+        self._searchText = searchText
+        self._activeEntry = activeEntry
+        self.entryRowProvider = entryRowProvider
+        self.copyPromptProvider = copyPromptProvider
+        self.folderId = folderId
+    }
     
     var body: some View {
         if case .folder(let folder) = entry {
@@ -229,7 +254,8 @@ struct TreeNodeView: View {
                                         searchText: $searchText,
                                         activeEntry: $activeEntry,
                                         entryRowProvider: entryRowProvider,
-                                        copyPromptProvider: copyPromptProvider
+                                        copyPromptProvider: copyPromptProvider,
+                                        folderId: folder.id // Pass folderId to children
                                     )
                                 )
                             } moveAction: { from, to in
@@ -249,7 +275,8 @@ struct TreeNodeView: View {
                                         searchText: $searchText,
                                         activeEntry: $activeEntry,
                                         entryRowProvider: entryRowProvider,
-                                        copyPromptProvider: copyPromptProvider
+                                        copyPromptProvider: copyPromptProvider,
+                                        folderId: folder.id // Pass folderId to children
                                     )
                                 )
                             })
@@ -258,12 +285,18 @@ struct TreeNodeView: View {
                     .padding(.leading, 20)
                 } label: {
                     entryRowProvider(entry)
-                        .onLongPressGesture {  // Optional: Triggers rename on long-press (iOS-friendly)
+                        .onLongPressGesture {
                             newFolderName = folder.name
                             showRenameAlert = true
                         }
                 }
                 .contextMenu {
+                    Button("Move to Top") {
+                        appState.historyState.moveToTop(entriesWithIds: [entry.id], inFolderId: folderId)
+                    }
+                    Button("Move to Bottom") {
+                        appState.historyState.moveToBottom(entriesWithIds: [entry.id], inFolderId: folderId)
+                    }
                     Button("Rename Folder") {
                         newFolderName = folder.name
                         showRenameAlert = true
@@ -290,6 +323,12 @@ struct TreeNodeView: View {
                 entryRowProvider(entry)
                     .contextMenu {
                         if case .item(let item) = entry {
+                            Button("Move to Top") {
+                                appState.historyState.moveToTop(entriesWithIds: [item.id], inFolderId: folderId)
+                            }
+                            Button("Move to Bottom") {
+                                appState.historyState.moveToBottom(entriesWithIds: [item.id], inFolderId: folderId)
+                            }
                             Button("Copy Prompt") {
                                 copyPromptProvider(item.prompt)
                             }
@@ -302,9 +341,7 @@ struct TreeNodeView: View {
                     }
             )
         }
-       
     }
-    
 }
  
 // Move LazyThumbnailView outside
@@ -487,6 +524,39 @@ struct HistoryView: View {
             
             Spacer()
             
+            // Arrow buttons, visible only in editing mode
+            if isEditing {
+                Button(action: {
+                    if !selectedIDs.isEmpty {
+                        appState.historyState.moveToTop(entriesWithIds: Array(selectedIDs), inFolderId: nil)
+                        selectedIDs.removeAll() // Optional: Clear selection after moving
+                    }
+                }) {
+                    Image(systemName: "arrow.up.to.line")
+                        .symbolRenderingMode(.hierarchical)
+                        .foregroundColor(selectedIDs.isEmpty ? .gray : .blue.opacity(0.8))
+                }
+                .buttonStyle(.borderless)
+                .disabled(selectedIDs.isEmpty)
+                .help("Move selected items to top")
+                .accessibilityLabel("Move selected items to top")
+                
+                Button(action: {
+                    if !selectedIDs.isEmpty {
+                        appState.historyState.moveToBottom(entriesWithIds: Array(selectedIDs), inFolderId: nil)
+                        selectedIDs.removeAll() // Optional: Clear selection after moving
+                    }
+                }) {
+                    Image(systemName: "arrow.down.to.line")
+                        .symbolRenderingMode(.hierarchical)
+                        .foregroundColor(selectedIDs.isEmpty ? .gray : .blue.opacity(0.8))
+                }
+                .buttonStyle(.borderless)
+                .disabled(selectedIDs.isEmpty)
+                .help("Move selected items to bottom")
+                .accessibilityLabel("Move selected items to bottom")
+            }
+            
             Button(action: {
                 isEditing.toggle()
                 if !isEditing {
@@ -509,7 +579,7 @@ struct HistoryView: View {
             .buttonStyle(.borderless)
             .help("Add new folder")
             .accessibilityLabel("Add folder")
- 
+            
             Button(action: {
                 showClearHistoryAlert = true
             }) {
@@ -528,6 +598,39 @@ struct HistoryView: View {
                 .font(.system(size: 24, weight: .semibold, design: .default))
                 .kerning(0.2)
                 .help("View past generated images and prompts")
+            
+            // Arrow buttons, visible only in editing mode
+            if editMode?.wrappedValue == .active {
+                Button(action: {
+                    if !selectedIDs.isEmpty {
+                        appState.historyState.moveToTop(entriesWithIds: Array(selectedIDs), inFolderId: nil)
+                        selectedIDs.removeAll() // Optional: Clear selection after moving
+                    }
+                }) {
+                    Image(systemName: "arrow.up.to.line")
+                        .symbolRenderingMode(.hierarchical)
+                        .foregroundColor(selectedIDs.isEmpty ? .gray : .blue.opacity(0.8))
+                }
+                .buttonStyle(.borderless)
+                .disabled(selectedIDs.isEmpty)
+                .help("Move selected items to top")
+                .accessibilityLabel("Move selected items to top")
+                
+                Button(action: {
+                    if !selectedIDs.isEmpty {
+                        appState.historyState.moveToBottom(entriesWithIds: Array(selectedIDs), inFolderId: nil)
+                        selectedIDs.removeAll() // Optional: Clear selection after moving
+                    }
+                }) {
+                    Image(systemName: "arrow.down.to.line")
+                        .symbolRenderingMode(.hierarchical)
+                        .foregroundColor(selectedIDs.isEmpty ? .gray : .blue.opacity(0.8))
+                }
+                .buttonStyle(.borderless)
+                .disabled(selectedIDs.isEmpty)
+                .help("Move selected items to bottom")
+                .accessibilityLabel("Move selected items to bottom")
+            }
             
             Button(action: {
                 appState.historyState.addFolder()
@@ -564,11 +667,11 @@ struct HistoryView: View {
             .buttonStyle(.plain)
             .help("Close history view")
             .accessibilityLabel("Close history view")
-             
+            
             EditButton()
         }
         .padding(.horizontal)
-        .padding(.vertical, 8) // Reduced vertical padding to minimize space above
+        .padding(.vertical, 8)
         #endif
     }
     
@@ -590,38 +693,40 @@ struct HistoryView: View {
                         .padding()
                 } else {
                     if searchText.isEmpty {
-                          AnyView(ReorderableForEach(filteredHistory, active: $activeEntry, appState: appState, folderId: nil) { entry in
-                              AnyView(
-                                  TreeNodeView(
-                                      entry: entry,
-                                      showDeleteAlert: $showDeleteAlert,
-                                      selectedHistoryItem: $selectedHistoryItem,
-                                      appState: appState,
-                                      selectedIDs: $selectedIDs,
-                                      searchText: $searchText,
-                                      activeEntry: $activeEntry,
-                                      entryRowProvider: { AnyView(self.entryRow(for: $0)) },
-                                      copyPromptProvider: self.copyPromptToClipboard
-                                  )
-                              )
-                          } moveAction: { from, to in
-                              appState.historyState.move(inFolderId: nil, from: from, to: to)
-                          }
-                          .reorderableForEachContainer(active: $activeEntry, appState: appState, folderId: nil)
-                          )
+                        AnyView(ReorderableForEach(filteredHistory, active: $activeEntry, appState: appState, folderId: nil) { entry in
+                            AnyView(
+                                TreeNodeView(
+                                    entry: entry,
+                                    showDeleteAlert: $showDeleteAlert,
+                                    selectedHistoryItem: $selectedHistoryItem,
+                                    appState: appState,
+                                    selectedIDs: $selectedIDs,
+                                    searchText: $searchText,
+                                    activeEntry: $activeEntry,
+                                    entryRowProvider: { AnyView(self.entryRow(for: $0)) },
+                                    copyPromptProvider: self.copyPromptToClipboard,
+                                    folderId: nil // Pass nil for root level
+                                )
+                            )
+                        } moveAction: { from, to in
+                            appState.historyState.move(inFolderId: nil, from: from, to: to)
+                        }
+                        .reorderableForEachContainer(active: $activeEntry, appState: appState, folderId: nil)
+                        )
                     } else {
                         AnyView(ForEach(filteredHistory) { entry in
                             AnyView(
-                            TreeNodeView(
-                                entry: entry,
-                                showDeleteAlert: $showDeleteAlert,
-                                selectedHistoryItem: $selectedHistoryItem,
-                                appState: appState,
-                                selectedIDs: $selectedIDs,
-                                searchText: $searchText,
-                                activeEntry: $activeEntry,
-                                entryRowProvider: { AnyView(self.entryRow(for: $0)) },
-                                copyPromptProvider: self.copyPromptToClipboard
+                                TreeNodeView(
+                                    entry: entry,
+                                    showDeleteAlert: $showDeleteAlert,
+                                    selectedHistoryItem: $selectedHistoryItem,
+                                    appState: appState,
+                                    selectedIDs: $selectedIDs,
+                                    searchText: $searchText,
+                                    activeEntry: $activeEntry,
+                                    entryRowProvider: { AnyView(self.entryRow(for: $0)) },
+                                    copyPromptProvider: self.copyPromptToClipboard,
+                                    folderId: nil // Pass nil for root level
                                 )
                             )
                         })

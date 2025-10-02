@@ -300,17 +300,17 @@ class HistoryState: ObservableObject {
             UserDefaults.standard.set(data, forKey: "history")
         }
     }
-
+    
     func addFolder() {
         history.append(.folder(Folder()))
         saveHistory()
     }
-
+    
     func delete(at offsets: IndexSet) {
         history.remove(atOffsets: offsets)
         saveHistory()
     }
-
+    
     func updateFolderName(with id: UUID, newName: String) {
         func update(in entries: inout [HistoryEntry]) -> Bool {
             if let index = entries.firstIndex(where: { $0.id == id }),
@@ -388,7 +388,7 @@ class HistoryState: ObservableObject {
         }
         return false
     }
-
+    
     func addEntry(_ entry: HistoryEntry, toFolderWithId folderId: UUID) {
         func add(to entries: inout [HistoryEntry]) {
             for i in entries.indices {
@@ -468,7 +468,81 @@ class HistoryState: ObservableObject {
             saveHistory()
         }
     }
+    func moveToTop(entriesWithIds ids: [UUID], inFolderId: UUID?) {
+        var mutableHistory = history
+        if let inFolderId {
+            func moveIn(entries: inout [HistoryEntry]) -> Bool {
+                if let folderIndex = entries.firstIndex(where: { $0.id == inFolderId }),
+                   case .folder(var folder) = entries[folderIndex] {
+                    let selectedEntries = ids.compactMap { id in
+                        folder.children.firstIndex(where: { $0.id == id }).map { folder.children.remove(at: $0) }
+                    }
+                    folder.children.insert(contentsOf: selectedEntries.reversed(), at: 0) // Reverse to maintain order
+                    entries[folderIndex] = .folder(folder)
+                    return true
+                }
+                for i in entries.indices {
+                    if case .folder(var folder) = entries[i] {
+                        if moveIn(entries: &folder.children) {
+                            entries[i] = .folder(folder)
+                            return true
+                        }
+                    }
+                }
+                return false
+            }
+            if moveIn(entries: &mutableHistory) {
+                history = mutableHistory
+                saveHistory()
+            }
+        } else {
+            let selectedEntries = ids.compactMap { id in
+                mutableHistory.firstIndex(where: { $0.id == id }).map { mutableHistory.remove(at: $0) }
+            }
+            mutableHistory.insert(contentsOf: selectedEntries.reversed(), at: 0) // Reverse to maintain order
+            history = mutableHistory
+            saveHistory()
+        }
+    }
+    
+    func moveToBottom(entriesWithIds ids: [UUID], inFolderId: UUID?) {
+        var mutableHistory = history
+        if let inFolderId {
+            func moveIn(entries: inout [HistoryEntry]) -> Bool {
+                if let folderIndex = entries.firstIndex(where: { $0.id == inFolderId }),
+                   case .folder(var folder) = entries[folderIndex] {
+                    let selectedEntries = ids.compactMap { id in
+                        folder.children.firstIndex(where: { $0.id == id }).map { folder.children.remove(at: $0) }
+                    }
+                    folder.children.append(contentsOf: selectedEntries) // Append maintains order
+                    entries[folderIndex] = .folder(folder)
+                    return true
+                }
+                for i in entries.indices {
+                    if case .folder(var folder) = entries[i] {
+                        if moveIn(entries: &folder.children) {
+                            entries[i] = .folder(folder)
+                            return true
+                        }
+                    }
+                }
+                return false
+            }
+            if moveIn(entries: &mutableHistory) {
+                history = mutableHistory
+                saveHistory()
+            }
+        } else {
+            let selectedEntries = ids.compactMap { id in
+                mutableHistory.firstIndex(where: { $0.id == id }).map { mutableHistory.remove(at: $0) }
+            }
+            mutableHistory.append(contentsOf: selectedEntries) // Append maintains order
+            history = mutableHistory
+            saveHistory()
+        }
+    }
 }
+
  
 class UIState: ObservableObject {
     @Published var imageSlots: [ImageSlot] = []
