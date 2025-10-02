@@ -190,44 +190,120 @@ struct HistoryView: View {
             .help("Search history by prompt text or date")
             .accessibilityLabel("Search prompts or dates")
     }
-   
-    private var historyList: some View {
-        List {
-            if filteredHistory.isEmpty {
-                Text("No history yet.")
-                    .foregroundColor(.secondary)
-                    .help("No generation history available yet")
-            } else {
-                OutlineGroup(filteredHistory, children: \.childrenForOutline) { entry in
-                    entryRow(for: entry)
+    
+    struct RootDropDelegate: DropDelegate {
+        let appState: AppState
+
+        func performDrop(info: DropInfo) -> Bool {
+            guard let item = info.itemProviders(for: [.text]).first else { return false }
+            item.loadObject(ofClass: NSString.self) { (string, _) in
+                if let idString = string as? String, let id = UUID(uuidString: idString),
+                   let movedEntry = appState.historyState.findAndRemoveEntry(with: id) {
+                    DispatchQueue.main.async {
+                        appState.historyState.history.append(movedEntry)
+                        appState.historyState.saveHistory()
+                    }
                 }
             }
+            return true
         }
-        .listStyle(.plain)
     }
    
+    private var historyList: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading) {
+                if filteredHistory.isEmpty {
+                    Text("No history yet.")
+                        .foregroundColor(.secondary)
+                        .help("No generation history available yet")
+                        .padding()
+                } else {
+                    ForEach(filteredHistory) { entry in
+                        TreeNodeView(
+                            entry: entry,
+                            showDeleteAlert: $showDeleteAlert,
+                            selectedHistoryItem: $selectedHistoryItem,
+                            appState: appState,
+                            entryRowProvider: { AnyView(self.entryRow(for: $0)) },
+                            copyPromptProvider: self.copyPromptToClipboard
+                        )
+                    }
+                }
+            }
+            .padding(.horizontal)
+            .onDrop(of: [.text], delegate: RootDropDelegate(appState: appState))
+        }
+    }
+    
+    // Moved outside and passed bindings
+    struct TreeNodeView: View {
+        let entry: HistoryEntry
+        @State private var isExpanded: Bool = true
+        @Binding var showDeleteAlert: Bool
+        @Binding var selectedHistoryItem: HistoryItem?
+        let appState: AppState
+        let entryRowProvider: (HistoryEntry) -> AnyView
+        let copyPromptProvider: (String) -> Void
+        
+        var body: some View {
+            if case .folder(let folder) = entry {
+                DisclosureGroup(isExpanded: $isExpanded) {
+                    ForEach(children) { child in
+                        TreeNodeView(
+                            entry: child,
+                            showDeleteAlert: $showDeleteAlert,
+                            selectedHistoryItem: $selectedHistoryItem,
+                            appState: appState,
+                            entryRowProvider: entryRowProvider,
+                            copyPromptProvider: copyPromptProvider
+                        )
+                    }
+                } label: {
+                    entryRowProvider(entry)
+                }
+                .contextMenu {
+                    Button("Delete Folder") {
+                        _ = appState.historyState.findAndRemoveEntry(with: entry.id)
+                    }
+                }
+                .onDrop(of: [.text], delegate: FolderDropDelegate(folder: folder, appState: appState))
+            } else {
+                entryRowProvider(entry)
+                    .contextMenu {
+                        if case .item(let item) = entry {
+                            Button("Copy Prompt") {
+                                copyPromptProvider(item.prompt)
+                            }
+                            .help("Copy the prompt to clipboard")
+                            Button("Delete") {
+                                selectedHistoryItem = item
+                                showDeleteAlert = true
+                            }
+                        }
+                    }
+                    .onDrop(of: [.text], delegate: RootDropDelegate(appState: appState))
+            }
+        }
+        
+        var children: [HistoryEntry] {
+            entry.childrenForOutline ?? []
+        }
+    }
+    
     @ViewBuilder
     private func entryRow(for entry: HistoryEntry) -> some View {
         switch entry {
         case .item(let item):
             itemRow(for: item)
-                .contextMenu {
-                    Button("Delete") {
-                        selectedHistoryItem = item
-                        showDeleteAlert = true
-                    }
-                }
                 .onDrag {
                     NSItemProvider(object: item.id.uuidString as NSString)
                 }
         case .folder(let folder):
             Text(folder.name)
-                .contextMenu {
-                    Button("Delete Folder") {
-                        _ = appState.historyState.findAndRemoveEntry(with: folder.id)
-                    }
+                .contentShape(Rectangle())
+                .onDrag {
+                    NSItemProvider(object: folder.id.uuidString as NSString)
                 }
-                .onDrop(of: [.text], delegate: FolderDropDelegate(folder: folder, appState: appState))
         }
     }
 
@@ -318,13 +394,6 @@ struct HistoryView: View {
             .accessibilityLabel("Add to input images")
         }
         .padding(.vertical, 4)
-        .contextMenu {
-            Button("Copy Prompt") {
-                copyPromptToClipboard(item.prompt)
-            }
-            .help("Copy the prompt to clipboard")
-        }
-        .draggable(item.imagePath.map { URL(fileURLWithPath: $0) } ?? URL(string: "")!)
     }
    
     // New custom view for lazy thumbnail loading
@@ -341,30 +410,41 @@ struct HistoryView: View {
         }
        
         var body: some View {
-            Group {
-                if let img = thumbnail {
-                    Image(platformImage: img)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 50, height: 50)
-                        .cornerRadius(12)
-                        .shadow(color: .black.opacity(0.2), radius: 4, x: 0, y: 2)
-                        .help("Thumbnail of generated image")
-                        .accessibilityLabel("Thumbnail of image generated on \(dateFormatter.string(from: item.date))")
-                } else {
-                    Image(systemName: "photo")
-                        .font(.system(size: 50))
-                        .foregroundColor(.secondary)
-                        .help("Placeholder for image thumbnail")
+                Group {
+                    if let img = thumbnail {
+                        if let path = item.imagePath {
+                            Image(platformImage: img)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 50, height: 50)
+                                .cornerRadius(12)
+                                .shadow(color: .black.opacity(0.2), radius: 4, x: 0, y: 2)
+                                .help("Thumbnail of generated image")
+                                .accessibilityLabel("Thumbnail of image generated on \(dateFormatter.string(from: item.date))")
+                                .draggable(URL(fileURLWithPath: path))
+                        } else {
+                            Image(platformImage: img)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 50, height: 50)
+                                .cornerRadius(12)
+                                .shadow(color: .black.opacity(0.2), radius: 4, x: 0, y: 2)
+                                .help("Thumbnail of generated image")
+                                .accessibilityLabel("Thumbnail of image generated on \(dateFormatter.string(from: item.date))")
+                        }
+                    } else {
+                        Image(systemName: "photo")
+                            .font(.system(size: 50))
+                            .foregroundColor(.secondary)
+                            .help("Placeholder for image thumbnail")
+                    }
+                }
+                .onAppear {
+                    if thumbnail == nil {
+                        loadThumbnail()
+                    }
                 }
             }
-            .onAppear {
-                if thumbnail == nil {
-                    loadThumbnail()
-                }
-            }
-        }
-       
         private func loadThumbnail() {
             DispatchQueue.global(qos: .background).async {
                 let loadedImage = loadImage(for: item)
@@ -1015,6 +1095,30 @@ struct FullHistoryItemView: View {
             }
         }
         return items
+    }
+    
+    // Helper to filter entries recursively
+    private func filterEntries(_ entries: [HistoryEntry], with search: String) -> [HistoryEntry] {
+        entries.compactMap { entry in
+            switch entry {
+            case .item(let item):
+                if item.prompt.lowercased().contains(search.lowercased()) ||
+                   dateFormatter.string(from: item.date).lowercased().contains(search.lowercased()) {
+                    return entry
+                } else {
+                    return nil
+                }
+            case .folder(let folder):
+                let filteredChildren = filterEntries(folder.children, with: search)
+                if !filteredChildren.isEmpty || folder.name.lowercased().contains(search.lowercased()) {
+                    var newFolder = folder
+                    newFolder.children = filteredChildren
+                    return .folder(newFolder)
+                } else {
+                    return nil
+                }
+            }
+        }
     }
 }
 
