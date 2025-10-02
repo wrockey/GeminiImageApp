@@ -7,21 +7,21 @@ import AppKit
 import UIKit
 import PencilKit
 #endif
-
+ 
 enum GenerationMode: String, Codable, CaseIterable {
     case gemini
     case comfyUI
     case grok  // Added for Grok API
     case aimlapi  // New: For AI/ML API (aimlapi.com)
 }
-
+ 
 // Updated NodeInfo struct (make promptText optional to accommodate non-prompt nodes)
 struct NodeInfo: Identifiable {
     let id: String
     let label: String
     let promptText: String?  // Optional: only set for prompt nodes
 }
-
+ 
 class SettingsState: ObservableObject {
     @Published var apiKey: String = KeychainHelper.loadAPIKey() ?? ""  // Load from Keychain
     @Published var outputDirectory: URL? = nil
@@ -52,7 +52,7 @@ class SettingsState: ObservableObject {
         return supportingModels.contains(selectedAIMLModel)
     }
 }
-
+ 
 class GenerationState: ObservableObject {
     @Published var comfyWorkflow: [String: Any]? = nil
     @Published var comfyPromptNodeID: String = ""
@@ -271,7 +271,7 @@ class GenerationState: ObservableObject {
         workflowError = error
     }
 }
-
+ 
 class HistoryState: ObservableObject {
     @Published var history: [HistoryEntry] = []
     
@@ -381,8 +381,70 @@ class HistoryState: ObservableObject {
         history = mutableHistory
         saveHistory()
     }
+    
+    func move(inFolderId: UUID?, from: IndexSet, to: Int) {
+        var mutableHistory = history
+        if let inFolderId {
+            func moveIn(entries: inout [HistoryEntry]) -> Bool {
+                if let folderIndex = entries.firstIndex(where: { $0.id == inFolderId }),
+                   case .folder(var folder) = entries[folderIndex] {
+                    folder.children.move(fromOffsets: from, toOffset: to)
+                    entries[folderIndex] = .folder(folder)
+                    return true
+                }
+                for i in entries.indices {
+                    if case .folder(var folder) = entries[i] {
+                        if moveIn(entries: &folder.children) {
+                            entries[i] = .folder(folder)
+                            return true
+                        }
+                    }
+                }
+                return false
+            }
+            if moveIn(entries: &mutableHistory) {
+                history = mutableHistory
+                saveHistory()
+            }
+        } else {
+            mutableHistory.move(fromOffsets: from, toOffset: to)
+            history = mutableHistory
+            saveHistory()
+        }
+    }
+    
+    func insert(entries toInsert: [HistoryEntry], inFolderId: UUID?, at index: Int) {
+        var mutableHistory = history
+        if let inFolderId {
+            func insertIn(entries: inout [HistoryEntry]) -> Bool {
+                if let folderIndex = entries.firstIndex(where: { $0.id == inFolderId }),
+                   case .folder(var folder) = entries[folderIndex] {
+                    folder.children.insert(contentsOf: toInsert, at: min(index, folder.children.count))
+                    entries[folderIndex] = .folder(folder)
+                    return true
+                }
+                for i in entries.indices {
+                    if case .folder(var folder) = entries[i] {
+                        if insertIn(entries: &folder.children) {
+                            entries[i] = .folder(folder)
+                            return true
+                        }
+                    }
+                }
+                return false
+            }
+            if insertIn(entries: &mutableHistory) {
+                history = mutableHistory
+                saveHistory()
+            }
+        } else {
+            mutableHistory.insert(contentsOf: toInsert, at: min(index, mutableHistory.count))
+            history = mutableHistory
+            saveHistory()
+        }
+    }
 }
-
+ 
 class UIState: ObservableObject {
     @Published var imageSlots: [ImageSlot] = []
     @Published var outputImages: [PlatformImage?] = []
@@ -390,7 +452,7 @@ class UIState: ObservableObject {
     @Published var outputPaths: [String?] = []
     @Published var currentOutputIndex: Int = 0
 }
-
+ 
 class AppState: ObservableObject {
     @Published var settings = SettingsState()
     @Published var generation = GenerationState()
@@ -466,7 +528,7 @@ class AppState: ObservableObject {
         }.store(in: &cancellables)
     }
 }
-
+ 
 struct ImageSlot: Identifiable {
     let id = UUID()
     var path: String = ""
@@ -475,7 +537,7 @@ struct ImageSlot: Identifiable {
     var selectedPromptIndex: Int = 0
     var originalData: Data? = nil
 }
-
+ 
 struct HistoryItem: Identifiable, Codable, Equatable {
     let id = UUID()
     let prompt: String
@@ -494,8 +556,8 @@ struct HistoryItem: Identifiable, Codable, Equatable {
         case batchId, indexInBatch, totalInBatch  // NEW
     }
 }
-
-enum HistoryEntry: Identifiable, Codable {
+ 
+enum HistoryEntry: Identifiable, Codable, Equatable {
     case item(HistoryItem)
     case folder(Folder)
 
@@ -503,6 +565,17 @@ enum HistoryEntry: Identifiable, Codable {
         switch self {
         case .item(let item): return item.id
         case .folder(let folder): return folder.id
+        }
+    }
+
+    static func == (lhs: HistoryEntry, rhs: HistoryEntry) -> Bool {
+        switch (lhs, rhs) {
+        case (.item(let a), .item(let b)):
+            return a == b
+        case (.folder(let a), .folder(let b)):
+            return a == b
+        default:
+            return false
         }
     }
 
@@ -540,13 +613,17 @@ enum HistoryEntry: Identifiable, Codable {
         }
     }
 }
-
-struct Folder: Identifiable, Codable {
+ 
+struct Folder: Identifiable, Codable, Equatable {
     let id: UUID = UUID()
     var name: String = "New Folder"
     var children: [HistoryEntry] = []
-}
 
+    static func == (lhs: Folder, rhs: Folder) -> Bool {
+        lhs.id == rhs.id && lhs.name == rhs.name && lhs.children == rhs.children
+    }
+}
+ 
 extension HistoryEntry {
     var childrenForOutline: [HistoryEntry]? {
         if case .folder(let folder) = self {
@@ -555,7 +632,7 @@ extension HistoryEntry {
         return nil
     }
 }
-
+ 
 struct Part: Codable {
     let text: String?
     let inlineData: InlineData?
@@ -570,7 +647,7 @@ struct Part: Codable {
         self.inlineData = inlineData
     }
 }
-
+ 
 struct InlineData: Codable {
     let mimeType: String
     let data: String
@@ -580,28 +657,28 @@ struct InlineData: Codable {
         case data
     }
 }
-
+ 
 struct Content: Codable {
     let parts: [Part]
 }
-
+ 
 struct GenerateContentRequest: Codable {
     let contents: [Content]
 }
-
+ 
 struct GenerateContentResponse: Codable {
     let candidates: [Candidate]
 }
-
+ 
 struct Candidate: Codable {
     let content: ResponseContent
     let finishReason: String?  // Added for safety checks (e.g., "SAFETY")
 }
-
+ 
 struct ResponseContent: Codable {
     let parts: [ResponsePart]
 }
-
+ 
 struct ResponsePart: Codable {
     let text: String?
     let inlineData: InlineData?
@@ -611,7 +688,7 @@ struct ResponsePart: Codable {
         case inlineData = "inline_data"
     }
 }
-
+ 
 struct ResponseInlineData: Codable {
     let mimeType: String
     let data: String
@@ -621,7 +698,7 @@ struct ResponseInlineData: Codable {
         case data
     }
 }
-
+ 
 struct NewResponsePart: Codable {
     let text: String?
     let inlineData: ResponseInlineData?
@@ -631,21 +708,21 @@ struct NewResponsePart: Codable {
         case inlineData
     }
 }
-
+ 
 struct NewResponseContent: Codable {
     let parts: [NewResponsePart]
 }
-
+ 
 struct NewCandidate: Codable {
     let content: NewResponseContent
     let finishReason: String?  // Added for safety checks (e.g., "SAFETY")
 }
-
+ 
 struct NewGenerateContentResponse: Codable {
     let candidates: [NewCandidate]
     let finishReason: String?  // Added for safety checks (e.g., "SAFETY")
 }
-
+ 
 @main
 struct GeminiImageApp: App {
     @StateObject private var appState = AppState()
@@ -718,7 +795,7 @@ struct GeminiImageApp: App {
         #endif
     }
 }
-
+ 
 struct MarkupWindowView: View {
     let slotId: UUID
     @EnvironmentObject var appState: AppState
