@@ -26,12 +26,14 @@ struct ReorderableForEach<Item: Reorderable, Content: View, Preview: View>: View
     let moveAction: (IndexSet, Int) -> Void
     let appState: AppState
     let folderId: UUID?
+    @Binding var selectedIDs: Set<UUID> // Add selectedIDs binding
     
     init(
         _ items: [Item],
         active: Binding<Item?>,
         appState: AppState,
         folderId: UUID?,
+        selectedIDs: Binding<Set<UUID>>, // Add parameter
         @ViewBuilder content: @escaping (Item) -> Content,
         @ViewBuilder preview: @escaping (Item) -> Preview,
         moveAction: @escaping (IndexSet, Int) -> Void
@@ -43,6 +45,7 @@ struct ReorderableForEach<Item: Reorderable, Content: View, Preview: View>: View
         self.moveAction = moveAction
         self.appState = appState
         self.folderId = folderId
+        self._selectedIDs = selectedIDs
     }
     
     init(
@@ -50,6 +53,7 @@ struct ReorderableForEach<Item: Reorderable, Content: View, Preview: View>: View
         active: Binding<Item?>,
         appState: AppState,
         folderId: UUID?,
+        selectedIDs: Binding<Set<UUID>>, // Add parameter
         @ViewBuilder content: @escaping (Item) -> Content,
         moveAction: @escaping (IndexSet, Int) -> Void
     ) where Preview == EmptyView {
@@ -60,6 +64,7 @@ struct ReorderableForEach<Item: Reorderable, Content: View, Preview: View>: View
         self.moveAction = moveAction
         self.appState = appState
         self.folderId = folderId
+        self._selectedIDs = selectedIDs
     }
     
     var body: some View {
@@ -68,7 +73,6 @@ struct ReorderableForEach<Item: Reorderable, Content: View, Preview: View>: View
                 contentView(for: item)
                     .onDrag {
                         active = item
-                        // Ensure item.id is treated as UUID since HistoryEntry uses UUID
                         guard let uuid = item.id as? UUID else {
                             return NSItemProvider()
                         }
@@ -80,7 +84,6 @@ struct ReorderableForEach<Item: Reorderable, Content: View, Preview: View>: View
                 contentView(for: item)
                     .onDrag {
                         active = item
-                        // Ensure item.id is treated as UUID since HistoryEntry uses UUID
                         guard let uuid = item.id as? UUID else {
                             return NSItemProvider()
                         }
@@ -102,7 +105,8 @@ struct ReorderableForEach<Item: Reorderable, Content: View, Preview: View>: View
                     hasChangedLocation: $hasChangedLocation,
                     appState: appState,
                     folderId: folderId,
-                    moveAction: moveAction
+                    moveAction: moveAction,
+                    selectedIDs: $selectedIDs // Pass selectedIDs
                 )
             )
     }
@@ -118,6 +122,27 @@ struct ReorderableDragRelocateDelegate<Item: Reorderable>: DropDelegate {
     let appState: AppState
     let folderId: UUID?
     let moveAction: (IndexSet, Int) -> Void
+    @Binding var selectedIDs: Set<UUID> // Add selectedIDs binding
+    
+    init(
+        item: Item,
+        items: [Item],
+        active: Binding<Item?>,
+        hasChangedLocation: Binding<Bool>,
+        appState: AppState,
+        folderId: UUID?,
+        moveAction: @escaping (IndexSet, Int) -> Void,
+        selectedIDs: Binding<Set<UUID>> // Add parameter
+    ) {
+        self.item = item
+        self.items = items
+        self._active = active
+        self._hasChangedLocation = hasChangedLocation
+        self.appState = appState
+        self.folderId = folderId
+        self.moveAction = moveAction
+        self._selectedIDs = selectedIDs
+    }
     
     func dropEntered(info: DropInfo) {
         guard let current = active else { return }
@@ -137,6 +162,7 @@ struct ReorderableDragRelocateDelegate<Item: Reorderable>: DropDelegate {
         let wasChanged = hasChangedLocation
         hasChangedLocation = false
         active = nil
+        selectedIDs.removeAll() // Clear selection after drop
         if wasChanged {
             return true
         }
@@ -150,6 +176,7 @@ struct ReorderableDragRelocateDelegate<Item: Reorderable>: DropDelegate {
                 if !movedEntries.isEmpty {
                     let insertIndex = items.firstIndex(where: { $0.id == item.id }).map { $0 + 1 } ?? items.count
                     appState.historyState.insert(entries: movedEntries, inFolderId: folderId, at: insertIndex)
+                    selectedIDs.removeAll() // Clear selection after insert
                 }
             }
         }
@@ -211,7 +238,12 @@ struct TreeNodeView: View {
     @Binding var activeEntry: HistoryEntry?
     let entryRowProvider: (HistoryEntry) -> AnyView
     let copyPromptProvider: (String) -> Void
-    let folderId: UUID? // Add folderId to support moves within folders
+    let folderId: UUID?
+    #if os(iOS)
+    @Environment(\.editMode) var editMode
+    #else
+    @Binding var isEditing: Bool // Add binding for macOS
+    #endif
     
     init(
         entry: HistoryEntry,
@@ -223,7 +255,8 @@ struct TreeNodeView: View {
         activeEntry: Binding<HistoryEntry?>,
         entryRowProvider: @escaping (HistoryEntry) -> AnyView,
         copyPromptProvider: @escaping (String) -> Void,
-        folderId: UUID? = nil // Add folderId parameter
+        folderId: UUID? = nil,
+        isEditing: Binding<Bool>? = nil // Optional for iOS compatibility
     ) {
         self.entry = entry
         self._showDeleteAlert = showDeleteAlert
@@ -235,6 +268,9 @@ struct TreeNodeView: View {
         self.entryRowProvider = entryRowProvider
         self.copyPromptProvider = copyPromptProvider
         self.folderId = folderId
+        #if os(macOS)
+        self._isEditing = isEditing ?? .constant(false)
+        #endif
     }
     
     var body: some View {
@@ -243,7 +279,7 @@ struct TreeNodeView: View {
                 DisclosureGroup(isExpanded: $isExpanded) {
                     VStack(alignment: .leading, spacing: 0) {
                         if searchText.isEmpty {
-                            AnyView(ReorderableForEach(folder.children, active: $activeEntry, appState: appState, folderId: folder.id) { child in
+                            AnyView(ReorderableForEach(folder.children, active: $activeEntry, appState: appState, folderId: folder.id, selectedIDs: $selectedIDs) { child in
                                 AnyView(
                                     TreeNodeView(
                                         entry: child,
@@ -255,7 +291,8 @@ struct TreeNodeView: View {
                                         activeEntry: $activeEntry,
                                         entryRowProvider: entryRowProvider,
                                         copyPromptProvider: copyPromptProvider,
-                                        folderId: folder.id // Pass folderId to children
+                                        folderId: folder.id,
+                                        isEditing: $isEditing // Pass isEditing
                                     )
                                 )
                             } moveAction: { from, to in
@@ -276,7 +313,8 @@ struct TreeNodeView: View {
                                         activeEntry: $activeEntry,
                                         entryRowProvider: entryRowProvider,
                                         copyPromptProvider: copyPromptProvider,
-                                        folderId: folder.id // Pass folderId to children
+                                        folderId: folder.id,
+                                        isEditing: $isEditing // Pass isEditing
                                     )
                                 )
                             })
@@ -291,12 +329,29 @@ struct TreeNodeView: View {
                         }
                 }
                 .contextMenu {
-                    Button("Move to Top") {
-                        appState.historyState.moveToTop(entriesWithIds: [entry.id], inFolderId: folderId)
+                    #if os(iOS)
+                    if editMode?.wrappedValue == .active && selectedIDs.contains(entry.id) {
+                        Button("Move to Top") {
+                            appState.historyState.moveToTop(entriesWithIds: [entry.id], inFolderId: folderId)
+                            selectedIDs.removeAll()
+                        }
+                        Button("Move to Bottom") {
+                            appState.historyState.moveToBottom(entriesWithIds: [entry.id], inFolderId: folderId)
+                            selectedIDs.removeAll()
+                        }
                     }
-                    Button("Move to Bottom") {
-                        appState.historyState.moveToBottom(entriesWithIds: [entry.id], inFolderId: folderId)
+                    #else
+                    if isEditing && selectedIDs.contains(entry.id) {
+                        Button("Move to Top") {
+                            appState.historyState.moveToTop(entriesWithIds: [entry.id], inFolderId: folderId)
+                            selectedIDs.removeAll()
+                        }
+                        Button("Move to Bottom") {
+                            appState.historyState.moveToBottom(entriesWithIds: [entry.id], inFolderId: folderId)
+                            selectedIDs.removeAll()
+                        }
                     }
+                    #endif
                     Button("Rename Folder") {
                         newFolderName = folder.name
                         showRenameAlert = true
@@ -305,7 +360,7 @@ struct TreeNodeView: View {
                         _ = appState.historyState.findAndRemoveEntry(with: entry.id)
                     }
                 }
-                .onDrop(of: [.text], delegate: FolderDropDelegate(folder: folder, appState: appState))
+                .onDrop(of: [.text], delegate: FolderDropDelegate(folder: folder, appState: appState, selectedIDs: $selectedIDs))
                 .alert("Rename Folder", isPresented: $showRenameAlert) {
                     TextField("Folder Name", text: $newFolderName)
                     Button("OK") {
@@ -323,12 +378,29 @@ struct TreeNodeView: View {
                 entryRowProvider(entry)
                     .contextMenu {
                         if case .item(let item) = entry {
-                            Button("Move to Top") {
-                                appState.historyState.moveToTop(entriesWithIds: [item.id], inFolderId: folderId)
+                            #if os(iOS)
+                            if editMode?.wrappedValue == .active && selectedIDs.contains(item.id) {
+                                Button("Move to Top") {
+                                    appState.historyState.moveToTop(entriesWithIds: [item.id], inFolderId: folderId)
+                                    selectedIDs.removeAll()
+                                }
+                                Button("Move to Bottom") {
+                                    appState.historyState.moveToBottom(entriesWithIds: [item.id], inFolderId: folderId)
+                                    selectedIDs.removeAll()
+                                }
                             }
-                            Button("Move to Bottom") {
-                                appState.historyState.moveToBottom(entriesWithIds: [item.id], inFolderId: folderId)
+                            #else
+                            if isEditing && selectedIDs.contains(item.id) {
+                                Button("Move to Top") {
+                                    appState.historyState.moveToTop(entriesWithIds: [item.id], inFolderId: folderId)
+                                    selectedIDs.removeAll()
+                                }
+                                Button("Move to Bottom") {
+                                    appState.historyState.moveToBottom(entriesWithIds: [item.id], inFolderId: folderId)
+                                    selectedIDs.removeAll()
+                                }
                             }
+                            #endif
                             Button("Copy Prompt") {
                                 copyPromptProvider(item.prompt)
                             }
@@ -693,7 +765,7 @@ struct HistoryView: View {
                         .padding()
                 } else {
                     if searchText.isEmpty {
-                        AnyView(ReorderableForEach(filteredHistory, active: $activeEntry, appState: appState, folderId: nil) { entry in
+                        AnyView(ReorderableForEach(filteredHistory, active: $activeEntry, appState: appState, folderId: nil, selectedIDs: $selectedIDs) { entry in
                             AnyView(
                                 TreeNodeView(
                                     entry: entry,
@@ -705,7 +777,8 @@ struct HistoryView: View {
                                     activeEntry: $activeEntry,
                                     entryRowProvider: { AnyView(self.entryRow(for: $0)) },
                                     copyPromptProvider: self.copyPromptToClipboard,
-                                    folderId: nil // Pass nil for root level
+                                    folderId: nil,
+                                    isEditing: $isEditing // Pass isEditing
                                 )
                             )
                         } moveAction: { from, to in
@@ -726,7 +799,8 @@ struct HistoryView: View {
                                     activeEntry: $activeEntry,
                                     entryRowProvider: { AnyView(self.entryRow(for: $0)) },
                                     copyPromptProvider: self.copyPromptToClipboard,
-                                    folderId: nil // Pass nil for root level
+                                    folderId: nil,
+                                    isEditing: $isEditing // Pass isEditing
                                 )
                             )
                         })
@@ -1608,6 +1682,13 @@ struct FullHistoryItemView: View {
 struct FolderDropDelegate: DropDelegate {
     let folder: Folder
     let appState: AppState
+    @Binding var selectedIDs: Set<UUID> // Add selectedIDs binding
+    
+    init(folder: Folder, appState: AppState, selectedIDs: Binding<Set<UUID>>) {
+        self.folder = folder
+        self.appState = appState
+        self._selectedIDs = selectedIDs
+    }
     
     func performDrop(info: DropInfo) -> Bool {
         guard let item = info.itemProviders(for: [.text]).first else { return false }
@@ -1621,6 +1702,7 @@ struct FolderDropDelegate: DropDelegate {
                             appState.historyState.addEntry(movedEntry, toFolderWithId: folder.id)
                         }
                     }
+                    selectedIDs.removeAll() // Clear selection after drop
                 }
             }
         }
