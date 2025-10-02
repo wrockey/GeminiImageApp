@@ -274,7 +274,190 @@ class GenerationState: ObservableObject {
  
 class HistoryState: ObservableObject {
     @Published var history: [HistoryEntry] = []
-    
+        
+        func findAndRemoveEntry(with id: UUID) -> HistoryEntry? {
+            var snapshot = history // Take snapshot
+            func remove(from entries: inout [HistoryEntry]) -> HistoryEntry? {
+                if let index = entries.firstIndex(where: { $0.id == id }) {
+                    return entries.remove(at: index)
+                }
+                for i in entries.indices {
+                    if case .folder(var folder) = entries[i] {
+                        if let removed = remove(from: &folder.children) {
+                            entries[i] = .folder(folder)
+                            return removed
+                        }
+                    }
+                }
+                return nil
+            }
+            if let removed = remove(from: &snapshot) {
+                history = snapshot
+                saveHistory()
+                return removed
+            }
+            return nil
+        }
+        
+        func insert(entries toInsert: [HistoryEntry], inFolderId: UUID?, at index: Int) {
+            var snapshot = history
+            if let inFolderId {
+                func insertIn(entries: inout [HistoryEntry]) -> Bool {
+                    if let folderIndex = entries.firstIndex(where: { $0.id == inFolderId }),
+                       case .folder(var folder) = entries[folderIndex] {
+                        folder.children.insert(contentsOf: toInsert, at: min(index, folder.children.count))
+                        entries[folderIndex] = .folder(folder)
+                        return true
+                    }
+                    for i in entries.indices {
+                        if case .folder(var folder) = entries[i] {
+                            if insertIn(entries: &folder.children) {
+                                entries[i] = .folder(folder)
+                                return true
+                            }
+                        }
+                    }
+                    return false
+                }
+                if insertIn(entries: &snapshot) {
+                    history = snapshot
+                    saveHistory()
+                }
+            } else {
+                snapshot.insert(contentsOf: toInsert, at: min(index, snapshot.count))
+                history = snapshot
+                saveHistory()
+            }
+        }
+        
+        func addEntry(_ entry: HistoryEntry, toFolderWithId folderId: UUID) {
+            var snapshot = history
+            func add(to entries: inout [HistoryEntry]) -> Bool {
+                for i in entries.indices {
+                    if case .folder(var folder) = entries[i], folder.id == folderId {
+                        folder.children.append(entry)
+                        entries[i] = .folder(folder)
+                        return true
+                    } else if case .folder(var folder) = entries[i] {
+                        if add(to: &folder.children) {
+                            entries[i] = .folder(folder)
+                            return true
+                        }
+                    }
+                }
+                return false
+            }
+            if add(to: &snapshot) {
+                history = snapshot
+                saveHistory()
+            }
+        }
+        
+        func move(inFolderId: UUID?, from: IndexSet, to: Int) {
+            var snapshot = history
+            if let inFolderId {
+                func moveIn(entries: inout [HistoryEntry]) -> Bool {
+                    if let folderIndex = entries.firstIndex(where: { $0.id == inFolderId }),
+                       case .folder(var folder) = entries[folderIndex] {
+                        folder.children.move(fromOffsets: from, toOffset: to)
+                        entries[folderIndex] = .folder(folder)
+                        return true
+                    }
+                    for i in entries.indices {
+                        if case .folder(var folder) = entries[i] {
+                            if moveIn(entries: &folder.children) {
+                                entries[i] = .folder(folder)
+                                return true
+                            }
+                        }
+                    }
+                    return false
+                }
+                if moveIn(entries: &snapshot) {
+                    history = snapshot
+                    saveHistory()
+                }
+            } else {
+                snapshot.move(fromOffsets: from, toOffset: to)
+                history = snapshot
+                saveHistory()
+            }
+        }
+        
+        func moveToTop(entriesWithIds ids: [UUID], inFolderId: UUID?) {
+            var snapshot = history
+            if let inFolderId {
+                func moveIn(entries: inout [HistoryEntry]) -> Bool {
+                    if let folderIndex = entries.firstIndex(where: { $0.id == inFolderId }),
+                       case .folder(var folder) = entries[folderIndex] {
+                        let selectedEntries = ids.compactMap { id in
+                            folder.children.firstIndex(where: { $0.id == id }).map { folder.children.remove(at: $0) }
+                        }
+                        folder.children.insert(contentsOf: selectedEntries.reversed(), at: 0)
+                        entries[folderIndex] = .folder(folder)
+                        return true
+                    }
+                    for i in entries.indices {
+                        if case .folder(var folder) = entries[i] {
+                            if moveIn(entries: &folder.children) {
+                                entries[i] = .folder(folder)
+                                return true
+                            }
+                        }
+                    }
+                    return false
+                }
+                if moveIn(entries: &snapshot) {
+                    history = snapshot
+                    saveHistory()
+                }
+            } else {
+                let selectedEntries = ids.compactMap { id in
+                    snapshot.firstIndex(where: { $0.id == id }).map { snapshot.remove(at: $0) }
+                }
+                snapshot.insert(contentsOf: selectedEntries.reversed(), at: 0)
+                history = snapshot
+                saveHistory()
+            }
+        }
+        
+        func moveToBottom(entriesWithIds ids: [UUID], inFolderId: UUID?) {
+            var snapshot = history
+            if let inFolderId {
+                func moveIn(entries: inout [HistoryEntry]) -> Bool {
+                    if let folderIndex = entries.firstIndex(where: { $0.id == inFolderId }),
+                       case .folder(var folder) = entries[folderIndex] {
+                        let selectedEntries = ids.compactMap { id in
+                            folder.children.firstIndex(where: { $0.id == id }).map { folder.children.remove(at: $0) }
+                        }
+                        folder.children.append(contentsOf: selectedEntries)
+                        entries[folderIndex] = .folder(folder)
+                        return true
+                    }
+                    for i in entries.indices {
+                        if case .folder(var folder) = entries[i] {
+                            if moveIn(entries: &folder.children) {
+                                entries[i] = .folder(folder)
+                                return true
+                            }
+                        }
+                    }
+                    return false
+                }
+                if moveIn(entries: &snapshot) {
+                    history = snapshot
+                    saveHistory()
+                }
+            } else {
+                let selectedEntries = ids.compactMap { id in
+                    snapshot.firstIndex(where: { $0.id == id }).map { snapshot.remove(at: $0) }
+                }
+                snapshot.append(contentsOf: selectedEntries)
+                history = snapshot
+                saveHistory()
+            }
+        }
+
     func loadHistory() {
         if let data = UserDefaults.standard.data(forKey: "history") {
             do {
@@ -336,30 +519,7 @@ class HistoryState: ObservableObject {
         }
     }
     
-    func findAndRemoveEntry(with id: UUID) -> HistoryEntry? {
-        func remove(from entries: inout [HistoryEntry]) -> HistoryEntry? {
-            if let index = entries.firstIndex(where: { $0.id == id }) {
-                return entries.remove(at: index)
-            }
-            for i in entries.indices {
-                if case .folder(var folder) = entries[i] {
-                    if let removed = remove(from: &folder.children) {
-                        entries[i] = .folder(folder)
-                        return removed
-                    }
-                }
-            }
-            return nil
-        }
-        var mutableHistory = history
-        if let removed = remove(from: &mutableHistory) {
-            history = mutableHistory
-            saveHistory()
-            return removed
-        }
-        return nil
-    }
-    func findAndRemoveEntry(matching predicate: (HistoryItem) -> Bool) -> Bool {
+     func findAndRemoveEntry(matching predicate: (HistoryItem) -> Bool) -> Bool {
         func remove(from entries: inout [HistoryEntry]) -> Bool {
             if let index = entries.firstIndex(where: {
                 if case .item(let item) = $0 {
@@ -389,158 +549,9 @@ class HistoryState: ObservableObject {
         return false
     }
     
-    func addEntry(_ entry: HistoryEntry, toFolderWithId folderId: UUID) {
-        func add(to entries: inout [HistoryEntry]) {
-            for i in entries.indices {
-                if case .folder(var folder) = entries[i], folder.id == folderId {
-                    folder.children.append(entry)
-                    entries[i] = .folder(folder)
-                    return
-                } else if case .folder(var folder) = entries[i] {
-                    add(to: &folder.children)
-                }
-            }
-        }
-        var mutableHistory = history
-        add(to: &mutableHistory)
-        history = mutableHistory
-        saveHistory()
-    }
     
-    func move(inFolderId: UUID?, from: IndexSet, to: Int) {
-        var mutableHistory = history
-        if let inFolderId {
-            func moveIn(entries: inout [HistoryEntry]) -> Bool {
-                if let folderIndex = entries.firstIndex(where: { $0.id == inFolderId }),
-                   case .folder(var folder) = entries[folderIndex] {
-                    folder.children.move(fromOffsets: from, toOffset: to)
-                    entries[folderIndex] = .folder(folder)
-                    return true
-                }
-                for i in entries.indices {
-                    if case .folder(var folder) = entries[i] {
-                        if moveIn(entries: &folder.children) {
-                            entries[i] = .folder(folder)
-                            return true
-                        }
-                    }
-                }
-                return false
-            }
-            if moveIn(entries: &mutableHistory) {
-                history = mutableHistory
-                saveHistory()
-            }
-        } else {
-            mutableHistory.move(fromOffsets: from, toOffset: to)
-            history = mutableHistory
-            saveHistory()
-        }
-    }
     
-    func insert(entries toInsert: [HistoryEntry], inFolderId: UUID?, at index: Int) {
-        var mutableHistory = history
-        if let inFolderId {
-            func insertIn(entries: inout [HistoryEntry]) -> Bool {
-                if let folderIndex = entries.firstIndex(where: { $0.id == inFolderId }),
-                   case .folder(var folder) = entries[folderIndex] {
-                    folder.children.insert(contentsOf: toInsert, at: min(index, folder.children.count))
-                    entries[folderIndex] = .folder(folder)
-                    return true
-                }
-                for i in entries.indices {
-                    if case .folder(var folder) = entries[i] {
-                        if insertIn(entries: &folder.children) {
-                            entries[i] = .folder(folder)
-                            return true
-                        }
-                    }
-                }
-                return false
-            }
-            if insertIn(entries: &mutableHistory) {
-                history = mutableHistory
-                saveHistory()
-            }
-        } else {
-            mutableHistory.insert(contentsOf: toInsert, at: min(index, mutableHistory.count))
-            history = mutableHistory
-            saveHistory()
-        }
-    }
-    func moveToTop(entriesWithIds ids: [UUID], inFolderId: UUID?) {
-        var mutableHistory = history
-        if let inFolderId {
-            func moveIn(entries: inout [HistoryEntry]) -> Bool {
-                if let folderIndex = entries.firstIndex(where: { $0.id == inFolderId }),
-                   case .folder(var folder) = entries[folderIndex] {
-                    let selectedEntries = ids.compactMap { id in
-                        folder.children.firstIndex(where: { $0.id == id }).map { folder.children.remove(at: $0) }
-                    }
-                    folder.children.insert(contentsOf: selectedEntries.reversed(), at: 0) // Reverse to maintain order
-                    entries[folderIndex] = .folder(folder)
-                    return true
-                }
-                for i in entries.indices {
-                    if case .folder(var folder) = entries[i] {
-                        if moveIn(entries: &folder.children) {
-                            entries[i] = .folder(folder)
-                            return true
-                        }
-                    }
-                }
-                return false
-            }
-            if moveIn(entries: &mutableHistory) {
-                history = mutableHistory
-                saveHistory()
-            }
-        } else {
-            let selectedEntries = ids.compactMap { id in
-                mutableHistory.firstIndex(where: { $0.id == id }).map { mutableHistory.remove(at: $0) }
-            }
-            mutableHistory.insert(contentsOf: selectedEntries.reversed(), at: 0) // Reverse to maintain order
-            history = mutableHistory
-            saveHistory()
-        }
-    }
-    
-    func moveToBottom(entriesWithIds ids: [UUID], inFolderId: UUID?) {
-        var mutableHistory = history
-        if let inFolderId {
-            func moveIn(entries: inout [HistoryEntry]) -> Bool {
-                if let folderIndex = entries.firstIndex(where: { $0.id == inFolderId }),
-                   case .folder(var folder) = entries[folderIndex] {
-                    let selectedEntries = ids.compactMap { id in
-                        folder.children.firstIndex(where: { $0.id == id }).map { folder.children.remove(at: $0) }
-                    }
-                    folder.children.append(contentsOf: selectedEntries) // Append maintains order
-                    entries[folderIndex] = .folder(folder)
-                    return true
-                }
-                for i in entries.indices {
-                    if case .folder(var folder) = entries[i] {
-                        if moveIn(entries: &folder.children) {
-                            entries[i] = .folder(folder)
-                            return true
-                        }
-                    }
-                }
-                return false
-            }
-            if moveIn(entries: &mutableHistory) {
-                history = mutableHistory
-                saveHistory()
-            }
-        } else {
-            let selectedEntries = ids.compactMap { id in
-                mutableHistory.firstIndex(where: { $0.id == id }).map { mutableHistory.remove(at: $0) }
-            }
-            mutableHistory.append(contentsOf: selectedEntries) // Append maintains order
-            history = mutableHistory
-            saveHistory()
-        }
-    }
+     
 }
 
  
