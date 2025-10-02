@@ -16,7 +16,7 @@ struct SizePreferenceKey: PreferenceKey {
  
 // Add Reorderable typealias
 typealias Reorderable = Identifiable & Equatable
-
+ 
 // Add ReorderableForEach and related structs
 struct ReorderableForEach<Item: Reorderable, Content: View, Preview: View>: View {
     let items: [Item]
@@ -68,7 +68,11 @@ struct ReorderableForEach<Item: Reorderable, Content: View, Preview: View>: View
                 contentView(for: item)
                     .onDrag {
                         active = item
-                        return NSItemProvider(object: item.id as! NSString) // Adjust if id not String
+                        // Ensure item.id is treated as UUID since HistoryEntry uses UUID
+                        guard let uuid = item.id as? UUID else {
+                            return NSItemProvider()
+                        }
+                        return NSItemProvider(object: uuid.uuidString as NSString)
                     } preview: {
                         preview(item)
                     }
@@ -76,7 +80,11 @@ struct ReorderableForEach<Item: Reorderable, Content: View, Preview: View>: View
                 contentView(for: item)
                     .onDrag {
                         active = item
-                        return NSItemProvider(object: item.id as! NSString)
+                        // Ensure item.id is treated as UUID since HistoryEntry uses UUID
+                        guard let uuid = item.id as? UUID else {
+                            return NSItemProvider()
+                        }
+                        return NSItemProvider(object: uuid.uuidString as NSString)
                     }
             }
         }
@@ -101,7 +109,7 @@ struct ReorderableForEach<Item: Reorderable, Content: View, Preview: View>: View
     
     @State private var hasChangedLocation: Bool = false
 }
-
+ 
 struct ReorderableDragRelocateDelegate<Item: Reorderable>: DropDelegate {
     let item: Item
     let items: [Item]
@@ -126,36 +134,61 @@ struct ReorderableDragRelocateDelegate<Item: Reorderable>: DropDelegate {
     }
     
     func performDrop(info: DropInfo) -> Bool {
+        let wasChanged = hasChangedLocation
         hasChangedLocation = false
-        if let current = active {
-            active = nil
-            return true
-        } else {
-            guard let provider = info.itemProviders(for: [.text]).first else { return false }
-            provider.loadObject(ofClass: NSString.self) { reading, _ in
-                guard let str = reading as? String else { return }
-                let idStrings = str.split(separator: ",").map(String.init)
-                let ids = idStrings.compactMap(UUID.init(uuidString:))
-                DispatchQueue.main.async {
-                    let movedEntries = ids.compactMap { appState.historyState.findAndRemoveEntry(with: $0) }
-                    if !movedEntries.isEmpty {
-                        let insertIndex = items.firstIndex(where: { $0.id == item.id }).map { $0 + 1 } ?? items.count
-                        appState.historyState.insert(entries: movedEntries, inFolderId: folderId, at: insertIndex)
-                    }
-                }
-            }
+        active = nil
+        if wasChanged {
             return true
         }
+        guard let provider = info.itemProviders(for: [.text]).first else { return false }
+        provider.loadObject(ofClass: NSString.self) { reading, _ in
+            guard let str = reading as? String else { return }
+            let idStrings = str.split(separator: ",").map(String.init)
+            let ids = idStrings.compactMap(UUID.init(uuidString:))
+            DispatchQueue.main.async {
+                let movedEntries = ids.compactMap { appState.historyState.findAndRemoveEntry(with: $0) }
+                if !movedEntries.isEmpty {
+                    let insertIndex = items.firstIndex(where: { $0.id == item.id }).map { $0 + 1 } ?? items.count
+                    appState.historyState.insert(entries: movedEntries, inFolderId: folderId, at: insertIndex)
+                }
+            }
+        }
+        return true
     }
 }
-
+ 
 extension View {
-    func reorderableForEachContainer<Item: Reorderable>(active: Binding<Item?>) -> some View {
+    func reorderableForEachContainer<Item: Reorderable>(active: Binding<Item?>, appState: AppState? = nil, folderId: UUID? = nil) -> some View {
         if #available(macOS 13.0, *) {
             AnyView(
-                self.onDrop(of: [.text], isTargeted: nil) { _ in
-                    active.wrappedValue = nil
-                    return false
+                self.onDrop(of: [.text], isTargeted: nil) { providers in
+                    if let appState = appState {
+                        if let provider = providers.first {
+                            provider.loadObject(ofClass: NSString.self) { reading, _ in
+                                if let str = reading as? String {
+                                    let idStrings = str.split(separator: ",").map(String.init)
+                                    let ids = idStrings.compactMap { UUID(uuidString: $0) }
+                                    DispatchQueue.main.async {
+                                        let movedEntries = ids.compactMap { appState.historyState.findAndRemoveEntry(with: $0) }
+                                        if !movedEntries.isEmpty {
+                                            // Append to the end by using the count of the target container
+                                            let insertIndex = folderId != nil ?
+                                                (appState.historyState.history.first { $0.id == folderId }?.childrenForOutline?.count ?? 0) :
+                                                appState.historyState.history.count
+                                            appState.historyState.insert(entries: movedEntries, inFolderId: folderId, at: insertIndex)
+                                        }
+                                    }
+                                }
+                            }
+                            return true
+                        } else {
+                            active.wrappedValue = nil
+                            return false
+                        }
+                    } else {
+                        active.wrappedValue = nil
+                        return false
+                    }
                 }
             )
         } else {
@@ -163,7 +196,7 @@ extension View {
         }
     }
 }
-
+ 
 // Move TreeNodeView outside
 struct TreeNodeView: View {
     let entry: HistoryEntry
@@ -201,7 +234,9 @@ struct TreeNodeView: View {
                                 )
                             } moveAction: { from, to in
                                 appState.historyState.move(inFolderId: folder.id, from: from, to: to)
-                            })
+                            }
+                            .reorderableForEachContainer(active: $activeEntry, appState: appState, folderId: folder.id)
+                            )
                         } else {
                             AnyView(ForEach(folder.children) { child in
                                 AnyView(
@@ -267,24 +302,24 @@ struct TreeNodeView: View {
                     }
             )
         }
-        
+       
     }
     
 }
-
+ 
 // Move LazyThumbnailView outside
 struct LazyThumbnailView: View {
     let item: HistoryItem
     @State private var thumbnail: PlatformImage? = nil
     @EnvironmentObject var appState: AppState
-   
+    
     private var dateFormatter: DateFormatter {
         let formatter = DateFormatter()
         formatter.dateStyle = .short
         formatter.timeStyle = .short
         return formatter
     }
-   
+    
     var body: some View {
         Group {
             if let img = thumbnail {
@@ -321,7 +356,7 @@ struct LazyThumbnailView: View {
             }
         }
     }
-   
+    
     private func loadThumbnail() {
         DispatchQueue.global(qos: .background).async {
             let loadedImage = loadImage(for: item)
@@ -330,7 +365,7 @@ struct LazyThumbnailView: View {
             }
         }
     }
-   
+    
     private func loadImage(for item: HistoryItem) -> PlatformImage? {
         guard let path = item.imagePath else { return nil }
         let fileURL = URL(fileURLWithPath: path)
@@ -346,7 +381,7 @@ struct LazyThumbnailView: View {
         }
     }
 }
-
+ 
 struct HistoryView: View {
     @Binding var imageSlots: [ImageSlot]
     @EnvironmentObject var appState: AppState
@@ -359,6 +394,8 @@ struct HistoryView: View {
     @State private var showAddedMessage: Bool = false
     #if os(iOS)
     @Environment(\.editMode) var editMode
+    #else
+    @State private var isEditing: Bool = false
     #endif
     @State private var activeEntry: HistoryEntry? = nil
     @State private var selectedIDs: Set<UUID> = []
@@ -442,14 +479,26 @@ struct HistoryView: View {
             .buttonStyle(.plain)
             .help("Collapse history sidebar")
             .accessibilityLabel("Collapse history sidebar")
-           
+            
             Text("History")
                 .font(.system(.headline, design: .default, weight: .semibold))
                 .kerning(0.2)
                 .help("View past generated images and prompts")
-           
+            
             Spacer()
-           
+            
+            Button(action: {
+                isEditing.toggle()
+                if !isEditing {
+                    selectedIDs.removeAll()
+                }
+            }) {
+                Text(isEditing ? "Done" : "Select")
+            }
+            .buttonStyle(.borderless)
+            .help("Select multiple items")
+            .accessibilityLabel("Select multiple items")
+            
             Button(action: {
                 appState.historyState.addFolder()
             }) {
@@ -479,7 +528,7 @@ struct HistoryView: View {
                 .font(.system(size: 24, weight: .semibold, design: .default))
                 .kerning(0.2)
                 .help("View past generated images and prompts")
-           
+            
             Button(action: {
                 appState.historyState.addFolder()
             }) {
@@ -490,7 +539,7 @@ struct HistoryView: View {
             .buttonStyle(.borderless)
             .help("Add new folder")
             .accessibilityLabel("Add folder")
-           
+            
             Button(action: {
                 showClearHistoryAlert = true
             }) {
@@ -501,9 +550,9 @@ struct HistoryView: View {
             .buttonStyle(.borderless)
             .help("Clear all history")
             .accessibilityLabel("Clear all history")
-           
+            
             Spacer()
-           
+            
             Button(action: {
                 dismiss()
             }) {
@@ -515,7 +564,7 @@ struct HistoryView: View {
             .buttonStyle(.plain)
             .help("Close history view")
             .accessibilityLabel("Close history view")
-            
+             
             EditButton()
         }
         .padding(.horizontal)
@@ -541,23 +590,25 @@ struct HistoryView: View {
                         .padding()
                 } else {
                     if searchText.isEmpty {
-                            AnyView(ReorderableForEach(filteredHistory, active: $activeEntry, appState: appState, folderId: nil) { entry in
-                                AnyView(
-                                    TreeNodeView(
-                                        entry: entry,
-                                        showDeleteAlert: $showDeleteAlert,
-                                        selectedHistoryItem: $selectedHistoryItem,
-                                        appState: appState,
-                                        selectedIDs: $selectedIDs,
-                                        searchText: $searchText,
-                                        activeEntry: $activeEntry,
-                                        entryRowProvider: { AnyView(self.entryRow(for: $0)) },
-                                        copyPromptProvider: self.copyPromptToClipboard
-                                    )
-                                )
-                            } moveAction: { from, to in
-                                appState.historyState.move(inFolderId: nil, from: from, to: to)
-                            })
+                          AnyView(ReorderableForEach(filteredHistory, active: $activeEntry, appState: appState, folderId: nil) { entry in
+                              AnyView(
+                                  TreeNodeView(
+                                      entry: entry,
+                                      showDeleteAlert: $showDeleteAlert,
+                                      selectedHistoryItem: $selectedHistoryItem,
+                                      appState: appState,
+                                      selectedIDs: $selectedIDs,
+                                      searchText: $searchText,
+                                      activeEntry: $activeEntry,
+                                      entryRowProvider: { AnyView(self.entryRow(for: $0)) },
+                                      copyPromptProvider: self.copyPromptToClipboard
+                                  )
+                              )
+                          } moveAction: { from, to in
+                              appState.historyState.move(inFolderId: nil, from: from, to: to)
+                          }
+                          .reorderableForEachContainer(active: $activeEntry, appState: appState, folderId: nil)
+                          )
                     } else {
                         AnyView(ForEach(filteredHistory) { entry in
                             AnyView(
@@ -578,7 +629,6 @@ struct HistoryView: View {
                 }
             }
             .padding(.horizontal)
-            .reorderableForEachContainer(active: $activeEntry)
         }
     }
     
@@ -589,21 +639,33 @@ struct HistoryView: View {
             itemRow(for: item)
                 .onDrag {
                     var payload: String
+                    var idsToDrag: [UUID]
                     #if os(iOS)
                     if editMode?.wrappedValue == .active && !selectedIDs.isEmpty {
-                        payload = selectedIDs.map { $0.uuidString }.joined(separator: ",")
+                        idsToDrag = Array(selectedIDs).sorted()
                     } else {
-                        payload = entry.id.uuidString
+                        idsToDrag = [entry.id]
                     }
                     #else
-                    payload = entry.id.uuidString
+                    if isEditing && !selectedIDs.isEmpty {
+                        idsToDrag = Array(selectedIDs).sorted()
+                    } else {
+                        idsToDrag = [entry.id]
+                    }
                     #endif
+                    payload = idsToDrag.map { $0.uuidString }.joined(separator: ",")
                     return NSItemProvider(object: payload as NSString)
                 }
         case .folder(let folder):
             HStack {
                 #if os(iOS)
                 if editMode?.wrappedValue == .active {
+                    Image(systemName: selectedIDs.contains(folder.id) ? "checkmark.circle.fill" : "circle")
+                        .foregroundColor(.accentColor)
+                        .font(.system(size: 20))
+                }
+                #else
+                if isEditing {
                     Image(systemName: selectedIDs.contains(folder.id) ? "checkmark.circle.fill" : "circle")
                         .foregroundColor(.accentColor)
                         .font(.system(size: 20))
@@ -628,18 +690,34 @@ struct HistoryView: View {
                     }
                 }
             }
+            #else
+            .onTapGesture {
+                if isEditing {
+                    if selectedIDs.contains(folder.id) {
+                        selectedIDs.remove(folder.id)
+                    } else {
+                        selectedIDs.insert(folder.id)
+                    }
+                }
+            }
             #endif
             .onDrag {
                 var payload: String
+                var idsToDrag: [UUID]
                 #if os(iOS)
                 if editMode?.wrappedValue == .active && !selectedIDs.isEmpty {
-                    payload = selectedIDs.map { $0.uuidString }.joined(separator: ",")
+                    idsToDrag = Array(selectedIDs).sorted()
                 } else {
-                    payload = entry.id.uuidString
+                    idsToDrag = [entry.id]
                 }
                 #else
-                payload = entry.id.uuidString
+                if isEditing && !selectedIDs.isEmpty {
+                    idsToDrag = Array(selectedIDs).sorted()
+                } else {
+                    idsToDrag = [entry.id]
+                }
                 #endif
+                payload = idsToDrag.map { $0.uuidString }.joined(separator: ",")
                 return NSItemProvider(object: payload as NSString)
             }
         }
@@ -658,6 +736,12 @@ struct HistoryView: View {
         return HStack(spacing: 12) {
             #if os(iOS)
             if editMode?.wrappedValue == .active {
+                Image(systemName: selectedIDs.contains(item.id) ? "checkmark.circle.fill" : "circle")
+                    .foregroundColor(.accentColor)
+                    .font(.system(size: 20))
+            }
+            #else
+            if isEditing {
                 Image(systemName: selectedIDs.contains(item.id) ? "checkmark.circle.fill" : "circle")
                     .foregroundColor(.accentColor)
                     .font(.system(size: 20))
@@ -743,6 +827,17 @@ struct HistoryView: View {
         .contentShape(Rectangle())
         .onTapGesture {
             if editMode?.wrappedValue == .active {
+                if selectedIDs.contains(item.id) {
+                    selectedIDs.remove(item.id)
+                } else {
+                    selectedIDs.insert(item.id)
+                }
+            }
+        }
+        #else
+        .contentShape(Rectangle())
+        .onTapGesture {
+            if isEditing {
                 if selectedIDs.contains(item.id) {
                     selectedIDs.remove(item.id)
                 } else {
@@ -1255,7 +1350,7 @@ struct FullHistoryItemView: View {
         }
         #endif
     }
-    
+ 
     
     private func deleteHistoryItem(item: HistoryItem, deleteFile: Bool) {
         // Compute sorted history and current index before deletion
