@@ -168,6 +168,8 @@ extension View {
 struct TreeNodeView: View {
     let entry: HistoryEntry
     @State private var isExpanded: Bool = true
+    @State private var showRenameAlert: Bool = false
+    @State private var newFolderName: String = ""
     @Binding var showDeleteAlert: Bool
     @Binding var selectedHistoryItem: HistoryItem?
     let appState: AppState
@@ -181,50 +183,72 @@ struct TreeNodeView: View {
         if case .folder(let folder) = entry {
             AnyView(
                 DisclosureGroup(isExpanded: $isExpanded) {
-                    if searchText.isEmpty {
-                        AnyView(ReorderableForEach(folder.children, active: $activeEntry, appState: appState, folderId: folder.id) { child in
-                            AnyView(
-                                TreeNodeView(
-                                    entry: child,
-                                    showDeleteAlert: $showDeleteAlert,
-                                    selectedHistoryItem: $selectedHistoryItem,
-                                    appState: appState,
-                                    selectedIDs: $selectedIDs,
-                                    searchText: $searchText,
-                                    activeEntry: $activeEntry,
-                                    entryRowProvider: entryRowProvider,
-                                    copyPromptProvider: copyPromptProvider
+                    VStack(alignment: .leading, spacing: 0) {
+                        if searchText.isEmpty {
+                            AnyView(ReorderableForEach(folder.children, active: $activeEntry, appState: appState, folderId: folder.id) { child in
+                                AnyView(
+                                    TreeNodeView(
+                                        entry: child,
+                                        showDeleteAlert: $showDeleteAlert,
+                                        selectedHistoryItem: $selectedHistoryItem,
+                                        appState: appState,
+                                        selectedIDs: $selectedIDs,
+                                        searchText: $searchText,
+                                        activeEntry: $activeEntry,
+                                        entryRowProvider: entryRowProvider,
+                                        copyPromptProvider: copyPromptProvider
+                                    )
                                 )
-                            )
-                        } moveAction: { from, to in
-                            appState.historyState.move(inFolderId: folder.id, from: from, to: to)
-                        })
-                    } else {
-                        AnyView(ForEach(folder.children) { child in
-                            AnyView(
-                                TreeNodeView(
-                                    entry: child,
-                                    showDeleteAlert: $showDeleteAlert,
-                                    selectedHistoryItem: $selectedHistoryItem,
-                                    appState: appState,
-                                    selectedIDs: $selectedIDs,
-                                    searchText: $searchText,
-                                    activeEntry: $activeEntry,
-                                    entryRowProvider: entryRowProvider,
-                                    copyPromptProvider: copyPromptProvider
+                            } moveAction: { from, to in
+                                appState.historyState.move(inFolderId: folder.id, from: from, to: to)
+                            })
+                        } else {
+                            AnyView(ForEach(folder.children) { child in
+                                AnyView(
+                                    TreeNodeView(
+                                        entry: child,
+                                        showDeleteAlert: $showDeleteAlert,
+                                        selectedHistoryItem: $selectedHistoryItem,
+                                        appState: appState,
+                                        selectedIDs: $selectedIDs,
+                                        searchText: $searchText,
+                                        activeEntry: $activeEntry,
+                                        entryRowProvider: entryRowProvider,
+                                        copyPromptProvider: copyPromptProvider
+                                    )
                                 )
-                            )
-                        })
-                    }
-                } label: {
-                    entryRowProvider(entry)
-                }
-                    .contextMenu {
-                        Button("Delete Folder") {
-                            _ = appState.historyState.findAndRemoveEntry(with: entry.id)
+                            })
                         }
                     }
-                    .onDrop(of: [.text], delegate: FolderDropDelegate(folder: folder, appState: appState))
+                    .padding(.leading, 20)
+                } label: {
+                    entryRowProvider(entry)
+                        .onLongPressGesture {  // Optional: Triggers rename on long-press (iOS-friendly)
+                            newFolderName = folder.name
+                            showRenameAlert = true
+                        }
+                }
+                .contextMenu {
+                    Button("Rename Folder") {
+                        newFolderName = folder.name
+                        showRenameAlert = true
+                    }
+                    Button("Delete Folder") {
+                        _ = appState.historyState.findAndRemoveEntry(with: entry.id)
+                    }
+                }
+                .onDrop(of: [.text], delegate: FolderDropDelegate(folder: folder, appState: appState))
+                .alert("Rename Folder", isPresented: $showRenameAlert) {
+                    TextField("Folder Name", text: $newFolderName)
+                    Button("OK") {
+                        if !newFolderName.isEmpty {
+                            appState.historyState.updateFolderName(with: folder.id, newName: newFolderName)
+                        }
+                    }
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    Text("Enter a new name for the folder.")
+                }
             )
         } else {
             AnyView(
@@ -585,6 +609,12 @@ struct HistoryView: View {
                         .font(.system(size: 20))
                 }
                 #endif
+                Image(systemName: "folder.fill")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 50, height: 50)
+                    .foregroundColor(.secondary) // Optional: Match thumbnail style
+                    .help("Folder icon")
                 Text(folder.name)
             }
             .contentShape(Rectangle())

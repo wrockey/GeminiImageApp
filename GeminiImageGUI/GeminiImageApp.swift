@@ -311,6 +311,31 @@ class HistoryState: ObservableObject {
         saveHistory()
     }
 
+    func updateFolderName(with id: UUID, newName: String) {
+        func update(in entries: inout [HistoryEntry]) -> Bool {
+            if let index = entries.firstIndex(where: { $0.id == id }),
+               case .folder(var folder) = entries[index] {
+                folder.name = newName
+                entries[index] = .folder(folder)
+                return true
+            }
+            for i in entries.indices {
+                if case .folder(var folder) = entries[i] {
+                    if update(in: &folder.children) {
+                        entries[i] = .folder(folder)
+                        return true
+                    }
+                }
+            }
+            return false
+        }
+        var mutableHistory = history
+        if update(in: &mutableHistory) {
+            history = mutableHistory
+            saveHistory()
+        }
+    }
+    
     func findAndRemoveEntry(with id: UUID) -> HistoryEntry? {
         func remove(from entries: inout [HistoryEntry]) -> HistoryEntry? {
             if let index = entries.firstIndex(where: { $0.id == id }) {
