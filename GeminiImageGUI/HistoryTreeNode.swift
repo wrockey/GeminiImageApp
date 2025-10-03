@@ -14,7 +14,7 @@ struct TreeNodeView: View {
     @State private var showRenameAlert: Bool = false
     @State private var newFolderName: String = ""
     @Binding var showDeleteAlert: Bool
-    @Binding var selectedHistoryItem: HistoryItem?
+    @Binding var entryToDelete: HistoryEntry?
     let appState: AppState
     @Binding var selectedIDs: Set<UUID>
     @Binding var searchText: String
@@ -29,7 +29,7 @@ struct TreeNodeView: View {
     init(
         entry: HistoryEntry,
         showDeleteAlert: Binding<Bool>,
-        selectedHistoryItem: Binding<HistoryItem?>,
+        entryToDelete: Binding<HistoryEntry?>,
         appState: AppState,
         selectedIDs: Binding<Set<UUID>>,
         searchText: Binding<String>,
@@ -43,7 +43,7 @@ struct TreeNodeView: View {
     ) {
         self.entry = entry
         self._showDeleteAlert = showDeleteAlert
-        self._selectedHistoryItem = selectedHistoryItem
+        self._entryToDelete = entryToDelete
         self.appState = appState
         self._selectedIDs = selectedIDs
         self._searchText = searchText
@@ -77,7 +77,7 @@ struct TreeNodeView: View {
                                     TreeNodeView(
                                         entry: child,
                                         showDeleteAlert: $showDeleteAlert,
-                                        selectedHistoryItem: $selectedHistoryItem,
+                                        entryToDelete: $entryToDelete,
                                         appState: appState,
                                         selectedIDs: $selectedIDs,
                                         searchText: $searchText,
@@ -99,7 +99,7 @@ struct TreeNodeView: View {
                                     TreeNodeView(
                                         entry: child,
                                         showDeleteAlert: $showDeleteAlert,
-                                        selectedHistoryItem: $selectedHistoryItem,
+                                        entryToDelete: $entryToDelete,
                                         appState: appState,
                                         selectedIDs: $selectedIDs,
                                         searchText: $searchText,
@@ -211,7 +211,8 @@ struct TreeNodeView: View {
                         showRenameAlert = true
                     }
                     Button("Delete Folder") {
-                        _ = appState.historyState.findAndRemoveEntry(with: entry.id)
+                        entryToDelete = .folder(folder)
+                        showDeleteAlert = true
                     }
                 }
                 .onDrop(of: [.text], delegate: FolderDropDelegate(
@@ -278,7 +279,7 @@ struct TreeNodeView: View {
                             }
                             .help("Copy the prompt to clipboard")
                             Button("Delete") {
-                                selectedHistoryItem = item
+                                entryToDelete = .item(item)
                                 showDeleteAlert = true
                             }
                         }

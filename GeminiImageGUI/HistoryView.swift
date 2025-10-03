@@ -8,7 +8,9 @@ struct HistoryView: View {
     @Binding var imageSlots: [ImageSlot]
     @EnvironmentObject var appState: AppState
     @State private var showDeleteAlert: Bool = false
-    @State private var selectedHistoryItem: HistoryItem?
+    @State private var entryToDelete: HistoryEntry?
+    @State private var showConfirmFolderFileDelete: Bool = false
+    @State private var folderToConfirmDelete: Folder? = nil
     @State private var showClearHistoryAlert: Bool = false
     @State private var searchText: String = ""
     @Binding var columnVisibility: NavigationSplitViewVisibility
@@ -27,14 +29,14 @@ struct HistoryView: View {
     #endif
     @State private var activeEntry: HistoryEntry? = nil
     @State private var selectedIDs: Set<UUID> = []
-   
+  
     private var dateFormatter: DateFormatter {
         let formatter = DateFormatter()
         formatter.dateStyle = .short
         formatter.timeStyle = .short
         return formatter
     }
-   
+  
     private var filteredHistory: [HistoryEntry] {
         if searchText.isEmpty {
             return appState.historyState.history
@@ -42,7 +44,7 @@ struct HistoryView: View {
             return filterEntries(appState.historyState.history, with: searchText)
         }
     }
-   
+  
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
@@ -50,16 +52,32 @@ struct HistoryView: View {
             historyList
         }
         .frame(minWidth: 300, maxWidth: .infinity, maxHeight: .infinity)
-        .alert("Delete History Item", isPresented: $showDeleteAlert) {
+        .alert("Delete History Entry", isPresented: $showDeleteAlert) {
             Button("Delete from History Only") {
-                deleteHistoryItem(deleteFile: false)
+                deleteEntry(deleteFiles: false)
             }
             Button("Delete from History and File", role: .destructive) {
-                deleteHistoryItem(deleteFile: true)
+                if case .folder(let folder) = entryToDelete {
+                    folderToConfirmDelete = folder
+                    showConfirmFolderFileDelete = true
+                } else {
+                    deleteEntry(deleteFiles: true)
+                }
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Do you want to delete from history only or also delete the file?")
+            Text("Do you want to delete from history only or also delete the file(s)?")
+        }
+        .alert("Confirm Delete Files", isPresented: $showConfirmFolderFileDelete) {
+            Button("Yes", role: .destructive) {
+                deleteEntry(deleteFiles: true)
+                folderToConfirmDelete = nil
+            }
+            Button("No", role: .cancel) {
+                folderToConfirmDelete = nil
+            }
+        } message: {
+            Text("Are you sure? All items in the folder will be deleted!")
         }
         .alert("Clear History", isPresented: $showClearHistoryAlert) {
             Button("Yes", role: .destructive) {
@@ -119,7 +137,7 @@ struct HistoryView: View {
             }
         }
     }
-   
+  
     private func hideToastAfterDelay() {
         DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
             withAnimation(.easeOut(duration: 0.3)) {
@@ -128,7 +146,7 @@ struct HistoryView: View {
             }
         }
     }
-   
+  
     private var header: some View {
         #if os(macOS)
         HStack {
@@ -405,7 +423,7 @@ struct HistoryView: View {
         }
         #endif
     }
-   
+  
     private var searchField: some View {
         TextField("Search prompts or dates...", text: $searchText)
             .textFieldStyle(.roundedBorder)
@@ -413,7 +431,7 @@ struct HistoryView: View {
             .help("Search history by prompt text or date")
             .accessibilityLabel("Search prompts or dates")
     }
-   
+  
     private var historyList: some View {
         ScrollView {
             LazyVStack(alignment: .leading) {
@@ -437,7 +455,7 @@ struct HistoryView: View {
                                 TreeNodeView(
                                     entry: entry,
                                     showDeleteAlert: $showDeleteAlert,
-                                    selectedHistoryItem: $selectedHistoryItem,
+                                    entryToDelete: $entryToDelete,
                                     appState: appState,
                                     selectedIDs: $selectedIDs,
                                     searchText: $searchText,
@@ -459,7 +477,7 @@ struct HistoryView: View {
                                 TreeNodeView(
                                     entry: entry,
                                     showDeleteAlert: $showDeleteAlert,
-                                    selectedHistoryItem: $selectedHistoryItem,
+                                    entryToDelete: $entryToDelete,
                                     appState: appState,
                                     selectedIDs: $selectedIDs,
                                     searchText: $searchText,
@@ -526,7 +544,7 @@ struct HistoryView: View {
             }
         }
     }
-   
+  
     @ViewBuilder
     private func entryRow(for entry: HistoryEntry) -> some View {
         switch entry {
@@ -617,7 +635,7 @@ struct HistoryView: View {
             }
         }
     }
-   
+  
     private func itemRow(for item: HistoryItem) -> some View {
         var creator: String? = nil
         if let mode = item.mode {
@@ -685,7 +703,7 @@ struct HistoryView: View {
             .accessibilityLabel("View full image")
            
             Button(action: {
-                selectedHistoryItem = item
+                entryToDelete = .item(item)
                 showDeleteAlert = true
             }) {
                 Image(systemName: "trash.circle.fill")
@@ -757,16 +775,28 @@ struct HistoryView: View {
             return NSItemProvider(object: payload as NSString)
         }
     }
-   
+  
     private func copyPromptToClipboard(_ prompt: String) {
         PlatformPasteboard.clearContents()
         PlatformPasteboard.writeString(prompt)
     }
-   
-    private func deleteHistoryItem(deleteFile: Bool) {
-        guard let item = selectedHistoryItem else { return }
+  
+    private func deleteEntry(deleteFiles: Bool) {
+        guard let entry = entryToDelete else { return }
         
-        if deleteFile, let path = item.imagePath {
+        if deleteFiles {
+            deleteFilesRecursively(entry: entry)
+        }
+        
+        _ = appState.historyState.findAndRemoveEntry(with: entry.id)
+        
+        entryToDelete = nil
+    }
+    
+    private func deleteFilesRecursively(entry: HistoryEntry) {
+        switch entry {
+        case .item(let item):
+            guard let path = item.imagePath else { return }
             let fileURL = URL(fileURLWithPath: path)
             let fileManager = FileManager.default
             if let dir = appState.settings.outputDirectory {
@@ -775,21 +805,27 @@ struct HistoryView: View {
                         try fileManager.removeItem(at: fileURL)
                     }
                 } catch {
-                    // Handle error if needed, but for simplicity, skip alert here
+                    // Handle error if needed, e.g., print("Failed to delete file: \(error)")
+                }
+            } else {
+                do {
+                    try fileManager.removeItem(at: fileURL)
+                } catch {
+                    // Handle error if needed
                 }
             }
+        case .folder(let folder):
+            for child in folder.children {
+                deleteFilesRecursively(entry: child)
+            }
         }
-        
-        _ = appState.historyState.findAndRemoveEntry(with: item.id)
-        
-        selectedHistoryItem = nil
     }
-   
+  
     private func clearHistory() {
         appState.historyState.history.removeAll()
         appState.historyState.saveHistory()
     }
-   
+  
     private func loadHistoryImage(for item: HistoryItem) -> PlatformImage? {
         guard let path = item.imagePath else { return nil }
         let fileURL = URL(fileURLWithPath: path)
@@ -830,7 +866,7 @@ struct HistoryView: View {
         }
         appState.ui.imageSlots.append(newSlot)
     }
-   
+  
     // Helper to filter entries recursively
     private func filterEntries(_ entries: [HistoryEntry], with search: String) -> [HistoryEntry] {
         entries.compactMap { entry in
@@ -855,4 +891,3 @@ struct HistoryView: View {
         }
     }
 }
-
