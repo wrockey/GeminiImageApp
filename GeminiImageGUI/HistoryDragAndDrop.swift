@@ -324,4 +324,41 @@ struct FolderDropDelegate: DropDelegate {
     }
 }
 
+extension HistoryEntry {
+    func collectAllIDs(into set: inout Set<UUID>) {
+        set.insert(id)
+        if case .folder(let folder) = self {
+            for child in folder.children {
+                child.collectAllIDs(into: &set)
+            }
+        }
+    }
+    
+    var imageCount: Int {
+        switch self {
+        case .item:
+            return 1
+        case .folder(let folder):
+            return folder.children.reduce(0) { $0 + $1.imageCount }
+        }
+    }
+}
+
+extension HistoryState {
+    func findEntries(with ids: Set<UUID>) -> [HistoryEntry] {
+        var result: [HistoryEntry] = []
+        func collect(from entries: [HistoryEntry]) {
+            for entry in entries {
+                if ids.contains(entry.id) {
+                    result.append(entry)
+                }
+                if let children = entry.childrenForOutline {
+                    collect(from: children)
+                }
+            }
+        }
+        collect(from: history)
+        return result
+    }
+}
 

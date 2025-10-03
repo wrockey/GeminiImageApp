@@ -8,10 +8,8 @@ struct HistoryView: View {
     @Binding var imageSlots: [ImageSlot]
     @EnvironmentObject var appState: AppState
     @State private var showDeleteAlert: Bool = false
-    @State private var entryToDelete: HistoryEntry?
-    @State private var showConfirmFolderFileDelete: Bool = false
-    @State private var folderToConfirmDelete: Folder? = nil
-    @State private var showClearHistoryAlert: Bool = false
+    @State private var entriesToDelete: [HistoryEntry] = []
+    @State private var showConfirmFileDelete: Bool = false
     @State private var searchText: String = ""
     @Binding var columnVisibility: NavigationSplitViewVisibility
     @State private var fullHistoryItemId: UUID? = nil
@@ -45,96 +43,95 @@ struct HistoryView: View {
         }
     }
   
+    private var deleteMessage: String {
+        entriesToDelete.count > 1 ? "Do you want to delete these entries from history only or also delete the file(s)?" : "Do you want to delete from history only or also delete the file?"
+    }
+        
     var body: some View {
+        content
+    }
+
+    private var content: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
             searchField
             historyList
         }
         .frame(minWidth: 300, maxWidth: .infinity, maxHeight: .infinity)
-        .alert("Delete History Entry", isPresented: $showDeleteAlert) {
+        .alert("Delete History Entries", isPresented: $showDeleteAlert) {
             Button("Delete from History Only") {
-                deleteEntry(deleteFiles: false)
+                deleteEntries(deleteFiles: false)
             }
             Button("Delete from History and File", role: .destructive) {
-                if case .folder(let folder) = entryToDelete {
-                    folderToConfirmDelete = folder
-                    showConfirmFolderFileDelete = true
+                let totalItems = entriesToDelete.reduce(into: 0) { $0 += $1.imageCount }
+                if totalItems > 1 {
+                    showConfirmFileDelete = true
                 } else {
-                    deleteEntry(deleteFiles: true)
+                    deleteEntries(deleteFiles: true)
                 }
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Do you want to delete from history only or also delete the file(s)?")
+            Text(deleteMessage)
         }
-        .alert("Confirm Delete Files", isPresented: $showConfirmFolderFileDelete) {
+        .alert("Confirm Delete Files", isPresented: $showConfirmFileDelete) {
             Button("Yes", role: .destructive) {
-                deleteEntry(deleteFiles: true)
-                folderToConfirmDelete = nil
+                deleteEntries(deleteFiles: true)
             }
-            Button("No", role: .cancel) {
-                folderToConfirmDelete = nil
-            }
-        } message: {
-            Text("Are you sure? All items in the folder will be deleted!")
-        }
-        .alert("Clear History", isPresented: $showClearHistoryAlert) {
-            Button("Yes", role: .destructive) {
-                clearHistory()
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Are you sure you want to clear the history?")
+            Button("No", role: .cancel) {}
         }
         .overlay {
-            Group {
-                // Prioritize showAddedMessage on iOS
-#if os(iOS)
-                if showAddedMessage {
-                    Text("Image added to input images")
-                        .font(.headline)
-                        .padding()
-                        .background(Color.black.opacity(0.7))
-                        .foregroundColor(.white)
-                        .cornerRadius(10)
-                        .transition(.opacity)
-                        .frame(maxHeight: .infinity, alignment: .top)
-                        .padding(.top, 50)
-                        .onAppear {
-                            hideToastAfterDelay()
-                        }
-                } else if showToast, let message = toastMessage {
-                    Text(message)
-                        .font(.headline)
-                        .padding()
-                        .background(Color.black.opacity(0.7))
-                        .foregroundColor(.white)
-                        .cornerRadius(10)
-                        .transition(.opacity)
-                        .frame(maxHeight: .infinity, alignment: .top)
-                        .padding(.top, 50)
-                        .onAppear {
-                            hideToastAfterDelay()
-                        }
-                }
-#else
-                if showToast, let message = toastMessage {
-                    Text(message)
-                        .font(.headline)
-                        .padding()
-                        .background(Color.black.opacity(0.7))
-                        .foregroundColor(.white)
-                        .cornerRadius(10)
-                        .transition(.opacity)
-                        .frame(maxHeight: .infinity, alignment: .top)
-                        .padding(.top, 50)
-                        .onAppear {
-                            hideToastAfterDelay()
-                        }
-                }
-#endif
+            overlayContent
+        }
+    }
+
+    private var overlayContent: some View {
+        Group {
+            // Prioritize showAddedMessage on iOS
+            #if os(iOS)
+            if showAddedMessage {
+                Text("Image added to input images")
+                    .font(.headline)
+                    .padding()
+                    .background(Color.black.opacity(0.7))
+                    .foregroundColor(.white)
+                    .cornerRadius(10)
+                    .transition(.opacity)
+                    .frame(maxHeight: .infinity, alignment: .top)
+                    .padding(.top, 50)
+                    .onAppear {
+                        hideToastAfterDelay()
+                    }
+            } else if showToast, let message = toastMessage {
+                Text(message)
+                    .font(.headline)
+                    .padding()
+                    .background(Color.black.opacity(0.7))
+                    .foregroundColor(.white)
+                    .cornerRadius(10)
+                    .transition(.opacity)
+                    .frame(maxHeight: .infinity, alignment: .top)
+                    .padding(.top, 50)
+                    .onAppear {
+                        hideToastAfterDelay()
+                    }
             }
+            #else
+            if showToast, let message = toastMessage {
+                Text(message)
+                    .font(.headline)
+                    .padding()
+                    .background(Color.black.opacity(0.7))
+                    .foregroundColor(.white)
+                    .cornerRadius(10)
+                    .transition(.opacity)
+                    .frame(maxHeight: .infinity, alignment: .top)
+                    .padding(.top, 50)
+                    .onAppear {
+                        hideToastAfterDelay()
+                    }
+            }
+            #endif
         }
     }
   
@@ -230,16 +227,6 @@ struct HistoryView: View {
             .help("Add new folder")
             .accessibilityLabel("Add folder")
            
-            Button(action: {
-                showClearHistoryAlert = true
-            }) {
-                Image(systemName: "trash")
-                    .symbolRenderingMode(.hierarchical)
-                    .foregroundColor(.red.opacity(0.8))
-            }
-            .buttonStyle(.borderless)
-            .help("Clear all history")
-            .accessibilityLabel("Clear all history")
         }
         .padding(.horizontal)
         .onDrop(of: [.text], isTargeted: nil) { providers in
@@ -345,17 +332,6 @@ struct HistoryView: View {
             .help("Add new folder")
             .accessibilityLabel("Add folder")
            
-            Button(action: {
-                showClearHistoryAlert = true
-            }) {
-                Image(systemName: "trash")
-                    .symbolRenderingMode(.hierarchical)
-                    .foregroundColor(.red.opacity(0.8))
-            }
-            .buttonStyle(.borderless)
-            .help("Clear all history")
-            .accessibilityLabel("Clear all history")
-           
             Spacer()
            
             Button(action: {
@@ -455,7 +431,7 @@ struct HistoryView: View {
                                 TreeNodeView(
                                     entry: entry,
                                     showDeleteAlert: $showDeleteAlert,
-                                    entryToDelete: $entryToDelete,
+                                    entriesToDelete: $entriesToDelete,
                                     appState: appState,
                                     selectedIDs: $selectedIDs,
                                     searchText: $searchText,
@@ -477,7 +453,7 @@ struct HistoryView: View {
                                 TreeNodeView(
                                     entry: entry,
                                     showDeleteAlert: $showDeleteAlert,
-                                    entryToDelete: $entryToDelete,
+                                    entriesToDelete: $entriesToDelete,
                                     appState: appState,
                                     selectedIDs: $selectedIDs,
                                     searchText: $searchText,
@@ -596,20 +572,28 @@ struct HistoryView: View {
 #if os(iOS)
             .onTapGesture {
                 if editMode?.wrappedValue == .active {
+                    var allIDs = Set<UUID>()
+                    entry.collectAllIDs(into: &allIDs)
                     if selectedIDs.contains(folder.id) {
-                        selectedIDs.remove(folder.id)
+                        for id in allIDs {
+                            selectedIDs.remove(id)
+                        }
                     } else {
-                        selectedIDs.insert(folder.id)
+                        selectedIDs.formUnion(allIDs)
                     }
                 }
             }
 #else
             .onTapGesture {
                 if isEditing {
+                    var allIDs = Set<UUID>()
+                    entry.collectAllIDs(into: &allIDs)
                     if selectedIDs.contains(folder.id) {
-                        selectedIDs.remove(folder.id)
+                        for id in allIDs {
+                            selectedIDs.remove(id)
+                        }
                     } else {
-                        selectedIDs.insert(folder.id)
+                        selectedIDs.formUnion(allIDs)
                     }
                 }
             }
@@ -703,7 +687,7 @@ struct HistoryView: View {
             .accessibilityLabel("View full image")
            
             Button(action: {
-                entryToDelete = .item(item)
+                entriesToDelete = [.item(item)]
                 showDeleteAlert = true
             }) {
                 Image(systemName: "trash.circle.fill")
@@ -781,16 +765,19 @@ struct HistoryView: View {
         PlatformPasteboard.writeString(prompt)
     }
   
-    private func deleteEntry(deleteFiles: Bool) {
-        guard let entry = entryToDelete else { return }
-        
+    private func deleteEntries(deleteFiles: Bool) {
         if deleteFiles {
-            deleteFilesRecursively(entry: entry)
+            for entry in entriesToDelete {
+                deleteFilesRecursively(entry: entry)
+            }
         }
         
-        _ = appState.historyState.findAndRemoveEntry(with: entry.id)
+        for entry in entriesToDelete {
+            _ = appState.historyState.findAndRemoveEntry(with: entry.id)
+        }
         
-        entryToDelete = nil
+        entriesToDelete = []
+        selectedIDs.removeAll()
     }
     
     private func deleteFilesRecursively(entry: HistoryEntry) {
@@ -819,11 +806,6 @@ struct HistoryView: View {
                 deleteFilesRecursively(entry: child)
             }
         }
-    }
-  
-    private func clearHistory() {
-        appState.historyState.history.removeAll()
-        appState.historyState.saveHistory()
     }
   
     private func loadHistoryImage(for item: HistoryItem) -> PlatformImage? {
@@ -891,3 +873,4 @@ struct HistoryView: View {
         }
     }
 }
+

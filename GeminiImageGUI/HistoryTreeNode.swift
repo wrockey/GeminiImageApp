@@ -14,7 +14,7 @@ struct TreeNodeView: View {
     @State private var showRenameAlert: Bool = false
     @State private var newFolderName: String = ""
     @Binding var showDeleteAlert: Bool
-    @Binding var entryToDelete: HistoryEntry?
+    @Binding var entriesToDelete: [HistoryEntry]
     let appState: AppState
     @Binding var selectedIDs: Set<UUID>
     @Binding var searchText: String
@@ -29,7 +29,7 @@ struct TreeNodeView: View {
     init(
         entry: HistoryEntry,
         showDeleteAlert: Binding<Bool>,
-        entryToDelete: Binding<HistoryEntry?>,
+        entriesToDelete: Binding<[HistoryEntry]>,
         appState: AppState,
         selectedIDs: Binding<Set<UUID>>,
         searchText: Binding<String>,
@@ -43,7 +43,7 @@ struct TreeNodeView: View {
     ) {
         self.entry = entry
         self._showDeleteAlert = showDeleteAlert
-        self._entryToDelete = entryToDelete
+        self._entriesToDelete = entriesToDelete
         self.appState = appState
         self._selectedIDs = selectedIDs
         self._searchText = searchText
@@ -77,7 +77,7 @@ struct TreeNodeView: View {
                                     TreeNodeView(
                                         entry: child,
                                         showDeleteAlert: $showDeleteAlert,
-                                        entryToDelete: $entryToDelete,
+                                        entriesToDelete: $entriesToDelete,
                                         appState: appState,
                                         selectedIDs: $selectedIDs,
                                         searchText: $searchText,
@@ -99,7 +99,7 @@ struct TreeNodeView: View {
                                     TreeNodeView(
                                         entry: child,
                                         showDeleteAlert: $showDeleteAlert,
-                                        entryToDelete: $entryToDelete,
+                                        entriesToDelete: $entriesToDelete,
                                         appState: appState,
                                         selectedIDs: $selectedIDs,
                                         searchText: $searchText,
@@ -211,7 +211,16 @@ struct TreeNodeView: View {
                         showRenameAlert = true
                     }
                     Button("Delete Folder") {
-                        entryToDelete = .folder(folder)
+                        #if os(iOS)
+                        let isMulti = editMode?.wrappedValue == .active && selectedIDs.count > 1 && selectedIDs.contains(folder.id)
+                        #else
+                        let isMulti = isEditing && selectedIDs.count > 1 && selectedIDs.contains(folder.id)
+                        #endif
+                        if isMulti {
+                            entriesToDelete = appState.historyState.findEntries(with: selectedIDs)
+                        } else {
+                            entriesToDelete = [.folder(folder)]
+                        }
                         showDeleteAlert = true
                     }
                 }
@@ -279,7 +288,16 @@ struct TreeNodeView: View {
                             }
                             .help("Copy the prompt to clipboard")
                             Button("Delete") {
-                                entryToDelete = .item(item)
+                                #if os(iOS)
+                                let isMulti = editMode?.wrappedValue == .active && selectedIDs.count > 1 && selectedIDs.contains(item.id)
+                                #else
+                                let isMulti = isEditing && selectedIDs.count > 1 && selectedIDs.contains(item.id)
+                                #endif
+                                if isMulti {
+                                    entriesToDelete = appState.historyState.findEntries(with: selectedIDs)
+                                } else {
+                                    entriesToDelete = [.item(item)]
+                                }
                                 showDeleteAlert = true
                             }
                         }
