@@ -19,7 +19,7 @@ struct ReorderableForEach<Item: Reorderable, Content: View, Preview: View>: View
     @Binding var selectedIDs: Set<UUID>
     @Binding var toastMessage: String? // New
     @Binding var showToast: Bool // New
-   
+    
     init(
         _ items: [Item],
         active: Binding<Item?>,
@@ -43,7 +43,7 @@ struct ReorderableForEach<Item: Reorderable, Content: View, Preview: View>: View
         self._toastMessage = toastMessage
         self._showToast = showToast
     }
-   
+    
     init(
         _ items: [Item],
         active: Binding<Item?>,
@@ -66,7 +66,7 @@ struct ReorderableForEach<Item: Reorderable, Content: View, Preview: View>: View
         self._toastMessage = toastMessage
         self._showToast = showToast
     }
-   
+    
     var body: some View {
         ForEach(items) { item in
             if let preview = preview {
@@ -92,7 +92,7 @@ struct ReorderableForEach<Item: Reorderable, Content: View, Preview: View>: View
             }
         }
     }
-   
+    
     private func contentView(for item: Item) -> some View {
         content(item)
             .opacity(active == item && hasChangedLocation ? 0.5 : 1)
@@ -112,7 +112,7 @@ struct ReorderableForEach<Item: Reorderable, Content: View, Preview: View>: View
                 )
             )
     }
-   
+    
     @State private var hasChangedLocation: Bool = false
 }
 
@@ -127,7 +127,7 @@ struct ReorderableDragRelocateDelegate<Item: Reorderable>: DropDelegate {
     @Binding var selectedIDs: Set<UUID>
     @Binding var toastMessage: String?
     @Binding var showToast: Bool
-   
+    
     init(
         item: Item,
         items: [Item],
@@ -151,7 +151,7 @@ struct ReorderableDragRelocateDelegate<Item: Reorderable>: DropDelegate {
         self._toastMessage = toastMessage
         self._showToast = showToast
     }
-   
+    
     func dropEntered(info: DropInfo) {
         guard let current = active else { return }
         guard let from = items.firstIndex(where: { $0.id == current.id }) else { return }
@@ -161,11 +161,11 @@ struct ReorderableDragRelocateDelegate<Item: Reorderable>: DropDelegate {
             moveAction(IndexSet(integer: from), to + (from < to ? 1 : 0))
         }
     }
-   
+    
     func dropUpdated(info: DropInfo) -> DropProposal? {
         .init(operation: .move)
     }
-   
+    
     func performDrop(info: DropInfo) -> Bool {
         let wasChanged = hasChangedLocation
         hasChangedLocation = false
@@ -204,9 +204,12 @@ struct ReorderableDragRelocateDelegate<Item: Reorderable>: DropDelegate {
             }
             DispatchQueue.main.async {
                 var movedEntries: [HistoryEntry] = []
+                var snapshot = appState.historyState.history
                 for id in ids {
-                    if let entry = appState.historyState.findAndRemoveEntry(with: id) {
+                    if let entry = appState.historyState.findAndRemoveEntry(id: id, in: &snapshot) {
                         movedEntries.append(entry)
+                    } else {
+                        print("Drag-and-drop failed to find entry with ID: \(id)")
                     }
                 }
                 if movedEntries.isEmpty {
@@ -216,7 +219,9 @@ struct ReorderableDragRelocateDelegate<Item: Reorderable>: DropDelegate {
                     return
                 }
                 let insertIndex = items.firstIndex(where: { $0.id == item.id }).map { $0 + 1 } ?? items.count
-                appState.historyState.insert(entries: movedEntries, inFolderId: folderId, at: insertIndex)
+                appState.historyState.insert(entries: movedEntries, inFolderId: folderId, at: insertIndex, into: &snapshot)
+                appState.historyState.history = snapshot
+                appState.historyState.saveHistory()
                 self.selectedIDs.removeAll()
                 self.toastMessage = "Moved \(movedEntries.count) item(s)"
                 self.showToast = true
@@ -225,7 +230,7 @@ struct ReorderableDragRelocateDelegate<Item: Reorderable>: DropDelegate {
         }
         return true
     }
-   
+    
     private func hideToastAfterDelay() {
         DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
             withAnimation(.easeOut(duration: 0.3)) {
@@ -241,7 +246,7 @@ struct FolderDropDelegate: DropDelegate {
     @Binding var selectedIDs: Set<UUID>
     @Binding var toastMessage: String?
     @Binding var showToast: Bool
-   
+    
     init(
         folder: Folder,
         appState: AppState,
@@ -255,7 +260,7 @@ struct FolderDropDelegate: DropDelegate {
         self._toastMessage = toastMessage
         self._showToast = showToast
     }
-   
+    
     func performDrop(info: DropInfo) -> Bool {
         guard let item = info.itemProviders(for: [.text]).first else {
             toastMessage = "Drop failed: No valid data"
@@ -292,9 +297,12 @@ struct FolderDropDelegate: DropDelegate {
             }
             DispatchQueue.main.async {
                 var movedEntries: [HistoryEntry] = []
+                var snapshot = appState.historyState.history
                 for id in ids {
-                    if let movedEntry = appState.historyState.findAndRemoveEntry(with: id) {
+                    if let movedEntry = appState.historyState.findAndRemoveEntry(id: id, in: &snapshot) {
                         movedEntries.append(movedEntry)
+                    } else {
+                        print("Drop failed to find entry with ID: \(id)")
                     }
                 }
                 if movedEntries.isEmpty {
@@ -304,8 +312,10 @@ struct FolderDropDelegate: DropDelegate {
                     return
                 }
                 for entry in movedEntries {
-                    appState.historyState.addEntry(entry, toFolderWithId: folder.id)
+                    appState.historyState.addEntry(entry, toFolderWithId: folder.id, into: &snapshot)
                 }
+                appState.historyState.history = snapshot
+                appState.historyState.saveHistory()
                 self.selectedIDs.removeAll()
                 self.toastMessage = "Moved \(movedEntries.count) item(s) to folder"
                 self.showToast = true
@@ -314,7 +324,7 @@ struct FolderDropDelegate: DropDelegate {
         }
         return true
     }
-   
+    
     private func hideToastAfterDelay() {
         DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
             withAnimation(.easeOut(duration: 0.3)) {
@@ -324,41 +334,9 @@ struct FolderDropDelegate: DropDelegate {
     }
 }
 
-extension HistoryEntry {
-    func collectAllIDs(into set: inout Set<UUID>) {
-        set.insert(id)
-        if case .folder(let folder) = self {
-            for child in folder.children {
-                child.collectAllIDs(into: &set)
-            }
-        }
-    }
-    
-    var imageCount: Int {
-        switch self {
-        case .item:
-            return 1
-        case .folder(let folder):
-            return folder.children.reduce(0) { $0 + $1.imageCount }
-        }
-    }
-}
 
 extension HistoryState {
-    func findEntries(with ids: Set<UUID>) -> [HistoryEntry] {
-        var result: [HistoryEntry] = []
-        func collect(from entries: [HistoryEntry]) {
-            for entry in entries {
-                if ids.contains(entry.id) {
-                    result.append(entry)
-                }
-                if let children = entry.childrenForOutline {
-                    collect(from: children)
-                }
-            }
-        }
-        collect(from: history)
-        return result
-    }
-}
 
+    
+    // Add entry to a specific folder
+ }

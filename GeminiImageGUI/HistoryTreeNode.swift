@@ -1,4 +1,4 @@
-// HistoryTreeNode.swift (updated with unified isEditing checks, non-optional isEditing param)
+// HistoryTreeNode.swift
 import SwiftUI
 import UniformTypeIdentifiers
 #if os(macOS)
@@ -22,7 +22,7 @@ struct TreeNodeView: View {
     let entryRowProvider: (HistoryEntry) -> AnyView
     let copyPromptProvider: (String) -> Void
     let folderId: UUID?
-    @Binding var isEditing: Bool  // Updated: Non-optional @Binding<Bool>
+    @Binding var isEditing: Bool
     @Binding var toastMessage: String?
     @Binding var showToast: Bool
     let addToInputProvider: (HistoryItem) -> Void
@@ -38,10 +38,10 @@ struct TreeNodeView: View {
         entryRowProvider: @escaping (HistoryEntry) -> AnyView,
         copyPromptProvider: @escaping (String) -> Void,
         folderId: UUID? = nil,
-        isEditing: Binding<Bool>,  // Updated: Required, non-optional
-        toastMessage: Binding<String?> = .constant(nil),
-        showToast: Binding<Bool> = .constant(false),
-        addToInputProvider: @escaping (HistoryItem) -> Void  // New
+        isEditing: Binding<Bool>,
+        toastMessage: Binding<String?>,
+        showToast: Binding<Bool>,
+        addToInputProvider: @escaping (HistoryItem) -> Void
     ) {
         self.entry = entry
         self._showDeleteAlert = showDeleteAlert
@@ -53,7 +53,7 @@ struct TreeNodeView: View {
         self.entryRowProvider = entryRowProvider
         self.copyPromptProvider = copyPromptProvider
         self.folderId = folderId
-        self._isEditing = isEditing  // Updated: Direct assignment, no ?? or #if
+        self._isEditing = isEditing
         self._toastMessage = toastMessage
         self._showToast = showToast
         self.addToInputProvider = addToInputProvider
@@ -61,228 +61,259 @@ struct TreeNodeView: View {
     
     var body: some View {
         if case .folder(let folder) = entry {
-            AnyView(
-                DisclosureGroup(isExpanded: $isExpanded) {
-                    VStack(alignment: .leading, spacing: 0) {
-                        if searchText.isEmpty {
-                            AnyView(ReorderableForEach(
-                                folder.children,
-                                active: $activeEntry,
-                                appState: appState,
-                                folderId: folder.id,
-                                selectedIDs: $selectedIDs,
-                                toastMessage: $toastMessage,
-                                showToast: $showToast
-                            ) { child in
-                                AnyView(
-                                    TreeNodeView(
-                                        entry: child,
-                                        showDeleteAlert: $showDeleteAlert,
-                                        entriesToDelete: $entriesToDelete,
-                                        appState: appState,
-                                        selectedIDs: $selectedIDs,
-                                        searchText: $searchText,
-                                        activeEntry: $activeEntry,
-                                        entryRowProvider: entryRowProvider,
-                                        copyPromptProvider: copyPromptProvider,
-                                        folderId: folder.id,
-                                        isEditing: $isEditing,  // Pass non-optional
-                                        toastMessage: $toastMessage,
-                                        showToast: $showToast,
-                                        addToInputProvider: addToInputProvider  // Pass down
-                                    )
+            DisclosureGroup(isExpanded: $isExpanded) {
+                VStack(alignment: .leading, spacing: 0) {
+                    if searchText.isEmpty {
+                        ReorderableForEach(
+                            folder.children,
+                            active: $activeEntry,
+                            appState: appState,
+                            folderId: folder.id,
+                            selectedIDs: $selectedIDs,
+                            toastMessage: $toastMessage,
+                            showToast: $showToast
+                        ) { child in
+                            AnyView(
+                                TreeNodeView(
+                                    entry: child,
+                                    showDeleteAlert: $showDeleteAlert,
+                                    entriesToDelete: $entriesToDelete,
+                                    appState: appState,
+                                    selectedIDs: $selectedIDs,
+                                    searchText: $searchText,
+                                    activeEntry: $activeEntry,
+                                    entryRowProvider: entryRowProvider,
+                                    copyPromptProvider: copyPromptProvider,
+                                    folderId: folder.id,
+                                    isEditing: $isEditing,
+                                    toastMessage: $toastMessage,
+                                    showToast: $showToast,
+                                    addToInputProvider: addToInputProvider
                                 )
-                            } moveAction: { from, to in
-                                appState.historyState.move(inFolderId: folder.id, from: from, to: to)
-                            })
-                        } else {
-                            AnyView(ForEach(folder.children) { child in
-                                AnyView(
-                                    TreeNodeView(
-                                        entry: child,
-                                        showDeleteAlert: $showDeleteAlert,
-                                        entriesToDelete: $entriesToDelete,
-                                        appState: appState,
-                                        selectedIDs: $selectedIDs,
-                                        searchText: $searchText,
-                                        activeEntry: $activeEntry,
-                                        entryRowProvider: entryRowProvider,
-                                        copyPromptProvider: copyPromptProvider,
-                                        folderId: folder.id,
-                                        isEditing: $isEditing,  // Pass non-optional
-                                        toastMessage: $toastMessage,
-                                        showToast: $showToast,
-                                        addToInputProvider: addToInputProvider  // Pass down
-                                    )
+                            )
+                        } moveAction: { from, to in
+                            appState.historyState.move(inFolderId: folder.id, from: from, to: to)
+                        }
+                    } else {
+                        ForEach(folder.children) { child in
+                            AnyView(
+                                TreeNodeView(
+                                    entry: child,
+                                    showDeleteAlert: $showDeleteAlert,
+                                    entriesToDelete: $entriesToDelete,
+                                    appState: appState,
+                                    selectedIDs: $selectedIDs,
+                                    searchText: $searchText,
+                                    activeEntry: $activeEntry,
+                                    entryRowProvider: entryRowProvider,
+                                    copyPromptProvider: copyPromptProvider,
+                                    folderId: folder.id,
+                                    isEditing: $isEditing,
+                                    toastMessage: $toastMessage,
+                                    showToast: $showToast,
+                                    addToInputProvider: addToInputProvider
                                 )
-                            })
+                            )
                         }
                     }
-                    .padding(.leading, 20)
-                    .onDrop(of: [.text], isTargeted: nil) { providers in
-                        guard let provider = providers.first else {
-                            activeEntry = nil
-                            return false
-                        }
-                        provider.loadObject(ofClass: NSString.self) { reading, _ in
-                            guard let str = reading as? String else {
-                                DispatchQueue.main.async {
-                                    self.toastMessage = "Drop failed: Invalid data"
-                                    self.showToast = true
-                                    self.hideToastAfterDelay()
-                                }
-                                return
-                            }
-                            let idStrings = str.split(separator: ",").map(String.init)
-                            let ids = idStrings.compactMap(UUID.init(uuidString:))
-                            guard !ids.isEmpty else {
-                                DispatchQueue.main.async {
-                                    self.toastMessage = "Drop failed: No valid items"
-                                    self.showToast = true
-                                    self.hideToastAfterDelay()
-                                }
-                                return
-                            }
+                }
+                .padding(.leading, 20)
+                .onDrop(of: [.text], isTargeted: nil) { providers in
+                    guard let provider = providers.first else {
+                        activeEntry = nil
+                        return false
+                    }
+                    provider.loadObject(ofClass: NSString.self) { reading, _ in
+                        guard let str = reading as? String else {
                             DispatchQueue.main.async {
-                                var movedEntries: [HistoryEntry] = []
-                                for id in ids {
-                                    if let entry = appState.historyState.findAndRemoveEntry(with: id) {
-                                        movedEntries.append(entry)
-                                    }
+                                self.toastMessage = "Drop failed: Invalid data"
+                                self.showToast = true
+                                self.hideToastAfterDelay()
+                            }
+                            return
+                        }
+                        let idStrings = str.split(separator: ",").map(String.init)
+                        let ids = idStrings.compactMap(UUID.init(uuidString:))
+                        guard !ids.isEmpty else {
+                            DispatchQueue.main.async {
+                                self.toastMessage = "Drop failed: No valid items"
+                                self.showToast = true
+                                self.hideToastAfterDelay()
+                            }
+                            return
+                        }
+                        DispatchQueue.main.async {
+                            var movedEntries: [HistoryEntry] = []
+                            var snapshot = appState.historyState.history
+                            for id in ids {
+                                if let entry = appState.historyState.findAndRemoveEntry(id: id, in: &snapshot) {
+                                    movedEntries.append(entry)
+                                } else {
+                                    print("Drop failed to find entry with ID: \(id)")
                                 }
-                                if movedEntries.isEmpty {
-                                    self.toastMessage = "Drop failed: Items not found"
-                                    self.showToast = true
-                                    self.hideToastAfterDelay()
-                                    return
-                                }
-                                let insertIndex = appState.historyState.history.first(where: { $0.id == folder.id })?.childrenForOutline?.count ?? 0
-                                appState.historyState.insert(entries: movedEntries, inFolderId: folder.id, at: insertIndex)
+                            }
+                            if movedEntries.isEmpty {
+                                self.toastMessage = "Drop failed: Items not found"
+                                self.showToast = true
+                                self.hideToastAfterDelay()
+                                return
+                            }
+                            let insertIndex = snapshot.first(where: { $0.id == folder.id })?.childrenForOutline?.count ?? 0
+                            if appState.historyState.insert(entries: movedEntries, inFolderId: folder.id, at: insertIndex, into: &snapshot) {
+                                appState.historyState.history = snapshot
+                                appState.historyState.saveHistory()
                                 self.selectedIDs.removeAll()
                                 self.toastMessage = "Moved \(movedEntries.count) item(s)"
                                 self.showToast = true
                                 self.hideToastAfterDelay()
-                            }
-                        }
-                        return true
-                    }
-                } label: {
-                    entryRowProvider(entry)
-                        .onLongPressGesture {
-                            newFolderName = folder.name
-                            showRenameAlert = true
-                        }
-                }
-                .contextMenu {
-                    if case .folder(let folder) = entry {
-                        if !isEditing {
-                            Button("Rename Folder") {
-                                newFolderName = folder.name
-                                showRenameAlert = true
-                            }
-                            Button("Delete", role: .destructive) {
-                                let isMulti = isEditing && selectedIDs.count > 1 && selectedIDs.contains(folder.id)
-                                if isMulti {
-                                    entriesToDelete = appState.historyState.findEntries(with: selectedIDs)
-                                } else {
-                                    entriesToDelete = [.folder(folder)]
-                                }
-                                showDeleteAlert = true
-                            }
-                        } else if selectedIDs.contains(folder.id) {
-                            // Batch move
-                            Button("Move to Top") {
-                                appState.historyState.moveToTop(entriesWithIds: [folder.id], inFolderId: folderId)
-                                selectedIDs.removeAll()
-                                toastMessage = "Moved to top"
-                                showToast = true
-                                hideToastAfterDelay()
-                            }
-                            Button("Move to Bottom") {
-                                appState.historyState.moveToBottom(entriesWithIds: [folder.id], inFolderId: folderId)
-                                selectedIDs.removeAll()
-                                toastMessage = "Moved to bottom"
-                                showToast = true
-                                hideToastAfterDelay()
-                            }
-                            Button("Delete Selected", role: .destructive) {
-                                entriesToDelete = appState.historyState.findEntries(with: selectedIDs)
-                                showDeleteAlert = true
+                            } else {
+                                self.toastMessage = "Failed to move to folder"
+                                self.showToast = true
+                                self.hideToastAfterDelay()
                             }
                         }
                     }
+                    return true
                 }
-                .onDrop(of: [.text], delegate: FolderDropDelegate(
-                    folder: folder,
-                    appState: appState,
-                    selectedIDs: $selectedIDs,
-                    toastMessage: $toastMessage,
-                    showToast: $showToast
-                ))
-                .alert("Rename Folder", isPresented: $showRenameAlert) {
-                    TextField("Folder Name", text: $newFolderName)
-                    Button("OK") {
-                        if !newFolderName.isEmpty {
-                            appState.historyState.updateFolderName(with: folder.id, newName: newFolderName)
-                        }
-                    }
-                    Button("Cancel", role: .cancel) {}
-                } message: {
-                    Text("Enter a new name for the folder.")
-                }
-            )
-        } else {
-            AnyView(
+            } label: {
                 entryRowProvider(entry)
-                    .contextMenu {
-                        if case .item(let item) = entry {
-                            if !isEditing {
-                                // Button("View Full") {  // Omitted as redundant with tap gesture
-                                //     #if os(macOS)
-                                //     openWindow(id: "history-viewer", value: item.id)
-                                //     #else
-                                //     appState.presentedModal = .fullHistoryItem(item.id)
-                                //     #endif
-                                // }
-                                Button("Add to Input") {
-                                    addToInputProvider(item)
-                                }
-                                Button("Copy Prompt") {
-                                    copyPromptProvider(item.prompt)
-                                }
-                                Button("Delete", role: .destructive) {
-                                    let isMulti = isEditing && selectedIDs.count > 1 && selectedIDs.contains(item.id)
-                                    if isMulti {
-                                        entriesToDelete = appState.historyState.findEntries(with: selectedIDs)
+                    .onLongPressGesture {
+                        newFolderName = folder.name
+                        showRenameAlert = true
+                    }
+            }
+            .contextMenu {
+                if !isEditing {
+                    Button("Rename Folder") {
+                        newFolderName = folder.name
+                        showRenameAlert = true
+                    }
+                    Button("Delete", role: .destructive) {
+                        let isMulti = isEditing && selectedIDs.count > 1 && selectedIDs.contains(folder.id)
+                        if isMulti {
+                            entriesToDelete = appState.historyState.findEntries(with: selectedIDs)
+                        } else {
+                            entriesToDelete = [.folder(folder)]
+                        }
+                        showDeleteAlert = true
+                    }
+                    #if os(macOS)
+                    Menu("Move to...") {
+                        Button("Root") {
+                            let success = appState.historyState.moveToFolder(entriesWithIds: [folder.id], toFolderId: nil)
+                            if success {
+                                selectedIDs.removeAll()
+                                toastMessage = "Moved to root"
+                                showToast = true
+                                hideToastAfterDelay()
+                            } else {
+                                toastMessage = "Failed to move to root"
+                                showToast = true
+                                hideToastAfterDelay()
+                            }
+                        }
+                        .accessibilityLabel("Move folder to root")
+                        ForEach(appState.historyState.allFolders()) { folderOption in
+                            if !folderOption.containsAny(ids: Set([folder.id]), in: appState.historyState.history) {
+                                Button(folderOption.name) {
+                                    let success = appState.historyState.moveToFolder(entriesWithIds: [folder.id], toFolderId: folderOption.id)
+                                    if success {
+                                        selectedIDs.removeAll()
+                                        toastMessage = "Moved to \(folderOption.name)"
+                                        showToast = true
+                                        hideToastAfterDelay()
                                     } else {
-                                        entriesToDelete = [.item(item)]
+                                        toastMessage = "Failed to move to \(folderOption.name)"
+                                        showToast = true
+                                        hideToastAfterDelay()
                                     }
-                                    showDeleteAlert = true
                                 }
-                            } else if selectedIDs.contains(item.id) {
-                                // Batch move options (existing)
-                                Button("Move to Top") {
-                                    appState.historyState.moveToTop(entriesWithIds: [item.id], inFolderId: folderId)
-                                    selectedIDs.removeAll()
-                                    toastMessage = "Moved to top"
-                                    showToast = true
-                                    hideToastAfterDelay()
-                                }
-                                Button("Move to Bottom") {
-                                    appState.historyState.moveToBottom(entriesWithIds: [item.id], inFolderId: folderId)
-                                    selectedIDs.removeAll()
-                                    toastMessage = "Moved to bottom"
-                                    showToast = true
-                                    hideToastAfterDelay()
-                                }
-                                Button("Delete Selected", role: .destructive) {
-                                    entriesToDelete = appState.historyState.findEntries(with: selectedIDs)
-                                    showDeleteAlert = true
-                                }
+                                .accessibilityLabel("Move folder to \(folderOption.name)")
                             }
                         }
                     }
-            )
+                    .disabled(appState.historyState.allFolders().isEmpty)
+                    .onAppear {
+                        print("Context menu for folder \(folder.id): Move to... menu rendered with \(appState.historyState.allFolders().count) folders")
+                    }
+                    #endif
+                } else if selectedIDs.contains(folder.id) {
+                    Button("Move to Top") {
+                        appState.historyState.moveToTop(entriesWithIds: Array(selectedIDs), inFolderId: folderId)
+                        selectedIDs.removeAll()
+                        toastMessage = "Moved to top"
+                        showToast = true
+                        hideToastAfterDelay()
+                    }
+                    .accessibilityLabel("Move selected items to top")
+                    Button("Move to Bottom") {
+                        appState.historyState.moveToBottom(entriesWithIds: Array(selectedIDs), inFolderId: folderId)
+                        selectedIDs.removeAll()
+                        toastMessage = "Moved to bottom"
+                        showToast = true
+                        hideToastAfterDelay()
+                    }
+                    .accessibilityLabel("Move selected items to bottom")
+                    #if os(macOS)
+                    Menu("Move to...") {
+                        Button("Root") {
+                            let success = appState.historyState.moveToFolder(entriesWithIds: Array(selectedIDs), toFolderId: nil)
+                            if success {
+                                selectedIDs.removeAll()
+                                toastMessage = "Moved to root"
+                                showToast = true
+                                hideToastAfterDelay()
+                            } else {
+                                toastMessage = "Failed to move to root"
+                                showToast = true
+                                hideToastAfterDelay()
+                            }
+                        }
+                        .accessibilityLabel("Move selected items to root")
+                        ForEach(appState.historyState.allFolders()) { folderOption in
+                            if !folderOption.containsAny(ids: selectedIDs, in: appState.historyState.history) {
+                                Button(folderOption.name) {
+                                    let success = appState.historyState.moveToFolder(entriesWithIds: Array(selectedIDs), toFolderId: folderOption.id)
+                                    if success {
+                                        selectedIDs.removeAll()
+                                        toastMessage = "Moved to \(folderOption.name)"
+                                        showToast = true
+                                        hideToastAfterDelay()
+                                    } else {
+                                        toastMessage = "Failed to move to \(folderOption.name)"
+                                        showToast = true
+                                        hideToastAfterDelay()
+                                    }
+                                }
+                                .accessibilityLabel("Move selected items to folder \(folderOption.name)")
+                            }
+                        }
+                    }
+                    .disabled(appState.historyState.allFolders().isEmpty)
+                    .onAppear {
+                        print("Context menu for selected folder \(folder.id): Move to... menu rendered with \(appState.historyState.allFolders().count) folders")
+                    }
+                    #endif
+                    Button("Delete Selected", role: .destructive) {
+                        entriesToDelete = appState.historyState.findEntries(with: selectedIDs)
+                        showDeleteAlert = true
+                    }
+                    .accessibilityLabel("Delete selected items")
+                }
+            }
+            .alert("Rename Folder", isPresented: $showRenameAlert) {
+                TextField("Folder Name", text: $newFolderName)
+                Button("OK") {
+                    if !newFolderName.isEmpty {
+                        appState.historyState.updateFolderName(with: folder.id, newName: newFolderName)
+                    }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("Enter a new name for the folder.")
+            }
+        } else {
+            entryRowProvider(entry) // Rely on itemRow(for:) for context menu
         }
     }
     
@@ -385,4 +416,3 @@ extension UIImage {
     }
 }
 #endif
-

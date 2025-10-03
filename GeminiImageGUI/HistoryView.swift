@@ -107,8 +107,7 @@ struct HistoryView: View {
 
     private var overlayContent: some View {
         Group {
-            // Prioritize showAddedMessage on iOS
-#if os(iOS)
+            #if os(iOS)
             if showAddedMessage {
                 Text("Image added to input images")
                     .font(.headline)
@@ -136,7 +135,7 @@ struct HistoryView: View {
                         hideToastAfterDelay()
                     }
             }
-#else
+            #else
             if showToast, let message = toastMessage {
                 Text(message)
                     .font(.headline)
@@ -151,7 +150,7 @@ struct HistoryView: View {
                         hideToastAfterDelay()
                     }
             }
-#endif
+            #endif
         }
     }
   
@@ -215,9 +214,12 @@ struct HistoryView: View {
                 }
                 DispatchQueue.main.async {
                     var movedEntries: [HistoryEntry] = []
+                    var snapshot = appState.historyState.history
                     for id in ids {
-                        if let entry = appState.historyState.findAndRemoveEntry(with: id) {
+                        if let entry = appState.historyState.findAndRemoveEntry(id: id, in: &snapshot) {
                             movedEntries.append(entry)
+                        } else {
+                            print("Drag-and-drop failed to find entry with ID: \(id)")
                         }
                     }
                     if movedEntries.isEmpty {
@@ -227,7 +229,9 @@ struct HistoryView: View {
                         return
                     }
                     let insertIndex = 0 // Insert at top for header drop
-                    appState.historyState.insert(entries: movedEntries, inFolderId: nil, at: insertIndex)
+                    appState.historyState.insert(entries: movedEntries, inFolderId: nil, at: insertIndex, into: &snapshot)
+                    appState.historyState.history = snapshot
+                    appState.historyState.saveHistory()
                     self.selectedIDs.removeAll()
                     self.toastMessage = "Moved \(movedEntries.count) item(s) to top"
                     self.showToast = true
@@ -287,9 +291,12 @@ struct HistoryView: View {
                 }
                 DispatchQueue.main.async {
                     var movedEntries: [HistoryEntry] = []
+                    var snapshot = appState.historyState.history
                     for id in ids {
-                        if let entry = appState.historyState.findAndRemoveEntry(with: id) {
+                        if let entry = appState.historyState.findAndRemoveEntry(id: id, in: &snapshot) {
                             movedEntries.append(entry)
+                        } else {
+                            print("Drag-and-drop failed to find entry with ID: \(id)")
                         }
                     }
                     if movedEntries.isEmpty {
@@ -299,7 +306,9 @@ struct HistoryView: View {
                         return
                     }
                     let insertIndex = 0 // Insert at top for header drop
-                    appState.historyState.insert(entries: movedEntries, inFolderId: nil, at: insertIndex)
+                    appState.historyState.insert(entries: movedEntries, inFolderId: nil, at: insertIndex, into: &snapshot)
+                    appState.historyState.history = snapshot
+                    appState.historyState.saveHistory()
                     self.selectedIDs.removeAll()
                     self.toastMessage = "Moved \(movedEntries.count) item(s) to top"
                     self.showToast = true
@@ -534,9 +543,12 @@ struct HistoryView: View {
                     }
                     DispatchQueue.main.async {
                         var movedEntries: [HistoryEntry] = []
+                        var snapshot = appState.historyState.history
                         for id in ids {
-                            if let entry = appState.historyState.findAndRemoveEntry(with: id) {
+                            if let entry = appState.historyState.findAndRemoveEntry(id: id, in: &snapshot) {
                                 movedEntries.append(entry)
+                            } else {
+                                print("Drag-and-drop failed to find entry with ID: \(id)")
                             }
                         }
                         if movedEntries.isEmpty {
@@ -546,7 +558,9 @@ struct HistoryView: View {
                             return
                         }
                         let insertIndex = appState.historyState.history.count
-                        appState.historyState.insert(entries: movedEntries, inFolderId: nil, at: insertIndex)
+                        appState.historyState.insert(entries: movedEntries, inFolderId: nil, at: insertIndex, into: &snapshot)
+                        appState.historyState.history = snapshot
+                        appState.historyState.saveHistory()
                         self.selectedIDs.removeAll()
                         self.toastMessage = "Moved \(movedEntries.count) item(s)"
                         self.showToast = true
@@ -559,7 +573,7 @@ struct HistoryView: View {
     }
 
     private var isEditingBinding: Binding<Bool> {
-    #if os(iOS)
+        #if os(iOS)
         Binding(
             get: { (editMode?.wrappedValue == .active) ?? false },
             set: { newValue in
@@ -570,9 +584,9 @@ struct HistoryView: View {
                 }
             }
         )
-    #else
+        #else
         $isEditing
-    #endif
+        #endif
     }
   
     @ViewBuilder
@@ -602,7 +616,7 @@ struct HistoryView: View {
                     .resizable()
                     .scaledToFit()
                     .frame(width: 50, height: 50)
-                    .foregroundColor(.secondary) // Optional: Match thumbnail style
+                    .foregroundColor(.secondary)
                     .help("Folder icon")
                 Text(folder.name)
             }
@@ -619,7 +633,6 @@ struct HistoryView: View {
                         selectedIDs.formUnion(allIDs)
                     }
                 }
-                // Note: When not editing, tap is handled by the parent DisclosureGroup in TreeNodeView to toggle isExpanded
             }
             .onDrag {
                 var payload: String
@@ -682,7 +695,6 @@ struct HistoryView: View {
                     selectedIDs.insert(item.id)
                 }
             } else {
-                // View full image
                 #if os(macOS)
                 #if swift(>=5.7)
                 openWindow(id: "history-viewer", value: item.id)
@@ -705,11 +717,138 @@ struct HistoryView: View {
             payload = idsToDrag.map { $0.uuidString }.joined(separator: ",")
             return NSItemProvider(object: payload as NSString)
         }
+        .contextMenu {
+            Group {
+                if !isEditingBinding.wrappedValue {
+                    Button("Add to Input") {
+                        addToInputImages(item: item)
+                        #if os(iOS)
+                        showAddedMessage = true
+                        hideToastAfterDelay()
+                        #endif
+                    }
+                    .accessibilityLabel("Add item to input")
+                    Button("Copy Prompt") {
+                        copyPromptToClipboard(item.prompt)
+                    }
+                    .accessibilityLabel("Copy prompt")
+                    Button("Delete", role: .destructive) {
+                        entriesToDelete = [.item(item)]
+                        showDeleteAlert = true
+                    }
+                    .accessibilityLabel("Delete item")
+                    #if os(macOS)
+                    Menu("Move to...") {
+                        Button("Root") {
+                            let success = appState.historyState.moveToFolder(entriesWithIds: [item.id], toFolderId: nil)
+                            if success {
+                                selectedIDs.removeAll()
+                                toastMessage = "Moved to root"
+                                showToast = true
+                                hideToastAfterDelay()
+                            } else {
+                                toastMessage = "Failed to move to root"
+                                showToast = true
+                                hideToastAfterDelay()
+                            }
+                        }
+                        .accessibilityLabel("Move item to root")
+                        ForEach(appState.historyState.allFolders()) { folderOption in
+                            Button(folderOption.name) {
+                                let success = appState.historyState.moveToFolder(entriesWithIds: [item.id], toFolderId: folderOption.id)
+                                if success {
+                                    selectedIDs.removeAll()
+                                    toastMessage = "Moved to \(folderOption.name)"
+                                    showToast = true
+                                    hideToastAfterDelay()
+                                } else {
+                                    toastMessage = "Failed to move to \(folderOption.name)"
+                                    showToast = true
+                                    hideToastAfterDelay()
+                                }
+                            }
+                            .accessibilityLabel("Move item to folder \(folderOption.name)")
+                        }
+                    }
+                    .disabled(appState.historyState.allFolders().isEmpty)
+                    .onAppear {
+                        print("Context menu for item \(item.id): Move to... menu rendered with \(appState.historyState.allFolders().count) folders")
+                    }
+                    #endif
+                } else if selectedIDs.contains(item.id) {
+                    Button("Move to Top") {
+                        appState.historyState.moveToTop(entriesWithIds: Array(selectedIDs), inFolderId: nil)
+                        selectedIDs.removeAll()
+                        toastMessage = "Moved to top"
+                        showToast = true
+                        hideToastAfterDelay()
+                    }
+                    .accessibilityLabel("Move selected items to top")
+                    Button("Move to Bottom") {
+                        appState.historyState.moveToBottom(entriesWithIds: Array(selectedIDs), inFolderId: nil)
+                        selectedIDs.removeAll()
+                        toastMessage = "Moved to bottom"
+                        showToast = true
+                        hideToastAfterDelay()
+                    }
+                    .accessibilityLabel("Move selected items to bottom")
+                    #if os(macOS)
+                    Menu("Move to...") {
+                        Button("Root") {
+                            let success = appState.historyState.moveToFolder(entriesWithIds: Array(selectedIDs), toFolderId: nil)
+                            if success {
+                                selectedIDs.removeAll()
+                                toastMessage = "Moved to root"
+                                showToast = true
+                                hideToastAfterDelay()
+                            } else {
+                                toastMessage = "Failed to move to root"
+                                showToast = true
+                                hideToastAfterDelay()
+                            }
+                        }
+                        .accessibilityLabel("Move selected items to root")
+                        ForEach(appState.historyState.allFolders()) { folderOption in
+                            if !folderOption.containsAny(ids: selectedIDs, in: appState.historyState.history) {
+                                Button(folderOption.name) {
+                                    let success = appState.historyState.moveToFolder(entriesWithIds: Array(selectedIDs), toFolderId: folderOption.id)
+                                    if success {
+                                        selectedIDs.removeAll()
+                                        toastMessage = "Moved to \(folderOption.name)"
+                                        showToast = true
+                                        hideToastAfterDelay()
+                                    } else {
+                                        toastMessage = "Failed to move to \(folderOption.name)"
+                                        showToast = true
+                                        hideToastAfterDelay()
+                                    }
+                                }
+                                .accessibilityLabel("Move selected items to folder \(folderOption.name)")
+                            }
+                        }
+                    }
+                    .disabled(appState.historyState.allFolders().isEmpty)
+                    .onAppear {
+                        print("Context menu for selected item \(item.id): Move to... menu rendered with \(appState.historyState.allFolders().count) folders")
+                    }
+                    #endif
+                    Button("Delete Selected", role: .destructive) {
+                        entriesToDelete = appState.historyState.findEntries(with: selectedIDs)
+                        showDeleteAlert = true
+                    }
+                    .accessibilityLabel("Delete selected items")
+                }
+            }
+        }
     }
   
     private func copyPromptToClipboard(_ prompt: String) {
-        PlatformPasteboard.clearContents()
-        PlatformPasteboard.writeString(prompt)
+        #if os(macOS)
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(prompt, forType: .string)
+        #elseif os(iOS)
+        UIPasteboard.general.string = prompt
+        #endif
     }
   
     private func deleteEntries(deleteFiles: Bool) {
@@ -719,9 +858,12 @@ struct HistoryView: View {
             }
         }
         
+        var snapshot = appState.historyState.history
         for entry in entriesToDelete {
-            _ = appState.historyState.findAndRemoveEntry(with: entry.id)
+            _ = appState.historyState.findAndRemoveEntry(id: entry.id, in: &snapshot)
         }
+        appState.historyState.history = snapshot
+        appState.historyState.saveHistory()
         
         entriesToDelete = []
         selectedIDs.removeAll()
@@ -739,13 +881,13 @@ struct HistoryView: View {
                         try fileManager.removeItem(at: fileURL)
                     }
                 } catch {
-                    // Handle error if needed, e.g., print("Failed to delete file: \(error)")
+                    print("Failed to delete file: \(error)")
                 }
             } else {
                 do {
                     try fileManager.removeItem(at: fileURL)
                 } catch {
-                    // Handle error if needed
+                    print("Failed to delete file: \(error)")
                 }
             }
         case .folder(let folder):
@@ -769,6 +911,7 @@ struct HistoryView: View {
             return PlatformImage(contentsOfFile: fileURL.path)
         }
     }
+    
     private func addToInputImages(item: HistoryItem) {
         guard let img = loadHistoryImage(for: item), let path = item.imagePath else { return }
         let url = URL(fileURLWithPath: path)
@@ -796,7 +939,6 @@ struct HistoryView: View {
         appState.ui.imageSlots.append(newSlot)
     }
   
-    // Helper to filter entries recursively
     private func filterEntries(_ entries: [HistoryEntry], with search: String) -> [HistoryEntry] {
         entries.compactMap { entry in
             switch entry {
