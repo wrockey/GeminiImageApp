@@ -1,4 +1,4 @@
-// HistoryTreeNode.swift
+// HistoryTreeNode.swift (updated with unified isEditing checks, non-optional isEditing param)
 import SwiftUI
 import UniformTypeIdentifiers
 #if os(macOS)
@@ -22,7 +22,7 @@ struct TreeNodeView: View {
     let entryRowProvider: (HistoryEntry) -> AnyView
     let copyPromptProvider: (String) -> Void
     let folderId: UUID?
-    @Binding var isEditing: Bool
+    @Binding var isEditing: Bool  // Updated: Non-optional @Binding<Bool>
     @Binding var toastMessage: String?
     @Binding var showToast: Bool
     
@@ -37,7 +37,7 @@ struct TreeNodeView: View {
         entryRowProvider: @escaping (HistoryEntry) -> AnyView,
         copyPromptProvider: @escaping (String) -> Void,
         folderId: UUID? = nil,
-        isEditing: Binding<Bool>? = nil,
+        isEditing: Binding<Bool>,  // Updated: Required, non-optional
         toastMessage: Binding<String?> = .constant(nil),
         showToast: Binding<Bool> = .constant(false)
     ) {
@@ -51,9 +51,7 @@ struct TreeNodeView: View {
         self.entryRowProvider = entryRowProvider
         self.copyPromptProvider = copyPromptProvider
         self.folderId = folderId
-        #if os(macOS)
-        self._isEditing = isEditing ?? .constant(false)
-        #endif
+        self._isEditing = isEditing  // Updated: Direct assignment, no ?? or #if
         self._toastMessage = toastMessage
         self._showToast = showToast
     }
@@ -85,7 +83,7 @@ struct TreeNodeView: View {
                                         entryRowProvider: entryRowProvider,
                                         copyPromptProvider: copyPromptProvider,
                                         folderId: folder.id,
-                                        isEditing: $isEditing,
+                                        isEditing: $isEditing,  // Pass non-optional
                                         toastMessage: $toastMessage,
                                         showToast: $showToast
                                     )
@@ -107,7 +105,7 @@ struct TreeNodeView: View {
                                         entryRowProvider: entryRowProvider,
                                         copyPromptProvider: copyPromptProvider,
                                         folderId: folder.id,
-                                        isEditing: $isEditing,
+                                        isEditing: $isEditing,  // Pass non-optional
                                         toastMessage: $toastMessage,
                                         showToast: $showToast
                                     )
@@ -171,8 +169,7 @@ struct TreeNodeView: View {
                         }
                 }
                 .contextMenu {
-                    #if os(iOS)
-                    if editMode?.wrappedValue == .active && selectedIDs.contains(entry.id) {
+                    if isEditing && selectedIDs.contains(entry.id) {  // Unified: Use isEditing for both platforms
                         Button("Move to Top") {
                             appState.historyState.moveToTop(entriesWithIds: [entry.id], inFolderId: folderId)
                             selectedIDs.removeAll()
@@ -188,34 +185,12 @@ struct TreeNodeView: View {
                             hideToastAfterDelay()
                         }
                     }
-                    #else
-                    if isEditing && selectedIDs.contains(entry.id) {
-                        Button("Move to Top") {
-                            appState.historyState.moveToTop(entriesWithIds: [entry.id], inFolderId: folderId)
-                            selectedIDs.removeAll()
-                            toastMessage = "Moved to top"
-                            showToast = true
-                            hideToastAfterDelay()
-                        }
-                        Button("Move to Bottom") {
-                            appState.historyState.moveToBottom(entriesWithIds: [entry.id], inFolderId: folderId)
-                            selectedIDs.removeAll()
-                            toastMessage = "Moved to bottom"
-                            showToast = true
-                            hideToastAfterDelay()
-                        }
-                    }
-                    #endif
                     Button("Rename Folder") {
                         newFolderName = folder.name
                         showRenameAlert = true
                     }
                     Button("Delete Folder") {
-                        #if os(iOS)
-                        let isMulti = editMode?.wrappedValue == .active && selectedIDs.count > 1 && selectedIDs.contains(folder.id)
-                        #else
-                        let isMulti = isEditing && selectedIDs.count > 1 && selectedIDs.contains(folder.id)
-                        #endif
+                        let isMulti = isEditing && selectedIDs.count > 1 && selectedIDs.contains(folder.id)  // Unified: Use isEditing
                         if isMulti {
                             entriesToDelete = appState.historyState.findEntries(with: selectedIDs)
                         } else {
@@ -248,8 +223,7 @@ struct TreeNodeView: View {
                 entryRowProvider(entry)
                     .contextMenu {
                         if case .item(let item) = entry {
-                            #if os(iOS)
-                            if editMode?.wrappedValue == .active && selectedIDs.contains(item.id) {
+                            if isEditing && selectedIDs.contains(item.id) {  // Unified: Use isEditing for both platforms
                                 Button("Move to Top") {
                                     appState.historyState.moveToTop(entriesWithIds: [item.id], inFolderId: folderId)
                                     selectedIDs.removeAll()
@@ -265,34 +239,12 @@ struct TreeNodeView: View {
                                     hideToastAfterDelay()
                                 }
                             }
-                            #else
-                            if isEditing && selectedIDs.contains(item.id) {
-                                Button("Move to Top") {
-                                    appState.historyState.moveToTop(entriesWithIds: [item.id], inFolderId: folderId)
-                                    selectedIDs.removeAll()
-                                    toastMessage = "Moved to top"
-                                    showToast = true
-                                    hideToastAfterDelay()
-                                }
-                                Button("Move to Bottom") {
-                                    appState.historyState.moveToBottom(entriesWithIds: [item.id], inFolderId: folderId)
-                                    selectedIDs.removeAll()
-                                    toastMessage = "Moved to bottom"
-                                    showToast = true
-                                    hideToastAfterDelay()
-                                }
-                            }
-                            #endif
                             Button("Copy Prompt") {
                                 copyPromptProvider(item.prompt)
                             }
                             .help("Copy the prompt to clipboard")
                             Button("Delete") {
-                                #if os(iOS)
-                                let isMulti = editMode?.wrappedValue == .active && selectedIDs.count > 1 && selectedIDs.contains(item.id)
-                                #else
-                                let isMulti = isEditing && selectedIDs.count > 1 && selectedIDs.contains(item.id)
-                                #endif
+                                let isMulti = isEditing && selectedIDs.count > 1 && selectedIDs.contains(item.id)  // Unified: Use isEditing
                                 if isMulti {
                                     entriesToDelete = appState.historyState.findEntries(with: selectedIDs)
                                 } else {
@@ -405,3 +357,4 @@ extension UIImage {
     }
 }
 #endif
+

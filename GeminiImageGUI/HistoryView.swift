@@ -17,7 +17,7 @@ struct HistoryView: View {
     @State private var toastMessage: String? = nil
     @State private var showToast: Bool = false
     #if os(iOS)
-    @Environment(\.editMode) var editMode
+    @Environment(\.editMode) private var editMode: Binding<EditMode>?
     #endif
     #if os(macOS)
     @State private var isEditing: Bool = false
@@ -27,6 +27,7 @@ struct HistoryView: View {
     #endif
     @State private var activeEntry: HistoryEntry? = nil
     @State private var selectedIDs: Set<UUID> = []
+    @Environment(\.dismiss) private var dismiss
   
     private var dateFormatter: DateFormatter {
         let formatter = DateFormatter()
@@ -43,10 +44,38 @@ struct HistoryView: View {
         }
     }
   
-    private var deleteMessage: String {
-        entriesToDelete.count > 1 ? "Do you want to delete these entries from history only or also delete the file(s)?" : "Do you want to delete from history only or also delete the file?"
-    }
+    private var fileCount: Int {
+        var uniqueItemIDs = Set<UUID>()
         
+        func collectUniqueItems(from entries: [HistoryEntry]) {
+            for entry in entries {
+                switch entry {
+                case .item(let item):
+                    uniqueItemIDs.insert(item.id)
+                case .folder(let folder):
+                    collectUniqueItems(from: folder.children)
+                }
+            }
+        }
+        
+        collectUniqueItems(from: entriesToDelete)
+        return uniqueItemIDs.count
+    }
+
+    private var deleteMessage: String {
+        if fileCount == 0 {
+            return "Delete from history?"
+        } else {
+            let imageWord = fileCount == 1 ? "image" : "images"
+            return "Delete from history only, or also permanently delete \(fileCount) \(imageWord)?"
+        }
+    }
+    
+    private var confirmDeleteMessage: String {
+        let totalItems = entriesToDelete.reduce(into: 0) { $0 += $1.imageCount }
+        return "Are you sure? \(totalItems) image\(totalItems == 1 ? "" : "s") will be deleted!"
+    }
+    
     var body: some View {
         content
     }
@@ -62,23 +91,14 @@ struct HistoryView: View {
             Button("Delete from History Only") {
                 deleteEntries(deleteFiles: false)
             }
-            Button("Delete from History and File", role: .destructive) {
-                let totalItems = entriesToDelete.reduce(into: 0) { $0 += $1.imageCount }
-                if totalItems > 1 {
-                    showConfirmFileDelete = true
-                } else {
+            if fileCount > 0 {
+                Button("Delete History and Files", role: .destructive) {
                     deleteEntries(deleteFiles: true)
                 }
             }
             Button("Cancel", role: .cancel) {}
         } message: {
             Text(deleteMessage)
-        }
-        .alert("Confirm Delete Files", isPresented: $showConfirmFileDelete) {
-            Button("Yes", role: .destructive) {
-                deleteEntries(deleteFiles: true)
-            }
-            Button("No", role: .cancel) {}
         }
         .overlay {
             overlayContent
@@ -88,7 +108,7 @@ struct HistoryView: View {
     private var overlayContent: some View {
         Group {
             // Prioritize showAddedMessage on iOS
-            #if os(iOS)
+#if os(iOS)
             if showAddedMessage {
                 Text("Image added to input images")
                     .font(.headline)
@@ -116,7 +136,7 @@ struct HistoryView: View {
                         hideToastAfterDelay()
                     }
             }
-            #else
+#else
             if showToast, let message = toastMessage {
                 Text(message)
                     .font(.headline)
@@ -131,7 +151,7 @@ struct HistoryView: View {
                         hideToastAfterDelay()
                     }
             }
-            #endif
+#endif
         }
     }
   
@@ -283,7 +303,7 @@ struct HistoryView: View {
                 .kerning(0.2)
                 .help("View past generated images and prompts")
            
-            if editMode?.wrappedValue == .active {
+            if isEditingBinding.wrappedValue {
                 Button(action: {
                     if !selectedIDs.isEmpty {
                         appState.historyState.moveToTop(entriesWithIds: Array(selectedIDs), inFolderId: nil)
@@ -439,7 +459,7 @@ struct HistoryView: View {
                                     entryRowProvider: { AnyView(self.entryRow(for: $0)) },
                                     copyPromptProvider: self.copyPromptToClipboard,
                                     folderId: nil,
-                                    isEditing: $isEditing,
+                                    isEditing: isEditingBinding,
                                     toastMessage: $toastMessage,
                                     showToast: $showToast
                                 )
@@ -461,7 +481,7 @@ struct HistoryView: View {
                                     entryRowProvider: { AnyView(self.entryRow(for: $0)) },
                                     copyPromptProvider: self.copyPromptToClipboard,
                                     folderId: nil,
-                                    isEditing: $isEditing,
+                                    isEditing: isEditingBinding,
                                     toastMessage: $toastMessage,
                                     showToast: $showToast
                                 )
@@ -520,6 +540,23 @@ struct HistoryView: View {
             }
         }
     }
+
+    private var isEditingBinding: Binding<Bool> {
+    #if os(iOS)
+        Binding(
+            get: { (editMode?.wrappedValue == .active) ?? false },
+            set: { newValue in
+                withAnimation {
+                    if let editMode = editMode {
+                        editMode.wrappedValue = newValue ? .active : .inactive
+                    }
+                }
+            }
+        )
+    #else
+        $isEditing
+    #endif
+    }
   
     @ViewBuilder
     private func entryRow(for entry: HistoryEntry) -> some View {
@@ -530,7 +567,7 @@ struct HistoryView: View {
                     var payload: String
                     var idsToDrag: [UUID]
 #if os(iOS)
-                    if editMode?.wrappedValue == .active && !selectedIDs.isEmpty {
+                    if isEditingBinding.wrappedValue && !selectedIDs.isEmpty {
                         idsToDrag = Array(selectedIDs).sorted()
                     } else {
                         idsToDrag = [entry.id]
@@ -548,7 +585,7 @@ struct HistoryView: View {
         case .folder(let folder):
             HStack {
 #if os(iOS)
-                if editMode?.wrappedValue == .active {
+                if isEditingBinding.wrappedValue {
                     Image(systemName: selectedIDs.contains(folder.id) ? "checkmark.circle.fill" : "circle")
                         .foregroundColor(.accentColor)
                         .font(.system(size: 20))
@@ -571,7 +608,7 @@ struct HistoryView: View {
             .contentShape(Rectangle())
 #if os(iOS)
             .onTapGesture {
-                if editMode?.wrappedValue == .active {
+                if isEditingBinding.wrappedValue {
                     var allIDs = Set<UUID>()
                     entry.collectAllIDs(into: &allIDs)
                     if selectedIDs.contains(folder.id) {
@@ -602,7 +639,7 @@ struct HistoryView: View {
                 var payload: String
                 var idsToDrag: [UUID]
 #if os(iOS)
-                if editMode?.wrappedValue == .active && !selectedIDs.isEmpty {
+                if isEditingBinding.wrappedValue && !selectedIDs.isEmpty {
                     idsToDrag = Array(selectedIDs).sorted()
                 } else {
                     idsToDrag = [entry.id]
@@ -632,7 +669,7 @@ struct HistoryView: View {
         
         return HStack(spacing: 12) {
             #if os(iOS)
-            if editMode?.wrappedValue == .active {
+            if isEditingBinding.wrappedValue {
                 Image(systemName: selectedIDs.contains(item.id) ? "checkmark.circle.fill" : "circle")
                     .foregroundColor(.accentColor)
                     .font(.system(size: 20))
@@ -719,7 +756,7 @@ struct HistoryView: View {
         #if os(iOS)
         .contentShape(Rectangle())
         .onTapGesture {
-            if editMode?.wrappedValue == .active {
+            if isEditingBinding.wrappedValue {
                 if selectedIDs.contains(item.id) {
                     selectedIDs.remove(item.id)
                 } else {
@@ -743,7 +780,7 @@ struct HistoryView: View {
             var payload: String
             var idsToDrag: [UUID]
             #if os(iOS)
-            if editMode?.wrappedValue == .active && !selectedIDs.isEmpty {
+            if isEditingBinding.wrappedValue && !selectedIDs.isEmpty {
                 idsToDrag = Array(selectedIDs).sorted()
             } else {
                 idsToDrag = [item.id]
@@ -873,4 +910,3 @@ struct HistoryView: View {
         }
     }
 }
-
