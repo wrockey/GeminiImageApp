@@ -7,32 +7,32 @@ import AppKit
 #elseif os(iOS)
 import UIKit
 #endif
-
+ 
 // Moved out: Overload parsePromptNodes for Data
 func parsePromptNodes(from data: Data) -> [NodeInfo] {
     print("DEBUG: Parsing prompts from pasted PNG data, size: \(data.count)")
-    
+   
     var offset: Int = 8  // Skip PNG signature
     let totalLength = data.count
     var workflowStr: String? = nil
-    
+   
     while offset + 11 < totalLength {
         let lengthRange = offset..<(offset + 4)
         let lengthData = data.subdata(in: lengthRange)
         let lengthBytes = [UInt8](lengthData)
         let length = (UInt32(lengthBytes[0]) << 24) | (UInt32(lengthBytes[1]) << 16) |
                     (UInt32(lengthBytes[2]) << 8) | UInt32(lengthBytes[3])
-        
+   
         let fullChunkSize = 12 + Int(length)
         let fullChunkEnd = offset + fullChunkSize
         guard fullChunkEnd <= totalLength else { break }
-        
+   
         let typeStart = offset + 4
         let typeRange = typeStart..<(typeStart + 4)
         let typeData = data.subdata(in: typeRange)
         let typeBytes = [UInt8](typeData)
         let chunkType = String(bytes: typeBytes, encoding: .ascii) ?? ""
-        
+   
         if chunkType == "tEXt" {
             let textStart = typeStart + 4
             let textRange = textStart ..< (textStart + Int(length))
@@ -47,10 +47,10 @@ func parsePromptNodes(from data: Data) -> [NodeInfo] {
                 }
             }
         }
-        
+   
         offset = fullChunkEnd
     }
-    
+   
     // Fallback to ImageIO if manual didn't find it
     if workflowStr == nil {
         let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".png")
@@ -63,20 +63,20 @@ func parsePromptNodes(from data: Data) -> [NodeInfo] {
             return []
         }
     }
-    
+   
     guard let extractedWorkflowStr = workflowStr else { return [] }
-    
+   
     guard let jsonData = extractedWorkflowStr.data(using: .utf8),
           let json = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any] else { return [] }
-    
+   
     var promptNodes: [NodeInfo] = []
-    
+   
     if let nodesArray = json["nodes"] as? [[String: Any]] {
         for node in nodesArray {
             guard let nodeID = node["id"] as? Int,
                   let classType = node["type"] as? String else { continue }
             let nodeIDStr = String(nodeID)
-            
+           
             if classType.contains("CLIPTextEncode") {
                 let widgetsValues = node["widgets_values"] as? [Any] ?? []
                 let text = widgetsValues.compactMap { $0 as? String }.first ?? ""
@@ -88,7 +88,7 @@ func parsePromptNodes(from data: Data) -> [NodeInfo] {
         for (nodeID, node) in json {
             guard let nodeDict = node as? [String: Any],
                   let classType = nodeDict["class_type"] as? String else { continue }
-            
+           
             if classType.contains("CLIPTextEncode") {
                 let text = (nodeDict["inputs"] as? [String: Any])?["text"] as? String ?? ""
                 let label = text.isEmpty ? "Node \(nodeID)" : "Node \(nodeID): \(text.prefix(50))\(text.count > 50 ? "..." : "")"
@@ -96,25 +96,25 @@ func parsePromptNodes(from data: Data) -> [NodeInfo] {
             }
         }
     }
-    
+   
     return promptNodes.sorted { $0.id < $1.id }
 }
-
+ 
 // Moved out: Overload parsePromptNodes for URL
 func parsePromptNodes(from url: URL) -> [NodeInfo] {
     print("DEBUG: Parsing prompts from PNG: \(url.path)")
-    
+   
     // Manual PNG chunk parsing to extract tEXt
     guard let data = try? Data(contentsOf: url) else {
         print("DEBUG: Failed to load PNG binary data")
         return []
     }
     print("DEBUG: PNG binary loaded, size: \(data.count) bytes")
-    
+   
     var offset: Int = 8  // Skip PNG signature (first 8 bytes)
     let totalLength = data.count
     var workflowStr: String? = nil
-    
+   
     while offset + 11 < totalLength {  // Ensure room for min chunk (12 bytes) + safety
         // Read chunk length (4 bytes, big-endian)
         let lengthRange = offset..<(offset + 4)
@@ -123,22 +123,22 @@ func parsePromptNodes(from url: URL) -> [NodeInfo] {
             break
         }
         let lengthData = data.subdata(in: lengthRange)
-        
+       
         // Safer big-endian UInt32 read (manual shift for reliability)
         let lengthBytes = [UInt8](lengthData)
         let length = (UInt32(lengthBytes[0]) << 24) | (UInt32(lengthBytes[1]) << 16) |
         (UInt32(lengthBytes[2]) << 8) | UInt32(lengthBytes[3])
-        
+       
         // DEBUG: Log length bytes (remove after fix)
         print("DEBUG: Length bytes at offset \(offset): [\(lengthBytes.map { String(format: "%02x", $0) }.joined(separator: " "))], length: \(length)")
-        
+       
         let fullChunkSize = 12 + Int(length)  // 4 len + 4 type + len data + 4 CRC
         let fullChunkEnd = offset + fullChunkSize
         guard fullChunkEnd <= totalLength else {
             print("DEBUG: Full chunk end \(fullChunkEnd) > total \(totalLength); skipping invalid chunk at offset \(offset)")
             break
         }
-        
+       
         let typeStart = offset + 4
         let typeRange = typeStart..<(typeStart + 4)
         guard typeRange.upperBound <= totalLength else {
@@ -148,10 +148,10 @@ func parsePromptNodes(from url: URL) -> [NodeInfo] {
         let typeData = data.subdata(in: typeRange)
         let typeBytes = [UInt8](typeData)
         let chunkType = String(bytes: typeBytes, encoding: .ascii) ?? ""
-        
+       
         // DEBUG: Log type bytes (remove after fix)
         print("DEBUG: Type bytes: [\(typeBytes.map { String(format: "%02x", $0) }.joined(separator: " "))], chunk: \(chunkType) length: \(length)")
-        
+       
         // For tEXt chunk: keyword\0value
         if chunkType == "tEXt" {
             let textStart = typeStart + 4  // After type
@@ -176,13 +176,13 @@ func parsePromptNodes(from url: URL) -> [NodeInfo] {
         else if chunkType == "zTXt" {
             print("DEBUG: zTXt chunk found at offset \(offset), length \(length); skipping (decompression needed?)")
         }
-        
+       
         // Advance to next chunk
         offset = fullChunkEnd
         // DEBUG: (remove after fix)
         print("DEBUG: Advanced to next offset: \(offset)")
     }
-    
+   
     // Fallback to ImageIO if manual didn't find it
     if workflowStr == nil {
         print("DEBUG: No tEXt chunks found; falling back to ImageIO")
@@ -193,7 +193,7 @@ func parsePromptNodes(from url: URL) -> [NodeInfo] {
             return []
         }
         print("DEBUG: ImageIO PNG dict keys: \(pngDict.allKeys)")
-        
+       
         let fallbackStr: String? = pngDict["workflow"] as? String ?? pngDict["prompt"] as? String ?? pngDict["Workflow"] as? String ?? pngDict["Prompt"] as? String ?? nil
         workflowStr = fallbackStr
         if let ws = workflowStr {
@@ -203,14 +203,14 @@ func parsePromptNodes(from url: URL) -> [NodeInfo] {
             return []
         }
     }
-    
+   
     guard let extractedWorkflowStr = workflowStr else {
         print("DEBUG: No workflow string extracted after all methods")
         return []
     }
     print("DEBUG: Workflow string length: \(extractedWorkflowStr.count)")
     print("DEBUG: Using workflow str: \(extractedWorkflowStr.prefix(100))...")
-    
+   
     // Parse JSON
     guard let jsonData = extractedWorkflowStr.data(using: .utf8),
           let json = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any] else {
@@ -218,9 +218,9 @@ func parsePromptNodes(from url: URL) -> [NodeInfo] {
         return []
     }
     print("DEBUG: JSON parsed. Top-level keys: \(Array(json.keys).sorted())")
-    
+   
     var promptNodes: [NodeInfo] = []
-    
+   
     // Full workflow: "nodes" array
     if let nodesArray = json["nodes"] as? [[String: Any]] {
         print("DEBUG: Full workflow - \(nodesArray.count) nodes")
@@ -228,7 +228,7 @@ func parsePromptNodes(from url: URL) -> [NodeInfo] {
             guard let nodeID = node["id"] as? Int,
                   let classType = node["type"] as? String else { continue }
             let nodeIDStr = String(nodeID)
-            
+           
             if classType.contains("CLIPTextEncode") {
                 let widgetsValues = node["widgets_values"] as? [Any] ?? []
                 let text = widgetsValues.compactMap { $0 as? String }.first ?? ""
@@ -242,7 +242,7 @@ func parsePromptNodes(from url: URL) -> [NodeInfo] {
         print("DEBUG: Flat prompt dict mode")
         for (nodeID, node) in json {
             guard let nodeDict = node as? [String: Any], let classType = nodeDict["class_type"] as? String else { continue }
-            
+           
             if classType.contains("CLIPTextEncode") {
                 let text = (nodeDict["inputs"] as? [String: Any])?["text"] as? String ?? ""
                 let label = text.isEmpty ? "Node \(nodeID)" : "Node \(nodeID): \(text.prefix(50))\(text.count > 50 ? "..." : "")"
@@ -250,21 +250,21 @@ func parsePromptNodes(from url: URL) -> [NodeInfo] {
             }
         }
     }
-    
+   
     let result = promptNodes.sorted { $0.id < $1.id }
     print("DEBUG: Total prompt nodes: \(result.count)")
     return result
 }
-
+ 
 struct InputImagesSection: View {
     @Binding var imageSlots: [ImageSlot]
     @Binding var errorItem: AlertError?
     let onAnnotate: (UUID) -> Void
     @EnvironmentObject var appState: AppState
-    
+   
     @State private var showCopiedMessage: Bool = false
     @State private var showClearConfirmation: Bool = false
-    
+   
     private var backgroundColor: Color {
         #if os(iOS)
         Color(.systemGray5)
@@ -279,7 +279,7 @@ struct InputImagesSection: View {
         Color(NSColor.windowBackgroundColor)  // macOS equivalent
         #endif
     }
-    
+   
     var body: some View {
         if appState.settings.mode == .grok || !appState.canAddImages {
             Text("Input images not supported in this mode.")
@@ -356,7 +356,7 @@ struct InputImagesSection: View {
             }
         }
     }
-
+ 
     private func addImageSlot() {
         if imageSlots.count < appState.maxImageSlots {
             imageSlots.append(ImageSlot())
@@ -386,7 +386,7 @@ struct InputImagesSection: View {
 #endif
     }
 }
-
+ 
 struct ImageSlotItemView: View {
     @Binding var slot: ImageSlot
     @Binding var errorItem: AlertError?
@@ -398,7 +398,7 @@ struct ImageSlotItemView: View {
     
     @State private var isDropTargeted: Bool = false  // Added for drop highlight
     @State private var showPicker: Bool = false  // Added for PHPicker
-
+ 
     @Environment(\.horizontalSizeClass) private var sizeClass  // Added: Detect compact (iPhone) vs regular (iPad)
     
     var body: some View {
@@ -472,11 +472,9 @@ struct ImageSlotItemView: View {
                     .frame(width: sizeClass == .compact ? 100 : 150, height: sizeClass == .compact ? 100 : 150)
             }
         }
-        #if os(macOS)
         .onDrop(of: [UTType.fileURL, UTType.image], isTargeted: $isDropTargeted) { providers in
             handleDrop(providers: providers)
         }
-        #endif
     }
     
     // Extracted: Path text and action buttons (browse, paste, annotate)
@@ -691,6 +689,16 @@ struct ImageSlotItemView: View {
         }
     }
     
+    private func copyToClipboard(_ text: String) {
+    #if os(iOS)
+            UIPasteboard.general.string = text
+    #elseif os(macOS)
+            let pasteboard = NSPasteboard.general
+            pasteboard.clearContents()
+            pasteboard.setString(text, forType: .string)
+    #endif
+        }
+    
     private func pasteImage() {
         var pngData: Data? = nil
         var image: PlatformImage? = nil
@@ -740,65 +748,68 @@ struct ImageSlotItemView: View {
         }
     }
     
-    private func copyToClipboard(_ text: String) {
-        #if os(iOS)
-        UIPasteboard.general.string = text
-        #elseif os(macOS)
-        let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
-        pasteboard.setString(text, forType: .string)
-        #endif
-    }
-    
     // New: Handle drop (macOS only)
-#if os(macOS)
-private func handleDrop(providers: [NSItemProvider]) -> Bool {
-    guard let provider = providers.first else { return false }
-    
-    // First, try loading as URL (for file drags)
-    provider.loadObject(ofClass: URL.self) { reading, error in
-        if let url = reading as? URL, error == nil {
-            DispatchQueue.main.async {
-                self.loadImageFromURL(url)
+    private func handleDrop(providers: [NSItemProvider]) -> Bool {
+        guard let provider = providers.first else { return false }
+        
+        if provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) {
+            provider.loadFileRepresentation(forTypeIdentifier: UTType.fileURL.identifier) { url, error in
+                if let error = error {
+                    DispatchQueue.main.async {
+                        self.errorItem = AlertError(message: "Drop error: \(error.localizedDescription)")
+                    }
+                    return
+                }
+                
+                guard let url = url else { return }
+                
+                let didStart = url.startAccessingSecurityScopedResource()
+                DispatchQueue.main.async {
+                    self.loadImageFromURL(url)
+                }
+                if didStart {
+                    url.stopAccessingSecurityScopedResource()
+                }
             }
-            return
+        } else if provider.hasItemConformingToTypeIdentifier(UTType.image.identifier) {
+            // Find the exact type that conforms to image
+            let types = provider.registeredTypeIdentifiers
+            let imageType = types.first { UTType($0)?.conforms(to: .image) ?? false } ?? UTType.image.identifier
+            provider.loadDataRepresentation(forTypeIdentifier: imageType) { data, error in
+                if let error = error {
+                    DispatchQueue.main.async {
+                        self.errorItem = AlertError(message: "Drop error: \(error.localizedDescription)")
+                    }
+                    return
+                }
+                
+                guard let data = data else { return }
+                
+                guard let platformImage = PlatformImage(data: data) else { return }
+                
+                DispatchQueue.main.async {
+                    self.slot.image = platformImage
+                    self.slot.path = "Dropped Image"
+                    
+                    var origData: Data? = nil
+                    // Attempt to extract prompts if PNG (check signature and parse from original data)
+                    if isPNGData(data) {
+                        origData = data
+                        let promptNodes = parsePromptNodes(from: data)
+                        if !promptNodes.isEmpty {
+                            self.slot.promptNodes = promptNodes.sorted { $0.id < $1.id }
+                            self.slot.selectedPromptIndex = 0
+                        }
+                    }
+                    self.slot.originalData = origData
+                }
+            }
+        } else {
+            return false
         }
         
-        // Fallback: Load as raw image data (for direct image drags, e.g., from Photos or browsers)
-        provider.loadDataRepresentation(forTypeIdentifier: UTType.image.identifier) { data, error in
-            if let error = error {
-                DispatchQueue.main.async {
-                    self.errorItem = AlertError(message: "Drop error: \(error.localizedDescription)")
-                }
-                return
-            }
-            
-            guard let data = data else { return }
-            
-            guard let nsImage = NSImage(data: data) else { return }
-            
-            DispatchQueue.main.async {
-                self.slot.image = nsImage
-                self.slot.path = "Dropped Image"
-                
-                var origData: Data? = nil
-                // Attempt to extract prompts if PNG (check signature and parse from original data)
-                if isPNGData(data) {
-                    origData = data
-                    let promptNodes = parsePromptNodes(from: data)
-                    if !promptNodes.isEmpty {
-                        self.slot.promptNodes = promptNodes.sorted { $0.id < $1.id }
-                        self.slot.selectedPromptIndex = 0
-                    }
-                }
-                self.slot.originalData = origData
-            }
-        }
+        return true
     }
-    
-    return true
-}
-#endif
     private func loadImageFromURL(_ url: URL) {
         do {
             let (image, promptNodes, originalData) = try withSecureAccess(to: url) {
@@ -833,9 +844,9 @@ private func handleDrop(providers: [NSItemProvider]) -> Bool {
         }
     }
     
-
+ 
 }
-
+ 
 // Added: Wrapper for PHPickerViewController
 #if os(iOS)
 struct PHPickerWrapper: UIViewControllerRepresentable {

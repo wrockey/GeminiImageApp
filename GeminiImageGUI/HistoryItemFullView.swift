@@ -1,4 +1,4 @@
-// HistoryItemFullView.swift
+// HistoryFullView.swift
 import SwiftUI
 #if os(macOS)
 import AppKit
@@ -407,7 +407,7 @@ struct FullHistoryItemView: View {
   
     private func deleteHistoryItem(item: HistoryItem, deleteFile: Bool) {
         // Compute sorted history and current index before deletion
-        let currentHistory = flattenHistory(appState.historyState.history).sorted(by: { $0.date > $1.date })
+        let currentHistory = flattenHistory(appState.historyState.history)
         guard let oldIdx = currentHistory.firstIndex(where: { $0.id == item.id }) else { return }
        
         if deleteFile, let path = item.imagePath {
@@ -427,7 +427,7 @@ struct FullHistoryItemView: View {
         _ = appState.historyState.findAndRemoveEntry(with: item.id)
        
         // Recompute sorted history after deletion
-        let newHistory = flattenHistory(appState.historyState.history).sorted(by: { $0.date > $1.date })
+        let newHistory = flattenHistory(appState.historyState.history)
         if newHistory.isEmpty {
             selectedId = nil
         } else {

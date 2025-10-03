@@ -1,7 +1,10 @@
 // HistoryTreeNode.swift
 import SwiftUI
+import UniformTypeIdentifiers
 #if os(macOS)
 import AppKit
+#elseif os(iOS)
+import UIKit
 #endif
 
 // Move TreeNodeView outside
@@ -22,7 +25,7 @@ struct TreeNodeView: View {
     @Binding var isEditing: Bool
     @Binding var toastMessage: String?
     @Binding var showToast: Bool
-   
+    
     init(
         entry: HistoryEntry,
         showDeleteAlert: Binding<Bool>,
@@ -54,7 +57,7 @@ struct TreeNodeView: View {
         self._toastMessage = toastMessage
         self._showToast = showToast
     }
-   
+    
     var body: some View {
         if case .folder(let folder) = entry {
             AnyView(
@@ -283,7 +286,7 @@ struct TreeNodeView: View {
             )
         }
     }
-   
+    
     private func hideToastAfterDelay() {
         DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
             withAnimation(.easeOut(duration: 0.3)) {
@@ -298,37 +301,36 @@ struct LazyThumbnailView: View {
     let item: HistoryItem
     @State private var thumbnail: PlatformImage? = nil
     @EnvironmentObject var appState: AppState
-   
+    
     private var dateFormatter: DateFormatter {
         let formatter = DateFormatter()
         formatter.dateStyle = .short
         formatter.timeStyle = .short
         return formatter
     }
-   
+    
     var body: some View {
         Group {
             if let img = thumbnail {
-                if let path = item.imagePath {
-                    Image(platformImage: img)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 50, height: 50)
-                        .cornerRadius(12)
-                        .shadow(color: .black.opacity(0.2), radius: 4, x: 0, y: 2)
-                        .help("Thumbnail of generated image")
-                        .accessibilityLabel("Thumbnail of image generated on \(dateFormatter.string(from: item.date))")
-                        .draggable(URL(fileURLWithPath: path))
-                } else {
-                    Image(platformImage: img)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 50, height: 50)
-                        .cornerRadius(12)
-                        .shadow(color: .black.opacity(0.2), radius: 4, x: 0, y: 2)
-                        .help("Thumbnail of generated image")
-                        .accessibilityLabel("Thumbnail of image generated on \(dateFormatter.string(from: item.date))")
-                }
+                Image(platformImage: img)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 50, height: 50)
+                    .cornerRadius(12)
+                    .shadow(color: .black.opacity(0.2), radius: 4, x: 0, y: 2)
+                    .help("Thumbnail of generated image")
+                    .accessibilityLabel("Thumbnail of image generated on \(dateFormatter.string(from: item.date))")
+                    .onDrag {
+                        guard let data = img.pngData() else {
+                            return NSItemProvider()
+                        }
+                        let provider = NSItemProvider()
+                        provider.registerDataRepresentation(forTypeIdentifier: UTType.png.identifier, visibility: .all) { completion in
+                            completion(data, nil)
+                            return nil
+                        }
+                        return provider
+                    }
             } else {
                 Image(systemName: "photo")
                     .font(.system(size: 50))
@@ -342,7 +344,7 @@ struct LazyThumbnailView: View {
             }
         }
     }
-   
+    
     private func loadThumbnail() {
         DispatchQueue.global(qos: .background).async {
             let loadedImage = loadImage(for: item)
@@ -351,7 +353,7 @@ struct LazyThumbnailView: View {
             }
         }
     }
-   
+    
     private func loadImage(for item: HistoryItem) -> PlatformImage? {
         guard let path = item.imagePath else { return nil }
         let fileURL = URL(fileURLWithPath: path)
@@ -367,3 +369,20 @@ struct LazyThumbnailView: View {
         }
     }
 }
+
+// Assume PlatformImage extension for pngData()
+#if os(macOS)
+extension NSImage {
+    func pngData() -> Data? {
+        guard let cgImage = self.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return nil }
+        let bitmap = NSBitmapImageRep(cgImage: cgImage)
+        return bitmap.representation(using: .png, properties: [:])
+    }
+}
+#elseif os(iOS)
+extension UIImage {
+    func pngData() -> Data? {
+        return self.pngData()
+    }
+}
+#endif

@@ -323,3 +323,4 @@ struct FolderDropDelegate: DropDelegate {
         }
     }
 }
+

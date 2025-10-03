@@ -16,6 +16,8 @@ typealias PlatformImage = NSImage
 #elseif os(iOS)
 typealias PlatformImage = UIImage
 #endif
+
+
  
 extension PlatformImage {
     var platformSize: CGSize {
@@ -61,6 +63,8 @@ extension PlatformImage {
         #endif
     }
 }
+
+
  
 // MARK: - Pasteboard Abstraction
 struct PlatformPasteboard {
