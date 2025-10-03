@@ -1,4 +1,3 @@
-// HistoryView.swift
 import SwiftUI
 #if os(macOS)
 import AppKit
@@ -21,7 +20,7 @@ struct HistoryView: View {
     #endif
     #if os(macOS)
     @State private var isEditing: Bool = false
-    #if swift(>=5.7) // Ensure macOS 13.0+ for openWindow
+    #if swift(>=5.7)
     @Environment(\.openWindow) private var openWindow
     #endif
     #endif
@@ -153,16 +152,16 @@ struct HistoryView: View {
             #endif
         }
     }
-  
+    
     private func hideToastAfterDelay() {
         DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
             withAnimation(.easeOut(duration: 0.3)) {
                 showToast = false
-                showAddedMessage = false // Ensure both are cleared
+                showAddedMessage = false
             }
         }
     }
-  
+    
     private var header: some View {
         #if os(macOS)
         HStack {
@@ -228,7 +227,7 @@ struct HistoryView: View {
                         self.hideToastAfterDelay()
                         return
                     }
-                    let insertIndex = 0 // Insert at top for header drop
+                    let insertIndex = 0
                     appState.historyState.insert(entries: movedEntries, inFolderId: nil, at: insertIndex, into: &snapshot)
                     appState.historyState.history = snapshot
                     appState.historyState.saveHistory()
@@ -305,7 +304,7 @@ struct HistoryView: View {
                         self.hideToastAfterDelay()
                         return
                     }
-                    let insertIndex = 0 // Insert at top for header drop
+                    let insertIndex = 0
                     appState.historyState.insert(entries: movedEntries, inFolderId: nil, at: insertIndex, into: &snapshot)
                     appState.historyState.history = snapshot
                     appState.historyState.saveHistory()
@@ -431,7 +430,7 @@ struct HistoryView: View {
             .accessibilityLabel("Select multiple items")
         }
     }
-  
+    
     private var searchField: some View {
         TextField("Search prompts or dates...", text: $searchText)
             .textFieldStyle(.roundedBorder)
@@ -439,7 +438,7 @@ struct HistoryView: View {
             .help("Search history by prompt text or date")
             .accessibilityLabel("Search prompts or dates")
     }
-  
+    
     private var historyList: some View {
         ScrollView {
             LazyVStack(alignment: .leading) {
@@ -588,7 +587,7 @@ struct HistoryView: View {
         $isEditing
         #endif
     }
-  
+    
     @ViewBuilder
     private func entryRow(for entry: HistoryEntry) -> some View {
         switch entry {
@@ -647,7 +646,7 @@ struct HistoryView: View {
             }
         }
     }
-  
+    
     private func itemRow(for item: HistoryItem) -> some View {
         var creator: String? = nil
         if let mode = item.mode {
@@ -798,7 +797,7 @@ struct HistoryView: View {
                             let success = appState.historyState.moveToFolder(entriesWithIds: Array(selectedIDs), toFolderId: nil)
                             if success {
                                 selectedIDs.removeAll()
-                                toastMessage = "Moved to root"
+                                toastMessage = selectedIDs.count > 1 ? "Moved \(selectedIDs.count) items to root" : "Moved to root"
                                 showToast = true
                                 hideToastAfterDelay()
                             } else {
@@ -809,22 +808,20 @@ struct HistoryView: View {
                         }
                         .accessibilityLabel("Move selected items to root")
                         ForEach(appState.historyState.allFolders()) { folderOption in
-                            if !folderOption.containsAny(ids: selectedIDs, in: appState.historyState.history) {
-                                Button(folderOption.name) {
-                                    let success = appState.historyState.moveToFolder(entriesWithIds: Array(selectedIDs), toFolderId: folderOption.id)
-                                    if success {
-                                        selectedIDs.removeAll()
-                                        toastMessage = "Moved to \(folderOption.name)"
-                                        showToast = true
-                                        hideToastAfterDelay()
-                                    } else {
-                                        toastMessage = "Failed to move to \(folderOption.name)"
-                                        showToast = true
-                                        hideToastAfterDelay()
-                                    }
+                            Button(folderOption.name) {
+                                let success = appState.historyState.moveToFolder(entriesWithIds: Array(selectedIDs), toFolderId: folderOption.id)
+                                if success {
+                                    selectedIDs.removeAll()
+                                    toastMessage = selectedIDs.count > 1 ? "Moved \(selectedIDs.count) items to \(folderOption.name)" : "Moved to \(folderOption.name)"
+                                    showToast = true
+                                    hideToastAfterDelay()
+                                } else {
+                                    toastMessage = "Failed to move to \(folderOption.name)"
+                                    showToast = true
+                                    hideToastAfterDelay()
                                 }
-                                .accessibilityLabel("Move selected items to folder \(folderOption.name)")
                             }
+                            .accessibilityLabel("Move selected items to folder \(folderOption.name)")
                         }
                     }
                     .disabled(appState.historyState.allFolders().isEmpty)
@@ -841,7 +838,7 @@ struct HistoryView: View {
             }
         }
     }
-  
+    
     private func copyPromptToClipboard(_ prompt: String) {
         #if os(macOS)
         NSPasteboard.general.clearContents()
@@ -850,7 +847,7 @@ struct HistoryView: View {
         UIPasteboard.general.string = prompt
         #endif
     }
-  
+    
     private func deleteEntries(deleteFiles: Bool) {
         if deleteFiles {
             for entry in entriesToDelete {
@@ -896,7 +893,7 @@ struct HistoryView: View {
             }
         }
     }
-  
+    
     private func loadHistoryImage(for item: HistoryItem) -> PlatformImage? {
         guard let path = item.imagePath else { return nil }
         let fileURL = URL(fileURLWithPath: path)
@@ -938,7 +935,7 @@ struct HistoryView: View {
         }
         appState.ui.imageSlots.append(newSlot)
     }
-  
+    
     private func filterEntries(_ entries: [HistoryEntry], with search: String) -> [HistoryEntry] {
         entries.compactMap { entry in
             switch entry {
