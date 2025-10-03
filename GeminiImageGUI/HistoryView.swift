@@ -178,75 +178,15 @@ struct HistoryView: View {
             .buttonStyle(.plain)
             .help("Collapse history sidebar")
             .accessibilityLabel("Collapse history sidebar")
-           
+            
             Text("History")
                 .font(.system(.headline, design: .default, weight: .semibold))
                 .kerning(0.2)
                 .help("View past generated images and prompts")
-           
+            
             Spacer()
-           
-            if isEditing {
-                Button(action: {
-                    if !selectedIDs.isEmpty {
-                        appState.historyState.moveToTop(entriesWithIds: Array(selectedIDs), inFolderId: nil)
-                        selectedIDs.removeAll()
-                        toastMessage = "Moved to top"
-                        showToast = true
-                        hideToastAfterDelay() // Ensure toast disappears
-                    }
-                }) {
-                    Image(systemName: "arrow.up.to.line")
-                        .symbolRenderingMode(.hierarchical)
-                        .foregroundColor(selectedIDs.isEmpty ? .gray : .blue.opacity(0.8))
-                }
-                .buttonStyle(.borderless)
-                .disabled(selectedIDs.isEmpty)
-                .help("Move selected items to top")
-                .accessibilityLabel("Move selected items to top")
-               
-                Button(action: {
-                    if !selectedIDs.isEmpty {
-                        appState.historyState.moveToBottom(entriesWithIds: Array(selectedIDs), inFolderId: nil)
-                        selectedIDs.removeAll()
-                        toastMessage = "Moved to bottom"
-                        showToast = true
-                        hideToastAfterDelay() // Ensure toast disappears
-                    }
-                }) {
-                    Image(systemName: "arrow.down.to.line")
-                        .symbolRenderingMode(.hierarchical)
-                        .foregroundColor(selectedIDs.isEmpty ? .gray : .blue.opacity(0.8))
-                }
-                .buttonStyle(.borderless)
-                .disabled(selectedIDs.isEmpty)
-                .help("Move selected items to bottom")
-                .accessibilityLabel("Move selected items to bottom")
-            }
-           
-            Button(action: {
-                isEditing.toggle()
-                if !isEditing {
-                    selectedIDs.removeAll()
-                }
-            }) {
-                Text(isEditing ? "Done" : "Select")
-            }
-            .buttonStyle(.borderless)
-            .help("Select multiple items")
-            .accessibilityLabel("Select multiple items")
-           
-            Button(action: {
-                appState.historyState.addFolder()
-            }) {
-                Image(systemName: "folder.badge.plus")
-                    .symbolRenderingMode(.hierarchical)
-                    .foregroundColor(.blue.opacity(0.8))
-            }
-            .buttonStyle(.borderless)
-            .help("Add new folder")
-            .accessibilityLabel("Add folder")
-           
+            
+            commonActions
         }
         .padding(.horizontal)
         .onDrop(of: [.text], isTargeted: nil) { providers in
@@ -302,102 +242,11 @@ struct HistoryView: View {
                 .font(.system(size: 24, weight: .semibold, design: .default))
                 .kerning(0.2)
                 .help("View past generated images and prompts")
-           
-            if isEditingBinding.wrappedValue {
-                Button(action: {
-                    if !selectedIDs.isEmpty {
-                        appState.historyState.moveToTop(entriesWithIds: Array(selectedIDs), inFolderId: nil)
-                        selectedIDs.removeAll()
-                        toastMessage = "Moved to top"
-                        showToast = true
-                        hideToastAfterDelay() // Ensure toast disappears
-                    }
-                }) {
-                    Image(systemName: "arrow.up.to.line")
-                        .symbolRenderingMode(.hierarchical)
-                        .foregroundColor(selectedIDs.isEmpty ? .gray : .blue.opacity(0.8))
-                }
-                .buttonStyle(.borderless)
-                .disabled(selectedIDs.isEmpty)
-                .help("Move selected items to top")
-                .accessibilityLabel("Move selected items to top")
-               
-                Button(action: {
-                    if !selectedIDs.isEmpty {
-                        appState.historyState.moveToBottom(entriesWithIds: Array(selectedIDs), inFolderId: nil)
-                        selectedIDs.removeAll()
-                        toastMessage = "Moved to bottom"
-                        showToast = true
-                        hideToastAfterDelay() // Ensure toast disappears
-                    }
-                }) {
-                    Image(systemName: "arrow.down.to.line")
-                        .symbolRenderingMode(.hierarchical)
-                        .foregroundColor(selectedIDs.isEmpty ? .gray : .blue.opacity(0.8))
-                }
-                .buttonStyle(.borderless)
-                .disabled(selectedIDs.isEmpty)
-                .help("Move selected items to bottom")
-                .accessibilityLabel("Move selected items to bottom")
-                Button(action: {
-                    if !selectedIDs.isEmpty {
-                        entriesToDelete = appState.historyState.findEntries(with: selectedIDs)
-                        showDeleteAlert = true
-                    }
-                }) {
-                    Image(systemName: "trash")
-                        .symbolRenderingMode(.hierarchical)
-                        .foregroundColor(selectedIDs.isEmpty ? .gray : .red.opacity(0.8))
-                }
-                .buttonStyle(.borderless)
-                .disabled(selectedIDs.isEmpty)
-                .help("Delete selected items")
-
-                Button(action: {
-                    if !selectedIDs.isEmpty {
-                        var addedCount = 0
-                        func addRecursively(entry: HistoryEntry) {
-                            switch entry {
-                            case .item(let item):
-                                addToInputImages(item: item)
-                                addedCount += 1
-                            case .folder(let folder):
-                                for child in folder.children {
-                                    addRecursively(entry: child)
-                                }
-                            }
-                        }
-                        for entry in appState.historyState.findEntries(with: selectedIDs) {
-                            addRecursively(entry: entry)
-                        }
-                        selectedIDs.removeAll()
-                        toastMessage = "Added \(addedCount) image\(addedCount == 1 ? "" : "s") to input"
-                        showToast = true
-                        hideToastAfterDelay()
-                    }
-                }) {
-                    Image(systemName: "plus")
-                        .symbolRenderingMode(.hierarchical)
-                        .foregroundColor(selectedIDs.isEmpty ? .gray : .blue.opacity(0.8))
-                }
-                .buttonStyle(.borderless)
-                .disabled(selectedIDs.isEmpty)
-                .help("Add selected images to input")
-            }
-           
-            Button(action: {
-                appState.historyState.addFolder()
-            }) {
-                Image(systemName: "folder.badge.plus")
-                    .symbolRenderingMode(.hierarchical)
-                    .foregroundColor(.blue.opacity(0.8))
-            }
-            .buttonStyle(.borderless)
-            .help("Add new folder")
-            .accessibilityLabel("Add folder")
-           
+            
             Spacer()
-           
+            
+            commonActions
+            
             Button(action: {
                 dismiss()
             }) {
@@ -409,8 +258,6 @@ struct HistoryView: View {
             .buttonStyle(.plain)
             .help("Close history view")
             .accessibilityLabel("Close history view")
-           
-            EditButton()
         }
         .padding(.horizontal)
         .padding(.vertical, 8)
@@ -462,6 +309,118 @@ struct HistoryView: View {
             return true
         }
         #endif
+    }
+
+    private var commonActions: some View {
+        Group {
+            Button(action: {
+                appState.historyState.addFolder()
+            }) {
+                Image(systemName: "folder.badge.plus")
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundColor(.blue.opacity(0.8))
+            }
+            .buttonStyle(.borderless)
+            .help("Add new folder")
+            .accessibilityLabel("Add folder")
+            
+            if isEditingBinding.wrappedValue {
+                Button(action: {
+                    if !selectedIDs.isEmpty {
+                        entriesToDelete = appState.historyState.findEntries(with: selectedIDs)
+                        showDeleteAlert = true
+                    }
+                }) {
+                    Image(systemName: "trash")
+                        .symbolRenderingMode(.hierarchical)
+                        .foregroundColor(selectedIDs.isEmpty ? .gray : .red.opacity(0.8))
+                }
+                .buttonStyle(.borderless)
+                .disabled(selectedIDs.isEmpty)
+                .help("Delete selected items")
+                .accessibilityLabel("Delete selected items")
+                
+                Button(action: {
+                    if !selectedIDs.isEmpty {
+                        appState.historyState.moveToTop(entriesWithIds: Array(selectedIDs), inFolderId: nil)
+                        selectedIDs.removeAll()
+                        toastMessage = "Moved to top"
+                        showToast = true
+                        hideToastAfterDelay()
+                    }
+                }) {
+                    Image(systemName: "arrow.up.to.line")
+                        .symbolRenderingMode(.hierarchical)
+                        .foregroundColor(selectedIDs.isEmpty ? .gray : .blue.opacity(0.8))
+                }
+                .buttonStyle(.borderless)
+                .disabled(selectedIDs.isEmpty)
+                .help("Move selected items to top")
+                .accessibilityLabel("Move selected items to top")
+                
+                Button(action: {
+                    if !selectedIDs.isEmpty {
+                        appState.historyState.moveToBottom(entriesWithIds: Array(selectedIDs), inFolderId: nil)
+                        selectedIDs.removeAll()
+                        toastMessage = "Moved to bottom"
+                        showToast = true
+                        hideToastAfterDelay()
+                    }
+                }) {
+                    Image(systemName: "arrow.down.to.line")
+                        .symbolRenderingMode(.hierarchical)
+                        .foregroundColor(selectedIDs.isEmpty ? .gray : .blue.opacity(0.8))
+                }
+                .buttonStyle(.borderless)
+                .disabled(selectedIDs.isEmpty)
+                .help("Move selected items to bottom")
+                .accessibilityLabel("Move selected items to bottom")
+                
+                Button(action: {
+                    if !selectedIDs.isEmpty {
+                        var addedCount = 0
+                        func addRecursively(entry: HistoryEntry) {
+                            switch entry {
+                            case .item(let item):
+                                addToInputImages(item: item)
+                                addedCount += 1
+                            case .folder(let folder):
+                                for child in folder.children {
+                                    addRecursively(entry: child)
+                                }
+                            }
+                        }
+                        for entry in appState.historyState.findEntries(with: selectedIDs) {
+                            addRecursively(entry: entry)
+                        }
+                        selectedIDs.removeAll()
+                        toastMessage = "Added \(addedCount) image\(addedCount == 1 ? "" : "s") to input"
+                        showToast = true
+                        hideToastAfterDelay()
+                    }
+                }) {
+                    Image(systemName: "plus")
+                        .symbolRenderingMode(.hierarchical)
+                        .foregroundColor(selectedIDs.isEmpty ? .gray : .blue.opacity(0.8))
+                }
+                .buttonStyle(.borderless)
+                .disabled(selectedIDs.isEmpty)
+                .help("Add selected images to input")
+                .accessibilityLabel("Add selected images to input")
+            }
+            
+            Button(action: {
+                isEditingBinding.wrappedValue.toggle()
+                if !isEditingBinding.wrappedValue {
+                    selectedIDs.removeAll()
+                }
+            }) {
+                Text(isEditingBinding.wrappedValue ? "Done" : "Select")
+            }
+            .buttonStyle(.borderless)
+            .help("Select multiple items")
+            .accessibilityLabel("Select multiple items")
+        }
     }
   
     private var searchField: some View {
