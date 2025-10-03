@@ -588,6 +588,21 @@ struct HistoryView: View {
         #endif
     }
     
+    // Helper to find the parent folder ID of an item
+    private func findParentFolderId(for itemId: UUID, in entries: [HistoryEntry]) -> UUID? {
+        for entry in entries {
+            if case .folder(let folder) = entry {
+                if folder.children.contains(where: { $0.id == itemId }) {
+                    return folder.id
+                }
+                if let nestedParent = findParentFolderId(for: itemId, in: folder.children) {
+                    return nestedParent
+                }
+            }
+        }
+        return nil // Item is in root if no parent folder is found
+    }
+    
     @ViewBuilder
     private func entryRow(for entry: HistoryEntry) -> some View {
         switch entry {
@@ -738,21 +753,27 @@ struct HistoryView: View {
                     .accessibilityLabel("Delete item")
                     #if os(macOS)
                     Menu("Move to...") {
-                        Button("Root") {
-                            let success = appState.historyState.moveToFolder(entriesWithIds: [item.id], toFolderId: nil)
-                            if success {
-                                selectedIDs.removeAll()
-                                toastMessage = "Moved to root"
-                                showToast = true
-                                hideToastAfterDelay()
-                            } else {
-                                toastMessage = "Failed to move to root"
-                                showToast = true
-                                hideToastAfterDelay()
+                        // Compute parent folder ID once
+                        let parentFolderId = findParentFolderId(for: item.id, in: appState.historyState.history)
+                        // Only show "Root" if the item is not in the root
+                        if parentFolderId != nil {
+                            Button("Root") {
+                                let success = appState.historyState.moveToFolder(entriesWithIds: [item.id], toFolderId: nil)
+                                if success {
+                                    selectedIDs.removeAll()
+                                    toastMessage = "Moved to root"
+                                    showToast = true
+                                    hideToastAfterDelay()
+                                } else {
+                                    toastMessage = "Failed to move to root"
+                                    showToast = true
+                                    hideToastAfterDelay()
+                                }
                             }
+                            .accessibilityLabel("Move item to root")
                         }
-                        .accessibilityLabel("Move item to root")
-                        ForEach(appState.historyState.allFolders()) { folderOption in
+                        // Filter out the current parent folder
+                        ForEach(appState.historyState.allFolders().filter { $0.id != parentFolderId }) { folderOption in
                             Button(folderOption.name) {
                                 let success = appState.historyState.moveToFolder(entriesWithIds: [item.id], toFolderId: folderOption.id)
                                 if success {
@@ -769,7 +790,7 @@ struct HistoryView: View {
                             .accessibilityLabel("Move item to folder \(folderOption.name)")
                         }
                     }
-                    .disabled(appState.historyState.allFolders().isEmpty)
+                    .disabled(appState.historyState.allFolders().filter { $0.id != findParentFolderId(for: item.id, in: appState.historyState.history) }.isEmpty && findParentFolderId(for: item.id, in: appState.historyState.history) == nil)
                     .onAppear {
                         print("Context menu for item \(item.id): Move to... menu rendered with \(appState.historyState.allFolders().count) folders")
                     }
