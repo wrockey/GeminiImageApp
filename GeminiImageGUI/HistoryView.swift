@@ -339,6 +339,50 @@ struct HistoryView: View {
                 .disabled(selectedIDs.isEmpty)
                 .help("Move selected items to bottom")
                 .accessibilityLabel("Move selected items to bottom")
+                Button(action: {
+                    if !selectedIDs.isEmpty {
+                        entriesToDelete = appState.historyState.findEntries(with: selectedIDs)
+                        showDeleteAlert = true
+                    }
+                }) {
+                    Image(systemName: "trash")
+                        .symbolRenderingMode(.hierarchical)
+                        .foregroundColor(selectedIDs.isEmpty ? .gray : .red.opacity(0.8))
+                }
+                .buttonStyle(.borderless)
+                .disabled(selectedIDs.isEmpty)
+                .help("Delete selected items")
+
+                Button(action: {
+                    if !selectedIDs.isEmpty {
+                        var addedCount = 0
+                        func addRecursively(entry: HistoryEntry) {
+                            switch entry {
+                            case .item(let item):
+                                addToInputImages(item: item)
+                                addedCount += 1
+                            case .folder(let folder):
+                                for child in folder.children {
+                                    addRecursively(entry: child)
+                                }
+                            }
+                        }
+                        for entry in appState.historyState.findEntries(with: selectedIDs) {
+                            addRecursively(entry: entry)
+                        }
+                        selectedIDs.removeAll()
+                        toastMessage = "Added \(addedCount) image\(addedCount == 1 ? "" : "s") to input"
+                        showToast = true
+                        hideToastAfterDelay()
+                    }
+                }) {
+                    Image(systemName: "plus")
+                        .symbolRenderingMode(.hierarchical)
+                        .foregroundColor(selectedIDs.isEmpty ? .gray : .blue.opacity(0.8))
+                }
+                .buttonStyle(.borderless)
+                .disabled(selectedIDs.isEmpty)
+                .help("Add selected images to input")
             }
            
             Button(action: {
@@ -461,7 +505,14 @@ struct HistoryView: View {
                                     folderId: nil,
                                     isEditing: isEditingBinding,
                                     toastMessage: $toastMessage,
-                                    showToast: $showToast
+                                    showToast: $showToast,
+                                    addToInputProvider: { item in
+                                        self.addToInputImages(item: item)
+                                        #if os(iOS)
+                                        self.showAddedMessage = true
+                                        self.hideToastAfterDelay()
+                                        #endif
+                                    }
                                 )
                             )
                         } moveAction: { from, to in
@@ -483,7 +534,14 @@ struct HistoryView: View {
                                     folderId: nil,
                                     isEditing: isEditingBinding,
                                     toastMessage: $toastMessage,
-                                    showToast: $showToast
+                                    showToast: $showToast,
+                                    addToInputProvider: { item in
+                                        self.addToInputImages(item: item)
+                                        #if os(iOS)
+                                        self.showAddedMessage = true
+                                        self.hideToastAfterDelay()
+                                        #endif
+                                    }
                                 )
                             )
                         })
@@ -566,37 +624,21 @@ struct HistoryView: View {
                 .onDrag {
                     var payload: String
                     var idsToDrag: [UUID]
-#if os(iOS)
                     if isEditingBinding.wrappedValue && !selectedIDs.isEmpty {
                         idsToDrag = Array(selectedIDs).sorted()
                     } else {
                         idsToDrag = [entry.id]
                     }
-#else
-                    if isEditing && !selectedIDs.isEmpty {
-                        idsToDrag = Array(selectedIDs).sorted()
-                    } else {
-                        idsToDrag = [entry.id]
-                    }
-#endif
                     payload = idsToDrag.map { $0.uuidString }.joined(separator: ",")
                     return NSItemProvider(object: payload as NSString)
                 }
         case .folder(let folder):
             HStack {
-#if os(iOS)
                 if isEditingBinding.wrappedValue {
                     Image(systemName: selectedIDs.contains(folder.id) ? "checkmark.circle.fill" : "circle")
                         .foregroundColor(.accentColor)
                         .font(.system(size: 20))
                 }
-#else
-                if isEditing {
-                    Image(systemName: selectedIDs.contains(folder.id) ? "checkmark.circle.fill" : "circle")
-                        .foregroundColor(.accentColor)
-                        .font(.system(size: 20))
-                }
-#endif
                 Image(systemName: "folder.fill")
                     .resizable()
                     .scaledToFit()
@@ -606,7 +648,6 @@ struct HistoryView: View {
                 Text(folder.name)
             }
             .contentShape(Rectangle())
-#if os(iOS)
             .onTapGesture {
                 if isEditingBinding.wrappedValue {
                     var allIDs = Set<UUID>()
@@ -619,38 +660,16 @@ struct HistoryView: View {
                         selectedIDs.formUnion(allIDs)
                     }
                 }
+                // Note: When not editing, tap is handled by the parent DisclosureGroup in TreeNodeView to toggle isExpanded
             }
-#else
-            .onTapGesture {
-                if isEditing {
-                    var allIDs = Set<UUID>()
-                    entry.collectAllIDs(into: &allIDs)
-                    if selectedIDs.contains(folder.id) {
-                        for id in allIDs {
-                            selectedIDs.remove(id)
-                        }
-                    } else {
-                        selectedIDs.formUnion(allIDs)
-                    }
-                }
-            }
-#endif
             .onDrag {
                 var payload: String
                 var idsToDrag: [UUID]
-#if os(iOS)
                 if isEditingBinding.wrappedValue && !selectedIDs.isEmpty {
                     idsToDrag = Array(selectedIDs).sorted()
                 } else {
                     idsToDrag = [entry.id]
                 }
-#else
-                if isEditing && !selectedIDs.isEmpty {
-                    idsToDrag = Array(selectedIDs).sorted()
-                } else {
-                    idsToDrag = [entry.id]
-                }
-#endif
                 payload = idsToDrag.map { $0.uuidString }.joined(separator: ",")
                 return NSItemProvider(object: payload as NSString)
             }
@@ -661,28 +680,20 @@ struct HistoryView: View {
         var creator: String? = nil
         if let mode = item.mode {
             creator = mode == .gemini ? "Gemini" : mode == .grok ? item.modelUsed ?? appState.settings.selectedGrokModel : mode == .aimlapi ? item.modelUsed ?? appState.settings.selectedAIMLModel : (item.workflowName ?? "ComfyUI")
-           
+            
             if let idx = item.indexInBatch, let tot = item.totalInBatch {
                 creator! += " #\(idx + 1) of \(tot)"
             }
         }
         
         return HStack(spacing: 12) {
-            #if os(iOS)
             if isEditingBinding.wrappedValue {
                 Image(systemName: selectedIDs.contains(item.id) ? "checkmark.circle.fill" : "circle")
                     .foregroundColor(.accentColor)
                     .font(.system(size: 20))
             }
-            #else
-            if isEditing {
-                Image(systemName: selectedIDs.contains(item.id) ? "checkmark.circle.fill" : "circle")
-                    .foregroundColor(.accentColor)
-                    .font(.system(size: 20))
-            }
-            #endif
             LazyThumbnailView(item: item)
-           
+            
             VStack(alignment: .leading, spacing: 4) {
                 Text(item.prompt.prefix(50) + (item.prompt.count > 50 ? "..." : ""))
                     .font(.subheadline)
@@ -700,60 +711,9 @@ struct HistoryView: View {
                         .help("Generated with: \(creator)")
                 }
             }
-           
             Spacer()
-           
-            Button(action: {
-                #if os(macOS)
-                #if swift(>=5.7) // macOS 13.0+
-                openWindow(id: "history-viewer", value: item.id)
-                #else
-                fullHistoryItemId = item.id
-                #endif
-                #else
-                appState.presentedModal = .fullHistoryItem(item.id)
-                #endif
-            }) {
-                Image(systemName: "magnifyingglass.circle.fill")
-                    .foregroundColor(.blue.opacity(0.8))
-                    .font(.system(size: 20))
-                    .symbolRenderingMode(.hierarchical)
-            }
-            .buttonStyle(.borderless)
-            .help("View full image")
-            .accessibilityLabel("View full image")
-           
-            Button(action: {
-                entriesToDelete = [.item(item)]
-                showDeleteAlert = true
-            }) {
-                Image(systemName: "trash.circle.fill")
-                    .foregroundColor(.red.opacity(0.8))
-                    .font(.system(size: 20))
-                    .symbolRenderingMode(.hierarchical)
-            }
-            .buttonStyle(.borderless)
-            .help("Delete history item")
-            .accessibilityLabel("Delete history item")
-           
-            Button(action: {
-                addToInputImages(item: item)
-                #if os(iOS)
-                showAddedMessage = true
-                hideToastAfterDelay()
-                #endif
-            }) {
-                Image(systemName: "plus.circle.fill")
-                    .foregroundColor(.blue.opacity(0.8))
-                    .font(.system(size: 20))
-                    .symbolRenderingMode(.hierarchical)
-            }
-            .buttonStyle(.borderless)
-            .help("Add to input images")
-            .accessibilityLabel("Add to input images")
         }
         .padding(.vertical, 4)
-        #if os(iOS)
         .contentShape(Rectangle())
         .onTapGesture {
             if isEditingBinding.wrappedValue {
@@ -762,36 +722,27 @@ struct HistoryView: View {
                 } else {
                     selectedIDs.insert(item.id)
                 }
+            } else {
+                // View full image
+                #if os(macOS)
+                #if swift(>=5.7)
+                openWindow(id: "history-viewer", value: item.id)
+                #else
+                fullHistoryItemId = item.id
+                #endif
+                #else
+                appState.presentedModal = .fullHistoryItem(item.id)
+                #endif
             }
         }
-        #else
-        .contentShape(Rectangle())
-        .onTapGesture {
-            if isEditing {
-                if selectedIDs.contains(item.id) {
-                    selectedIDs.remove(item.id)
-                } else {
-                    selectedIDs.insert(item.id)
-                }
-            }
-        }
-        #endif
         .onDrag {
             var payload: String
             var idsToDrag: [UUID]
-            #if os(iOS)
             if isEditingBinding.wrappedValue && !selectedIDs.isEmpty {
                 idsToDrag = Array(selectedIDs).sorted()
             } else {
                 idsToDrag = [item.id]
             }
-            #else
-            if isEditing && !selectedIDs.isEmpty {
-                idsToDrag = Array(selectedIDs).sorted()
-            } else {
-                idsToDrag = [item.id]
-            }
-            #endif
             payload = idsToDrag.map { $0.uuidString }.joined(separator: ",")
             return NSItemProvider(object: payload as NSString)
         }
