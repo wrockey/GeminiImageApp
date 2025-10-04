@@ -18,6 +18,7 @@ struct HistoryView: View {
     @State private var showToast: Bool = false
     #if os(iOS)
     @Environment(\.editMode) private var editMode: Binding<EditMode>?
+    @State private var showClearHistoryConfirmation: Bool = false
     #endif
     #if os(macOS)
     @State private var isEditing: Bool = false
@@ -79,6 +80,17 @@ struct HistoryView: View {
    
     var body: some View {
         content
+            #if os(iOS)
+            .alert("Clear History", isPresented: $showClearHistoryConfirmation) {
+                Button("Clear", role: .destructive) {
+                    appState.historyState.history = []
+                    appState.historyState.saveHistory()
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("This will remove all history entries but keep your files intact. Are you sure?")
+            }
+            #endif
     }
  
     private var content: some View {
@@ -199,6 +211,19 @@ struct HistoryView: View {
             Spacer()
            
             commonActions
+           
+            Button(action: {
+                showClearHistoryConfirmation = true
+            }) {
+                Image(systemName: "trash.circle.fill")
+                    .font(.system(size: 24))
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundColor(.red.opacity(0.8))
+            }
+            .buttonStyle(.plain)
+            .disabled(filteredHistory.isEmpty)
+            .help("Clear all history entries")
+            .accessibilityLabel("Clear history")
            
             Button(action: {
                 dismiss()
@@ -984,4 +1009,3 @@ struct HistoryView: View {
         return folders.map { .folder($0) } + items.map { .item($0) }
     }
 }
-

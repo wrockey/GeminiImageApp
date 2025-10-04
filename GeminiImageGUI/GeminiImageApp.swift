@@ -1003,12 +1003,33 @@ struct GeminiImageApp: App {
     @StateObject private var appState = AppState()
     @State private var showSplash = true
     @State private var batchFilePath: String = ""
+    #if os(macOS)
+    @State private var showClearHistoryConfirmation = false
+    #endif
    
     var body: some Scene {
         #if os(macOS)
         WindowGroup {
             ContentView()
                 .environmentObject(appState)
+                .alert("Clear History", isPresented: $showClearHistoryConfirmation) {
+                    Button("Clear", role: .destructive) {
+                        appState.historyState.history = []
+                        appState.historyState.saveHistory()
+                    }
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    Text("This will remove all history entries but keep your files intact. Are you sure?")
+                }
+        }
+        .commands {
+            CommandMenu("History") {
+                Button("Clear History") {
+                    showClearHistoryConfirmation = true
+                }
+                .disabled(appState.historyState.history.isEmpty)
+                .keyboardShortcut("k", modifiers: [.command, .shift])
+            }
         }
         WindowGroup(id: "text-editor", for: Data.self) { $data in
             TextEditorView(bookmarkData: data, batchFilePath: $batchFilePath)
