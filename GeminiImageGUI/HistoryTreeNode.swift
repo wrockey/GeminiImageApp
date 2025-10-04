@@ -6,7 +6,7 @@ import AppKit
 #elseif os(iOS)
 import UIKit
 #endif
-
+ 
 // Move TreeNodeView outside
 struct TreeNodeView: View {
     let entry: HistoryEntry
@@ -26,7 +26,7 @@ struct TreeNodeView: View {
     @Binding var toastMessage: String?
     @Binding var showToast: Bool
     let addToInputProvider: (HistoryItem) -> Void
-    
+   
     init(
         entry: HistoryEntry,
         showDeleteAlert: Binding<Bool>,
@@ -58,12 +58,32 @@ struct TreeNodeView: View {
         self._showToast = showToast
         self.addToInputProvider = addToInputProvider
     }
-    
+   
     var body: some View {
         if case .folder(let folder) = entry {
             DisclosureGroup(isExpanded: $isExpanded) {
                 VStack(alignment: .leading, spacing: 0) {
                     if searchText.isEmpty {
+                        #if os(macOS)
+                        ForEach(folder.children) { child in
+                            TreeNodeView(
+                                entry: child,
+                                showDeleteAlert: $showDeleteAlert,
+                                entriesToDelete: $entriesToDelete,
+                                appState: appState,
+                                selectedIDs: $selectedIDs,
+                                searchText: $searchText,
+                                activeEntry: $activeEntry,
+                                entryRowProvider: entryRowProvider,
+                                copyPromptProvider: copyPromptProvider,
+                                folderId: folder.id,
+                                isEditing: $isEditing,
+                                toastMessage: $toastMessage,
+                                showToast: $showToast,
+                                addToInputProvider: addToInputProvider
+                            )
+                        }
+                        #else
                         ReorderableForEach(
                             folder.children,
                             active: $activeEntry,
@@ -94,6 +114,7 @@ struct TreeNodeView: View {
                         } moveAction: { from, to in
                             appState.historyState.move(inFolderId: folder.id, from: from, to: to)
                         }
+                        #endif
                     } else {
                         ForEach(folder.children) { child in
                             AnyView(
@@ -118,6 +139,7 @@ struct TreeNodeView: View {
                     }
                 }
                 .padding(.leading, 20)
+                #if os(iOS)
                 .onDrop(of: [.text], isTargeted: nil) { providers in
                     guard let provider = providers.first else {
                         activeEntry = nil
@@ -175,6 +197,7 @@ struct TreeNodeView: View {
                     }
                     return true
                 }
+                #endif
             } label: {
                 entryRowProvider(entry)
                     .onLongPressGesture {
@@ -199,21 +222,23 @@ struct TreeNodeView: View {
                     }
                     #if os(macOS)
                     Menu("Move to...") {
-                        Button("Root") {
-                            let success = appState.historyState.moveToFolder(entriesWithIds: [folder.id], toFolderId: nil)
-                            if success {
-                                selectedIDs.removeAll()
-                                toastMessage = "Moved to root"
-                                showToast = true
-                                hideToastAfterDelay()
-                            } else {
-                                toastMessage = "Failed to move to root"
-                                showToast = true
-                                hideToastAfterDelay()
+                        if folderId != nil {
+                            Button("Root") {
+                                let success = appState.historyState.moveToFolder(entriesWithIds: [folder.id], toFolderId: nil)
+                                if success {
+                                    selectedIDs.removeAll()
+                                    toastMessage = "Moved to root"
+                                    showToast = true
+                                    hideToastAfterDelay()
+                                } else {
+                                    toastMessage = "Failed to move to root"
+                                    showToast = true
+                                    hideToastAfterDelay()
+                                }
                             }
+                            .accessibilityLabel("Move folder to root")
                         }
-                        .accessibilityLabel("Move folder to root")
-                        ForEach(appState.historyState.allFolders()) { folderOption in
+                        ForEach(appState.historyState.allFolders().filter { $0.id != folder.id }) { folderOption in
                             if !folderOption.containsAny(ids: Set([folder.id]), in: appState.historyState.history) {
                                 Button(folderOption.name) {
                                     let success = appState.historyState.moveToFolder(entriesWithIds: [folder.id], toFolderId: folderOption.id)
@@ -238,6 +263,7 @@ struct TreeNodeView: View {
                     }
                     #endif
                 } else if selectedIDs.contains(folder.id) {
+                    #if os(iOS)
                     Button("Move to Top") {
                         appState.historyState.moveToTop(entriesWithIds: Array(selectedIDs), inFolderId: folderId)
                         selectedIDs.removeAll()
@@ -254,23 +280,26 @@ struct TreeNodeView: View {
                         hideToastAfterDelay()
                     }
                     .accessibilityLabel("Move selected items to bottom")
+                    #endif
                     #if os(macOS)
                     Menu("Move to...") {
-                        Button("Root") {
-                            let success = appState.historyState.moveToFolder(entriesWithIds: Array(selectedIDs), toFolderId: nil)
-                            if success {
-                                selectedIDs.removeAll()
-                                toastMessage = "Moved to root"
-                                showToast = true
-                                hideToastAfterDelay()
-                            } else {
-                                toastMessage = "Failed to move to root"
-                                showToast = true
-                                hideToastAfterDelay()
+                        if folderId != nil {
+                            Button("Root") {
+                                let success = appState.historyState.moveToFolder(entriesWithIds: Array(selectedIDs), toFolderId: nil)
+                                if success {
+                                    selectedIDs.removeAll()
+                                    toastMessage = "Moved to root"
+                                    showToast = true
+                                    hideToastAfterDelay()
+                                } else {
+                                    toastMessage = "Failed to move to root"
+                                    showToast = true
+                                    hideToastAfterDelay()
+                                }
                             }
+                            .accessibilityLabel("Move selected items to root")
                         }
-                        .accessibilityLabel("Move selected items to root")
-                        ForEach(appState.historyState.allFolders()) { folderOption in
+                        ForEach(appState.historyState.allFolders().filter { !selectedIDs.contains($0.id) }) { folderOption in
                             if !folderOption.containsAny(ids: selectedIDs, in: appState.historyState.history) {
                                 Button(folderOption.name) {
                                     let success = appState.historyState.moveToFolder(entriesWithIds: Array(selectedIDs), toFolderId: folderOption.id)
@@ -316,7 +345,7 @@ struct TreeNodeView: View {
             entryRowProvider(entry) // Rely on itemRow(for:) for context menu
         }
     }
-    
+   
     private func hideToastAfterDelay() {
         DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
             withAnimation(.easeOut(duration: 0.3)) {
@@ -325,20 +354,20 @@ struct TreeNodeView: View {
         }
     }
 }
-
+ 
 // Move LazyThumbnailView outside
 struct LazyThumbnailView: View {
     let item: HistoryItem
     @State private var thumbnail: PlatformImage? = nil
     @EnvironmentObject var appState: AppState
-    
+   
     private var dateFormatter: DateFormatter {
         let formatter = DateFormatter()
         formatter.dateStyle = .short
         formatter.timeStyle = .short
         return formatter
     }
-    
+   
     var body: some View {
         Group {
             if let img = thumbnail {
@@ -374,7 +403,7 @@ struct LazyThumbnailView: View {
             }
         }
     }
-    
+   
     private func loadThumbnail() {
         DispatchQueue.global(qos: .background).async {
             let loadedImage = loadImage(for: item)
@@ -383,7 +412,7 @@ struct LazyThumbnailView: View {
             }
         }
     }
-    
+   
     private func loadImage(for item: HistoryItem) -> PlatformImage? {
         guard let path = item.imagePath else { return nil }
         let fileURL = URL(fileURLWithPath: path)
@@ -399,7 +428,7 @@ struct LazyThumbnailView: View {
         }
     }
 }
-
+ 
 // Assume PlatformImage extension for pngData()
 #if os(macOS)
 extension NSImage {

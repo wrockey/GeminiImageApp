@@ -1,16 +1,16 @@
 //ResponseSection.swift
 import SwiftUI
-
+ 
 struct ResponseSection: View {
     @EnvironmentObject var appState: AppState
     @Binding var imageScale: CGFloat
     @Binding var errorItem: AlertError?
     @Environment(\.colorScheme) var colorScheme
-    
+   
     @State private var finalScale: CGFloat = 1.0
     @State private var showCopiedOverlay: Bool = false
     @State private var showDeleteAlert: Bool = false
-    
+   
     var body: some View {
         VStack(spacing: 16) {  // Changed to VStack for vertical layout
             imageContent
@@ -35,7 +35,7 @@ struct ResponseSection: View {
             Text("Do you want to delete the image from history only or also delete the file?")
         }
     }
-    
+   
     private var backgroundColor: Color {
         #if os(iOS)
         Color(.systemGray6)
@@ -43,7 +43,7 @@ struct ResponseSection: View {
         Color.gray  // Fallback for macOS
         #endif
     }
-    
+   
     private var secondaryBackgroundColor: Color {
         #if os(iOS)
         Color(.systemGray6)
@@ -51,7 +51,7 @@ struct ResponseSection: View {
         Color.gray  // Fallback for macOS
         #endif
     }
-    
+   
     private var systemBackgroundColor: Color {
         #if os(iOS)
         Color(.systemBackground)
@@ -59,7 +59,7 @@ struct ResponseSection: View {
         Color(NSColor.windowBackgroundColor)  // macOS equivalent
         #endif
     }
-    
+   
     private var secondarySystemBackgroundColor: Color {
         #if os(iOS)
         Color(.secondarySystemBackground)
@@ -67,7 +67,7 @@ struct ResponseSection: View {
         Color(NSColor.controlBackgroundColor)  // macOS equivalent
         #endif
     }
-    
+   
     @ViewBuilder
     private var imageContent: some View {
         let count = appState.ui.outputImages.count
@@ -107,7 +107,7 @@ struct ResponseSection: View {
                             }
                         }
                     )
-                
+           
                 // +++ NEW: Navigation if multiples
                 if count > 1 {
                     HStack(spacing: 12) {
@@ -119,11 +119,11 @@ struct ResponseSection: View {
                         .disabled(index == 0)
                         .buttonStyle(.bordered)
                         .tint(.blue)
-                        
+           
                         Text("\(index + 1) of \(count)")
                             .font(.subheadline)
                             .foregroundColor(.secondary)
-                        
+           
                         Button {
                             if index < count - 1 { appState.ui.currentOutputIndex += 1 }
                         } label: {
@@ -136,7 +136,7 @@ struct ResponseSection: View {
                     .help("Navigate between generated images")
                     .accessibilityLabel("Image navigation")
                 }
-                
+           
                 HStack(spacing: 12) {  // HStack for buttons below image
                     Button {
                         PlatformPasteboard.clearContents()
@@ -158,7 +158,7 @@ struct ResponseSection: View {
                     .shadow(radius: 2)
                     .help("Copy the image to the clipboard")
                     .accessibilityLabel("Copy image")
-                    
+           
                     Button {
                         saveImageAs(image: platformImage)
                     } label: {
@@ -170,7 +170,7 @@ struct ResponseSection: View {
                     .shadow(radius: 2)
                     .help("Save the image to a file")
                     .accessibilityLabel("Save image as")
-                    
+           
                     Button {
                         showDeleteAlert = true
                     } label: {
@@ -223,14 +223,14 @@ struct ResponseSection: View {
                 .accessibilityLabel("Response text: \(text)")
         }
     }
-    
+   
     private func saveImageAs(image: PlatformImage) {
         // Platform-abstracted save panel (macOS-specific for now)
 #if os(macOS)
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.png]
         panel.nameFieldStringValue = "generated_image.png"
-        
+   
         if panel.runModal() == .OK, let url = panel.url {
             if let data = image.platformTiffRepresentation(), let bitmap = NSBitmapImageRep(data: data), let pngData = bitmap.representation(using: .png, properties: [:]) {
                 do {
@@ -246,16 +246,16 @@ struct ResponseSection: View {
             errorItem = AlertError(message: "Failed to prepare image for saving.")
             return
         }
-        
+   
         let activityVC = UIActivityViewController(activityItems: [pngData], applicationActivities: nil)
-        
+   
         // Fix popover source for iPad
         if UIDevice.current.userInterfaceIdiom == .pad {
             activityVC.popoverPresentationController?.sourceView = UIApplication.shared.windows.first?.rootViewController?.view
             activityVC.popoverPresentationController?.sourceRect = CGRect(x: UIScreen.main.bounds.midX, y: UIScreen.main.bounds.midY, width: 0, height: 0)
             activityVC.popoverPresentationController?.permittedArrowDirections = []
         }
-        
+   
         if let topVC = UIApplication.shared.windows.first(where: { $0.isKeyWindow })?.rootViewController {
             topVC.present(activityVC, animated: true)
         } else {
@@ -263,7 +263,7 @@ struct ResponseSection: View {
         }
 #endif
     }
-    
+   
     // NEW: Delete handler for current image
     private func deleteCurrentImage(deleteFile: Bool) {
         let index = appState.ui.currentOutputIndex
@@ -279,16 +279,16 @@ struct ResponseSection: View {
                     } catch { /* log error */ }
                 }
             }
-            
+           
             // Find and remove matching history item
             _ = appState.historyState.findAndRemoveEntry(matching: { $0.imagePath == path })
         }
-        
+   
         // Remove from UI arrays
         appState.ui.outputImages.remove(at: index)
         appState.ui.outputTexts.remove(at: index)
         appState.ui.outputPaths.remove(at: index)
-        
+   
         // Adjust index
         if !appState.ui.outputImages.isEmpty {
             appState.ui.currentOutputIndex = min(index, appState.ui.outputImages.count - 1)
@@ -297,5 +297,7 @@ struct ResponseSection: View {
         }
     }
 }
+
+
 
 

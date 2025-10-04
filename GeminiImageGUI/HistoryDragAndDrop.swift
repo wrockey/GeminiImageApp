@@ -3,10 +3,10 @@ import SwiftUI
 #if os(macOS)
 import AppKit
 #endif
-
+ 
 // Add Reorderable typealias
 typealias Reorderable = Identifiable & Equatable
-
+ 
 // Add ReorderableForEach and related structs
 struct ReorderableForEach<Item: Reorderable, Content: View, Preview: View>: View {
     let items: [Item]
@@ -17,9 +17,9 @@ struct ReorderableForEach<Item: Reorderable, Content: View, Preview: View>: View
     let appState: AppState
     let folderId: UUID?
     @Binding var selectedIDs: Set<UUID>
-    @Binding var toastMessage: String? // New
-    @Binding var showToast: Bool // New
-    
+    @Binding var toastMessage: String?
+    @Binding var showToast: Bool
+   
     init(
         _ items: [Item],
         active: Binding<Item?>,
@@ -43,7 +43,7 @@ struct ReorderableForEach<Item: Reorderable, Content: View, Preview: View>: View
         self._toastMessage = toastMessage
         self._showToast = showToast
     }
-    
+   
     init(
         _ items: [Item],
         active: Binding<Item?>,
@@ -66,7 +66,7 @@ struct ReorderableForEach<Item: Reorderable, Content: View, Preview: View>: View
         self._toastMessage = toastMessage
         self._showToast = showToast
     }
-    
+   
     var body: some View {
         ForEach(items) { item in
             if let preview = preview {
@@ -92,7 +92,7 @@ struct ReorderableForEach<Item: Reorderable, Content: View, Preview: View>: View
             }
         }
     }
-    
+   
     private func contentView(for item: Item) -> some View {
         content(item)
             .opacity(active == item && hasChangedLocation ? 0.5 : 1)
@@ -112,10 +112,10 @@ struct ReorderableForEach<Item: Reorderable, Content: View, Preview: View>: View
                 )
             )
     }
-    
+   
     @State private var hasChangedLocation: Bool = false
 }
-
+ 
 struct ReorderableDragRelocateDelegate<Item: Reorderable>: DropDelegate {
     let item: Item
     let items: [Item]
@@ -127,7 +127,7 @@ struct ReorderableDragRelocateDelegate<Item: Reorderable>: DropDelegate {
     @Binding var selectedIDs: Set<UUID>
     @Binding var toastMessage: String?
     @Binding var showToast: Bool
-    
+   
     init(
         item: Item,
         items: [Item],
@@ -151,7 +151,7 @@ struct ReorderableDragRelocateDelegate<Item: Reorderable>: DropDelegate {
         self._toastMessage = toastMessage
         self._showToast = showToast
     }
-    
+   
     func dropEntered(info: DropInfo) {
         guard let current = active else { return }
         guard let from = items.firstIndex(where: { $0.id == current.id }) else { return }
@@ -161,11 +161,11 @@ struct ReorderableDragRelocateDelegate<Item: Reorderable>: DropDelegate {
             moveAction(IndexSet(integer: from), to + (from < to ? 1 : 0))
         }
     }
-    
+   
     func dropUpdated(info: DropInfo) -> DropProposal? {
         .init(operation: .move)
     }
-    
+   
     func performDrop(info: DropInfo) -> Bool {
         let wasChanged = hasChangedLocation
         hasChangedLocation = false
@@ -230,7 +230,7 @@ struct ReorderableDragRelocateDelegate<Item: Reorderable>: DropDelegate {
         }
         return true
     }
-    
+   
     private func hideToastAfterDelay() {
         DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
             withAnimation(.easeOut(duration: 0.3)) {
@@ -239,14 +239,14 @@ struct ReorderableDragRelocateDelegate<Item: Reorderable>: DropDelegate {
         }
     }
 }
-
+ 
 struct FolderDropDelegate: DropDelegate {
     let folder: Folder
     let appState: AppState
     @Binding var selectedIDs: Set<UUID>
     @Binding var toastMessage: String?
     @Binding var showToast: Bool
-    
+   
     init(
         folder: Folder,
         appState: AppState,
@@ -260,7 +260,7 @@ struct FolderDropDelegate: DropDelegate {
         self._toastMessage = toastMessage
         self._showToast = showToast
     }
-    
+   
     func performDrop(info: DropInfo) -> Bool {
         guard let item = info.itemProviders(for: [.text]).first else {
             toastMessage = "Drop failed: No valid data"
@@ -324,7 +324,7 @@ struct FolderDropDelegate: DropDelegate {
         }
         return true
     }
-    
+   
     private func hideToastAfterDelay() {
         DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
             withAnimation(.easeOut(duration: 0.3)) {
@@ -333,10 +333,10 @@ struct FolderDropDelegate: DropDelegate {
         }
     }
 }
-
-
+ 
+ 
 extension HistoryState {
-
-    
+ 
+   
     // Add entry to a specific folder
  }

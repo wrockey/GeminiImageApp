@@ -3,7 +3,7 @@ import SwiftUI
 #if os(macOS)
 import AppKit
 #endif
-
+ 
 struct FullHistoryItemView: View {
     let initialId: UUID
     @EnvironmentObject var appState: AppState
@@ -15,26 +15,26 @@ struct FullHistoryItemView: View {
     @State private var showAddedMessage: Bool = false
     @State private var previousHistory: [HistoryItem] = []
     @State private var isFullScreen: Bool = false
-    
+   
     private var dateFormatter: DateFormatter {
         let formatter = DateFormatter()
         formatter.dateStyle = .short
         formatter.timeStyle = .short
         return formatter
     }
-    
+   
     private var history: [HistoryItem] {
         flattenHistory(appState.historyState.history)
     }
-    
+   
     private var currentItem: HistoryItem? {
         history.first { $0.id == selectedId }
     }
-    
+   
     private var currentIndex: Int? {
         history.firstIndex { $0.id == selectedId }
     }
-    
+   
     var body: some View {
         GeometryReader { geometry in
             ZStack {
@@ -144,7 +144,7 @@ struct FullHistoryItemView: View {
             previousSelectedId = newValue
         }
     }
-    
+   
     // NEW: Modern horizontal scroll for iOS 17+/macOS 14+
     @available(iOS 17.0, macOS 14.0, *)
     private func horizontalScrollView(for geometry: GeometryProxy) -> some View {
@@ -180,7 +180,7 @@ struct FullHistoryItemView: View {
         }
         #endif
     }
-    
+   
     // NEW: Fallback for older versions
     private func fallbackHorizontalView(for geometry: GeometryProxy) -> some View {
         #if os(iOS)
@@ -204,12 +204,12 @@ struct FullHistoryItemView: View {
         }
         #endif
     }
-    
+   
     // NEW: Subview for image/no-image display
     private struct HistoryImageDisplay: View {
         let item: HistoryItem
         @EnvironmentObject var appState: AppState
-        
+   
         var body: some View {
             if let img = loadHistoryImage(for: item) {
                 Image(platformImage: img)
@@ -225,7 +225,7 @@ struct FullHistoryItemView: View {
                     .help("No image available for this history item")
             }
         }
-        
+   
         private func loadHistoryImage(for item: HistoryItem) -> PlatformImage? {
             guard let path = item.imagePath else { return nil }
             let fileURL = URL(fileURLWithPath: path)
@@ -241,18 +241,18 @@ struct FullHistoryItemView: View {
             }
         }
     }
-    
+   
     // NEW: Extracted bottom overlay
     private func bottomOverlay(for item: HistoryItem) -> some View {
         var creator: String? = nil
         if let mode = item.mode {
             creator = mode == .gemini ? "Gemini" : mode == .grok ? item.modelUsed ?? appState.settings.selectedGrokModel : mode == .aimlapi ? item.modelUsed ?? appState.settings.selectedAIMLModel : item.workflowName ?? "ComfyUI"
-            
+   
             if let idx = item.indexInBatch, let tot = item.totalInBatch {
                 creator! += " #\(idx + 1) of \(tot)"
             }
         }
-        
+   
         return VStack(spacing: 4) {
             VStack(alignment: .center, spacing: 2) {
                 HStack(alignment: .center) {
@@ -291,7 +291,7 @@ struct FullHistoryItemView: View {
                         .help("Generation mode or workflow used")
                 }
             }
-            
+   
             HStack {
                 Button(action: {
                     if let idx = currentIndex {
@@ -308,9 +308,9 @@ struct FullHistoryItemView: View {
                 .buttonStyle(.plain)
                 .help("Previous image in history")
                 .accessibilityLabel("Previous image")
-                
+               
                 Spacer()
-                
+               
                 Button(action: {
                     showDeleteAlert = true
                 }) {
@@ -322,9 +322,9 @@ struct FullHistoryItemView: View {
                 .buttonStyle(.plain)
                 .help("Delete this history item")
                 .accessibilityLabel("Delete item")
-                
+               
                 Spacer()
-                
+               
                 Button(action: {
                     addToInputImages(item: item)
                     showAddedMessage = true
@@ -342,9 +342,9 @@ struct FullHistoryItemView: View {
                 .buttonStyle(.plain)
                 .help("Add to input images")
                 .accessibilityLabel("Add to input slot")
-                
+               
                 Spacer()
-                
+               
                 Button(action: {
                     if let idx = currentIndex {
                         let newIdx = min(history.count - 1, idx + 1)
@@ -366,7 +366,7 @@ struct FullHistoryItemView: View {
         .background(Color.white)
         .frame(maxWidth: .infinity)
     }
-    
+   
     // NEW: Extracted close button
     private var closeButton: some View {
         #if os(iOS)
@@ -403,11 +403,11 @@ struct FullHistoryItemView: View {
         }
         #endif
     }
-    
+   
     private func deleteHistoryItem(item: HistoryItem, deleteFile: Bool) {
         let currentHistory = flattenHistory(appState.historyState.history)
         guard let oldIdx = currentHistory.firstIndex(where: { $0.id == item.id }) else { return }
-        
+   
         if deleteFile, let path = item.imagePath {
             let fileURL = URL(fileURLWithPath: path)
             let fileManager = FileManager.default
@@ -427,12 +427,12 @@ struct FullHistoryItemView: View {
                 }
             }
         }
-        
+   
         var snapshot = appState.historyState.history
         _ = appState.historyState.findAndRemoveEntry(id: item.id, in: &snapshot)
         appState.historyState.history = snapshot
         appState.historyState.saveHistory()
-        
+   
         let newHistory = flattenHistory(appState.historyState.history)
         if newHistory.isEmpty {
             selectedId = nil
@@ -441,7 +441,7 @@ struct FullHistoryItemView: View {
             selectedId = newHistory[newIdx].id
         }
     }
-    
+   
     private func loadHistoryImage(for item: HistoryItem) -> PlatformImage? {
         guard let path = item.imagePath else { return nil }
         let fileURL = URL(fileURLWithPath: path)
@@ -456,7 +456,7 @@ struct FullHistoryItemView: View {
             return PlatformImage(contentsOfFile: fileURL.path)
         }
     }
-    
+   
     private func copyPromptToClipboard(_ prompt: String) {
         #if os(macOS)
         NSPasteboard.general.clearContents()
@@ -465,12 +465,12 @@ struct FullHistoryItemView: View {
         UIPasteboard.general.string = prompt
         #endif
     }
-    
+   
     private func addToInputImages(item: HistoryItem) {
         guard let img = loadHistoryImage(for: item), let path = item.imagePath else { return }
         let url = URL(fileURLWithPath: path)
         var promptNodes: [NodeInfo] = []
-        
+   
         if url.pathExtension.lowercased() == "png" {
             if let dir = appState.settings.outputDirectory {
                 do {
@@ -484,7 +484,7 @@ struct FullHistoryItemView: View {
                 promptNodes = parsePromptNodes(from: url)
             }
         }
-        
+   
         var newSlot = ImageSlot(path: path, image: img)
         if !promptNodes.isEmpty {
             newSlot.promptNodes = promptNodes.sorted { $0.id < $1.id }
@@ -492,7 +492,7 @@ struct FullHistoryItemView: View {
         }
         appState.ui.imageSlots.append(newSlot)
     }
-    
+   
     private func updateWindowSize() {
         #if os(macOS)
         guard let item = currentItem,
@@ -501,28 +501,28 @@ struct FullHistoryItemView: View {
               let screen = NSScreen.main else {
             return
         }
-        
+   
         let bottomHeight: CGFloat = 100 // Approximate height for bottom overlay
         let minWidth: CGFloat = 400
         let imageSize = platformImage.size
         var desiredSize = CGSize(width: max(imageSize.width, minWidth), height: imageSize.height + bottomHeight)
-        
+   
         let screenSize = screen.visibleFrame.size
         let marginHorizontal: CGFloat = 40
         let marginVertical: CGFloat = 100
-        
+   
         let maxSize = CGSize(width: screenSize.width - marginHorizontal,
                             height: screenSize.height - marginVertical)
-        
+   
         let scale = min(1.0, min(maxSize.width / desiredSize.width, maxSize.height / desiredSize.height))
-        
+   
         let windowSize = CGSize(width: desiredSize.width * scale, height: desiredSize.height * scale)
-        
+   
         window.setContentSize(windowSize)
         window.center()
         #endif
     }
-    
+   
     private func flattenHistory(_ entries: [HistoryEntry]) -> [HistoryItem] {
         var items: [HistoryItem] = []
         for entry in entries {

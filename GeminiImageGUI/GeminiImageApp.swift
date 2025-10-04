@@ -7,20 +7,20 @@ import AppKit
 import UIKit
 import PencilKit
 #endif
-
+ 
 enum GenerationMode: String, Codable, CaseIterable {
     case gemini
     case comfyUI
     case grok
     case aimlapi
 }
-
+ 
 struct NodeInfo: Identifiable {
     let id: String
     let label: String
     let promptText: String?
 }
-
+ 
 class SettingsState: ObservableObject {
     @Published var apiKey: String = KeychainHelper.loadAPIKey() ?? ""
     @Published var outputDirectory: URL? = nil
@@ -49,7 +49,7 @@ class SettingsState: ObservableObject {
         return supportingModels.contains(selectedAIMLModel)
     }
 }
-
+ 
 class GenerationState: ObservableObject {
     @Published var comfyWorkflow: [String: Any]? = nil
     @Published var comfyPromptNodeID: String = ""
@@ -61,13 +61,13 @@ class GenerationState: ObservableObject {
     @Published var outputNodes: [NodeInfo] = []
     @Published var imageNodes: [NodeInfo] = []
     @Published var workflowError: String? = nil
-    
+   
     func loadWorkflowFromFile(comfyJSONURL: URL?) {
         guard let url = comfyJSONURL else {
             resetNodes(withError: "No URL provided.")
             return
         }
-        
+   
         var targetURL = url
         if let bookmarkData = UserDefaults.standard.data(forKey: "comfyJSONBookmark") {
             var isStale = false
@@ -78,7 +78,7 @@ class GenerationState: ObservableObject {
                 let resolveOptions: URL.BookmarkResolutionOptions = []
                 #endif
                 targetURL = try URL(resolvingBookmarkData: bookmarkData, options: resolveOptions, bookmarkDataIsStale: &isStale)
-                
+   
                 if isStale {
                     #if os(macOS)
                     let bookmarkOptions: URL.BookmarkCreationOptions = [.withSecurityScope]
@@ -94,15 +94,15 @@ class GenerationState: ObservableObject {
                 return
             }
         }
-        
+   
         var coordError: NSError?
         var innerError: Error?
         var json: [String: Any]?
-        
+   
         NSFileCoordinator().coordinate(readingItemAt: targetURL, options: [], error: &coordError) { coordinatedURL in
             if coordinatedURL.startAccessingSecurityScopedResource() {
                 defer { coordinatedURL.stopAccessingSecurityScopedResource() }
-                
+   
                 do {
                     let ext = coordinatedURL.pathExtension.lowercased()
                     if ext == "json" {
@@ -128,7 +128,7 @@ class GenerationState: ObservableObject {
                 innerError = NSError(domain: "AccessError", code: 0, userInfo: [NSLocalizedDescriptionKey: "Failed to start accessing security-scoped resource."])
             }
         }
-        
+   
         if let coordError = coordError {
             resetNodes(withError: "Coordination error: \(coordError.localizedDescription)")
             return
@@ -141,34 +141,34 @@ class GenerationState: ObservableObject {
             resetNodes(withError: "Failed to load or parse workflow.")
             return
         }
-        
+   
         processJSON(json: json)
     }
-    
+   
     func extractWorkflowFromPNG(url: URL) -> String? {
         guard let data = try? Data(contentsOf: url) else { return nil }
-        
+   
         var offset: Int = 8
         let totalLength = data.count
         var workflowStr: String? = nil
-        
+   
         while offset + 11 < totalLength {
             let lengthRange = offset..<(offset + 4)
             let lengthData = data.subdata(in: lengthRange)
             let lengthBytes = [UInt8](lengthData)
             let length = (UInt32(lengthBytes[0]) << 24) | (UInt32(lengthBytes[1]) << 16) |
                         (UInt32(lengthBytes[2]) << 8) | UInt32(lengthBytes[3])
-            
+   
             let fullChunkSize = 12 + Int(length)
             let fullChunkEnd = offset + fullChunkSize
             guard fullChunkEnd <= totalLength else { break }
-            
+   
             let typeStart = offset + 4
             let typeRange = typeStart..<(typeStart + 4)
             let typeData = data.subdata(in: typeRange)
             let typeBytes = [UInt8](typeData)
             let chunkType = String(bytes: typeBytes, encoding: .ascii) ?? ""
-            
+   
             if chunkType == "tEXt" {
                 let textStart = typeStart + 4
                 let textRange = textStart ..< (textStart + Int(length))
@@ -183,31 +183,31 @@ class GenerationState: ObservableObject {
                     }
                 }
             }
-            
+   
             offset = fullChunkEnd
         }
-        
+   
         if workflowStr == nil {
             guard let src = CGImageSourceCreateWithURL(url as CFURL, nil),
                   let props = CGImageSourceCopyPropertiesAtIndex(src, 0, nil) as? NSDictionary,
                   let pngDict = props["{PNG}"] as? NSDictionary else { return nil }
-            
+   
             workflowStr = pngDict["workflow"] as? String ?? pngDict["prompt"] as? String ?? pngDict["Workflow"] as? String ?? pngDict["Prompt"] as? String
         }
-        
+   
         return workflowStr
     }
-    
+   
     private func processJSON(json: [String: Any]) {
         var promptNodes: [NodeInfo] = []
         var outputNodes: [NodeInfo] = []
         var imageNodes: [NodeInfo] = []
-        
+   
         if let nodesArray = json["nodes"] as? [[String: Any]] {
             for node in nodesArray {
                 guard let nodeID = node["id"] as? Int, let classType = node["type"] as? String else { continue }
                 let nodeIDStr = String(nodeID)
-                
+   
                 if classType == "CLIPTextEncode" {
                     let text = (node["widgets_values"] as? [Any])?.first(where: { $0 is String }) as? String ?? ""
                     let label = text.isEmpty ? "Node \(nodeIDStr)" : "Node \(nodeIDStr): \(text.prefix(50))\(text.count > 50 ? "..." : "")"
@@ -223,7 +223,7 @@ class GenerationState: ObservableObject {
         } else {
             for (nodeID, node) in json {
                 guard let nodeDict = node as? [String: Any], let classType = nodeDict["class_type"] as? String else { continue }
-                
+   
                 if classType == "CLIPTextEncode" {
                     let text = (nodeDict["inputs"] as? [String: Any])?["text"] as? String ?? ""
                     let label = text.isEmpty ? "Node \(nodeID)" : "Node \(nodeID): \(text.prefix(50))\(text.count > 50 ? "..." : "")"
@@ -237,7 +237,7 @@ class GenerationState: ObservableObject {
                 }
             }
         }
-        
+   
         if promptNodes.isEmpty && outputNodes.isEmpty && imageNodes.isEmpty {
             workflowError = "Invalid workflow format or no relevant nodes found. Please load a valid ComfyUI JSON (API or standard format)."
             self.promptNodes = []
@@ -245,17 +245,17 @@ class GenerationState: ObservableObject {
             self.imageNodes = []
             return
         }
-        
+   
         self.promptNodes = promptNodes.sorted { $0.id < $1.id }
         self.outputNodes = outputNodes.sorted { $0.id < $1.id }
         self.imageNodes = imageNodes.sorted { $0.id < $1.id }
-        
+   
         comfyPromptNodeID = promptNodes.first?.id ?? ""
         comfyOutputNodeID = outputNodes.first?.id ?? ""
         comfyImageNodeID = imageNodes.first?.id ?? ""
         workflowError = nil
     }
-    
+   
     private func resetNodes(withError error: String) {
         promptNodes = []
         outputNodes = []
@@ -263,14 +263,14 @@ class GenerationState: ObservableObject {
         workflowError = error
     }
 }
-
+ 
 class HistoryState: ObservableObject {
     @Published var history: [HistoryEntry] = []
-    
+   
     struct FolderOption: Identifiable {
         let id: UUID
         let name: String
-        
+   
         func containsAny(ids: Set<UUID>, in entries: [HistoryEntry]) -> Bool {
             func checkSubtree(for folderId: UUID, in subEntries: [HistoryEntry]) -> Bool {
                 for entry in subEntries {
@@ -285,7 +285,7 @@ class HistoryState: ObservableObject {
                 }
                 return false
             }
-            
+   
             for entry in entries {
                 if case .folder(let folder) = entry, folder.id == self.id {
                     return checkSubtree(for: self.id, in: folder.children)
@@ -298,7 +298,7 @@ class HistoryState: ObservableObject {
             return false
         }
     }
-    
+   
     func allFolders() -> [FolderOption] {
         var folders: [FolderOption] = []
         func collectFolders(from entries: [HistoryEntry]) {
@@ -312,12 +312,12 @@ class HistoryState: ObservableObject {
         collectFolders(from: history)
         return folders.sorted { $0.name.lowercased() < $1.name.lowercased() }
     }
-    
+   
     func moveToFolder(entriesWithIds ids: [UUID], toFolderId: UUID?) -> Bool {
         var snapshot = history
         var movedEntries: [HistoryEntry] = []
         var skippedCount: Int = 0
-        
+   
         // Helper to find the parent folder ID of an entry
         func findParentFolderId(for entryId: UUID, in entries: [HistoryEntry]) -> UUID? {
             for entry in entries {
@@ -332,7 +332,7 @@ class HistoryState: ObservableObject {
             }
             return nil
         }
-        
+   
         // Helper to check if targetFolderId is a descendant of entryId
         func isDescendant(entryId: UUID, targetFolderId: UUID, in entries: [HistoryEntry]) -> Bool {
             for entry in entries {
@@ -350,7 +350,7 @@ class HistoryState: ObservableObject {
             }
             return false
         }
-        
+   
         // Remove entries, skipping those already in the target folder or invalid moves
         for id in ids {
             if let entry = findAndRemoveEntry(id: id, in: &snapshot) {
@@ -372,12 +372,12 @@ class HistoryState: ObservableObject {
                 print("Failed to find and remove entry with ID: \(id)")
             }
         }
-        
+   
         if movedEntries.isEmpty {
             print("No entries found to move for IDs: \(ids)")
             return false
         }
-        
+   
         // Insert into destination
         let insertIndex = toFolderId == nil ? snapshot.count : 0
         if insert(entries: movedEntries, inFolderId: toFolderId, at: insertIndex, into: &snapshot) {
@@ -394,7 +394,7 @@ class HistoryState: ObservableObject {
             return false
         }
     }
-    
+   
     func findAndRemoveEntry(id: UUID, in entries: inout [HistoryEntry]) -> HistoryEntry? {
         if let index = entries.firstIndex(where: { $0.id == id }) {
             return entries.remove(at: index)
@@ -409,7 +409,7 @@ class HistoryState: ObservableObject {
         }
         return nil
     }
-    
+   
     func insert(entries toInsert: [HistoryEntry], inFolderId: UUID?, at index: Int, into snapshot: inout [HistoryEntry]) -> Bool {
         if let inFolderId = inFolderId {
             for i in snapshot.indices {
@@ -431,7 +431,7 @@ class HistoryState: ObservableObject {
             return true
         }
     }
-    
+   
     func move(inFolderId: UUID?, from: IndexSet, to: Int) {
         var snapshot = history
         if let inFolderId = inFolderId {
@@ -462,7 +462,7 @@ class HistoryState: ObservableObject {
             saveHistory()
         }
     }
-    
+   
     func moveToTop(entriesWithIds ids: [UUID], inFolderId: UUID?) {
         var snapshot = history
         if let inFolderId = inFolderId {
@@ -499,7 +499,7 @@ class HistoryState: ObservableObject {
             saveHistory()
         }
     }
-    
+   
     func moveToBottom(entriesWithIds ids: [UUID], inFolderId: UUID?) {
         var snapshot = history
         if let inFolderId = inFolderId {
@@ -536,7 +536,7 @@ class HistoryState: ObservableObject {
             saveHistory()
         }
     }
-    
+   
     func loadHistory() {
         if let data = UserDefaults.standard.data(forKey: "history") {
             do {
@@ -554,7 +554,7 @@ class HistoryState: ObservableObject {
             history = []
         }
     }
-    
+   
     func saveHistory() {
         do {
             let data = try JSONEncoder().encode(history)
@@ -563,17 +563,17 @@ class HistoryState: ObservableObject {
             print("Failed to save history: \(error)")
         }
     }
-    
+   
     func addFolder() {
         history.append(.folder(Folder()))
         saveHistory()
     }
-    
+   
     func delete(at offsets: IndexSet) {
         history.remove(atOffsets: offsets)
         saveHistory()
     }
-    
+   
     func updateFolderName(with id: UUID, newName: String) {
         func update(in entries: inout [HistoryEntry]) -> Bool {
             if let index = entries.firstIndex(where: { $0.id == id }),
@@ -598,7 +598,7 @@ class HistoryState: ObservableObject {
             saveHistory()
         }
     }
-    
+   
     func findEntries(with ids: Set<UUID>) -> [HistoryEntry] {
         var result: [HistoryEntry] = []
         func collect(from entries: [HistoryEntry]) {
@@ -614,7 +614,7 @@ class HistoryState: ObservableObject {
         collect(from: history)
         return result
     }
-    
+   
     private func findAndRemoveEntry(with id: UUID, in entries: inout [HistoryEntry]) -> HistoryEntry? {
         if let index = entries.firstIndex(where: { $0.id == id }) {
             return entries.remove(at: index)
@@ -629,7 +629,7 @@ class HistoryState: ObservableObject {
         }
         return nil
     }
-    
+   
     func addEntry(_ entry: HistoryEntry, toFolderWithId folderId: UUID) {
         var snapshot = history
         func add(to entries: inout [HistoryEntry]) -> Bool {
@@ -652,7 +652,7 @@ class HistoryState: ObservableObject {
             saveHistory()
         }
     }
-    
+   
     func addEntry(_ entry: HistoryEntry, toFolderWithId folderId: UUID, into snapshot: inout [HistoryEntry]) {
         func add(to entries: inout [HistoryEntry]) -> Bool {
             for i in entries.indices {
@@ -674,7 +674,7 @@ class HistoryState: ObservableObject {
             saveHistory()
         }
     }
-    
+   
     func findAndRemoveEntry(matching predicate: (HistoryItem) -> Bool) -> Bool {
         func remove(from entries: inout [HistoryEntry]) -> Bool {
             if let index = entries.firstIndex(where: {
@@ -705,7 +705,7 @@ class HistoryState: ObservableObject {
         return false
     }
 }
-
+ 
 class UIState: ObservableObject {
     @Published var imageSlots: [ImageSlot] = []
     @Published var outputImages: [PlatformImage?] = []
@@ -713,7 +713,7 @@ class UIState: ObservableObject {
     @Published var outputPaths: [String?] = []
     @Published var currentOutputIndex: Int = 0
 }
-
+ 
 class AppState: ObservableObject {
     @Published var settings = SettingsState()
     @Published var generation = GenerationState()
@@ -723,7 +723,7 @@ class AppState: ObservableObject {
     var currentAIMLModel: AIMLModel? {
         ModelRegistry.modelFor(id: settings.selectedAIMLModel)
     }
-    
+   
     var canAddImages: Bool {
         switch settings.mode {
         case .gemini:
@@ -736,7 +736,7 @@ class AppState: ObservableObject {
             return false
         }
     }
-    
+   
     var maxImageSlots: Int {
         switch settings.mode {
         case .gemini:
@@ -749,46 +749,46 @@ class AppState: ObservableObject {
             return 0
         }
     }
-    
+   
     var preferImgBBForImages: Bool {
         !settings.imgbbApiKey.isEmpty && (currentAIMLModel?.acceptsPublicURL ?? true)
     }
-    
+   
     #if os(iOS)
     @Published var showFullHistoryItem: UUID? = nil
     @Published var showMarkupSlotId: UUID? = nil
     @Published var showResponseSheet: Bool = false
     @Published var presentedModal: PresentedModal? = nil
     #endif
-    
+   
     @Published var batchPrompts: [String] = []
     @Published var batchFileURL: URL? = nil
-    
+   
     private var cancellables = Set<AnyCancellable>()
-    
+   
     @objc func setPrompt(_ newPrompt: String) {
         self.prompt = newPrompt
     }
-    
+   
     init() {
         settings.objectWillChange.sink { [weak self] _ in
             self?.objectWillChange.send()
         }.store(in: &cancellables)
-        
+   
         generation.objectWillChange.sink { [weak self] _ in
             self?.objectWillChange.send()
         }.store(in: &cancellables)
-        
+   
         historyState.objectWillChange.sink { [weak self] _ in
             self?.objectWillChange.send()
         }.store(in: &cancellables)
-        
+   
         ui.objectWillChange.sink { [weak self] _ in
             self?.objectWillChange.send()
         }.store(in: &cancellables)
     }
 }
-
+ 
 struct ImageSlot: Identifiable {
     let id = UUID()
     var path: String = ""
@@ -797,7 +797,7 @@ struct ImageSlot: Identifiable {
     var selectedPromptIndex: Int = 0
     var originalData: Data? = nil
 }
-
+ 
 struct HistoryItem: Identifiable, Codable, Equatable {
     let id = UUID()
     let prompt: String
@@ -810,31 +810,31 @@ struct HistoryItem: Identifiable, Codable, Equatable {
     let batchId: UUID?
     let indexInBatch: Int?
     let totalInBatch: Int?
-    
+   
     enum CodingKeys: String, CodingKey {
         case id, prompt, responseText, imagePath, date, mode, workflowName, modelUsed
         case batchId, indexInBatch, totalInBatch
     }
 }
-
+ 
 enum HistoryEntry: Identifiable, Codable, Equatable {
     case item(HistoryItem)
     case folder(Folder)
-    
+   
     var childrenForOutline: [HistoryEntry]? {
         if case .folder(let folder) = self {
             return folder.children
         }
         return nil
     }
-    
+   
     var id: UUID {
         switch self {
         case .item(let item): return item.id
         case .folder(let folder): return folder.id
         }
     }
-    
+   
     func collectAllIDs(into set: inout Set<UUID>) {
         set.insert(id)
         if case .folder(let folder) = self {
@@ -843,7 +843,7 @@ enum HistoryEntry: Identifiable, Codable, Equatable {
             }
         }
     }
-    
+   
     var imageCount: Int {
         switch self {
         case .item:
@@ -852,7 +852,7 @@ enum HistoryEntry: Identifiable, Codable, Equatable {
             return folder.children.reduce(0) { $0 + $1.imageCount }
         }
     }
-    
+   
     static func == (lhs: HistoryEntry, rhs: HistoryEntry) -> Bool {
         switch (lhs, rhs) {
         case (.item(let a), .item(let b)):
@@ -863,15 +863,15 @@ enum HistoryEntry: Identifiable, Codable, Equatable {
             return false
         }
     }
-    
+   
     private enum CodingKeys: String, CodingKey {
         case type, content
     }
-    
+   
     private enum EntryType: String, Codable {
         case item, folder
     }
-    
+   
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         let type = try container.decode(EntryType.self, forKey: .type)
@@ -884,7 +884,7 @@ enum HistoryEntry: Identifiable, Codable, Equatable {
             self = .folder(folder)
         }
     }
-    
+   
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         switch self {
@@ -897,113 +897,113 @@ enum HistoryEntry: Identifiable, Codable, Equatable {
         }
     }
 }
-
+ 
 struct Folder: Identifiable, Codable, Equatable {
     let id: UUID = UUID()
     var name: String = "New Folder"
     var children: [HistoryEntry] = []
-    
+   
     static func == (lhs: Folder, rhs: Folder) -> Bool {
         lhs.id == rhs.id && lhs.name == rhs.name && lhs.children == rhs.children
     }
 }
-
+ 
 struct Part: Codable {
     let text: String?
     let inlineData: InlineData?
-    
+   
     enum CodingKeys: String, CodingKey {
         case text
         case inlineData = "inline_data"
     }
-    
+   
     init(text: String? = nil, inlineData: InlineData? = nil) {
         self.text = text
         self.inlineData = inlineData
     }
 }
-
+ 
 struct InlineData: Codable {
     let mimeType: String
     let data: String
-    
+   
     enum CodingKeys: String, CodingKey {
         case mimeType = "mime_type"
         case data
     }
 }
-
+ 
 struct Content: Codable {
     let parts: [Part]
 }
-
+ 
 struct GenerateContentRequest: Codable {
     let contents: [Content]
 }
-
+ 
 struct GenerateContentResponse: Codable {
     let candidates: [Candidate]
 }
-
+ 
 struct Candidate: Codable {
     let content: ResponseContent
     let finishReason: String?
 }
-
+ 
 struct ResponseContent: Codable {
     let parts: [ResponsePart]
 }
-
+ 
 struct ResponsePart: Codable {
     let text: String?
     let inlineData: InlineData?
-    
+   
     enum CodingKeys: String, CodingKey {
         case text
         case inlineData = "inline_data"
     }
 }
-
+ 
 struct ResponseInlineData: Codable {
     let mimeType: String
     let data: String
-    
+   
     enum CodingKeys: String, CodingKey {
         case mimeType
         case data
     }
 }
-
+ 
 struct NewResponsePart: Codable {
     let text: String?
     let inlineData: ResponseInlineData?
-    
+   
     enum CodingKeys: String, CodingKey {
         case text
         case inlineData
     }
 }
-
+ 
 struct NewResponseContent: Codable {
     let parts: [NewResponsePart]
 }
-
+ 
 struct NewCandidate: Codable {
     let content: NewResponseContent
     let finishReason: String?
 }
-
+ 
 struct NewGenerateContentResponse: Codable {
     let candidates: [NewCandidate]
     let finishReason: String?
 }
-
+ 
 @main
 struct GeminiImageApp: App {
     @StateObject private var appState = AppState()
     @State private var showSplash = true
     @State private var batchFilePath: String = ""
-    
+   
     var body: some Scene {
         #if os(macOS)
         WindowGroup {
@@ -1015,14 +1015,14 @@ struct GeminiImageApp: App {
                 .frame(minWidth: 400, minHeight: 300)
                 .environmentObject(appState)
         }
-        
+   
         WindowGroup(for: UUID.self) { $slotId in
             if let slotId {
                 MarkupWindowView(slotId: slotId)
                     .environmentObject(appState)
             }
         }
-        
+   
         WindowGroup(id: "history-viewer", for: UUID.self) { $historyId in
             if let historyId {
                 FullHistoryItemView(initialId: historyId)
@@ -1030,7 +1030,7 @@ struct GeminiImageApp: App {
             }
         }
         .defaultSize(width: 800, height: 600)
-        
+   
         WindowGroup(id: "response-window") {
             PopOutView()
                 .environmentObject(appState)
@@ -1070,11 +1070,11 @@ struct GeminiImageApp: App {
         #endif
     }
 }
-
+ 
 struct MarkupWindowView: View {
     let slotId: UUID
     @EnvironmentObject var appState: AppState
-    
+   
     var body: some View {
         if let index = appState.ui.imageSlots.firstIndex(where: { $0.id == slotId }),
            let image = appState.ui.imageSlots[index].image {

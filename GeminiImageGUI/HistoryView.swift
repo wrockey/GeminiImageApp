@@ -1,8 +1,9 @@
+//HistoryView.swift
 import SwiftUI
 #if os(macOS)
 import AppKit
 #endif
-
+ 
 struct HistoryView: View {
     @Binding var imageSlots: [ImageSlot]
     @EnvironmentObject var appState: AppState
@@ -36,16 +37,17 @@ struct HistoryView: View {
     }
   
     private var filteredHistory: [HistoryEntry] {
-        if searchText.isEmpty {
-            return appState.historyState.history
-        } else {
-            return filterEntries(appState.historyState.history, with: searchText)
-        }
+        let base = searchText.isEmpty ? appState.historyState.history : filterEntries(appState.historyState.history, with: searchText)
+        #if os(macOS)
+        return sortedEntries(base)
+        #else
+        return base
+        #endif
     }
   
     private var fileCount: Int {
         var uniqueItemIDs = Set<UUID>()
-        
+   
         func collectUniqueItems(from entries: [HistoryEntry]) {
             for entry in entries {
                 switch entry {
@@ -56,11 +58,11 @@ struct HistoryView: View {
                 }
             }
         }
-        
+   
         collectUniqueItems(from: entriesToDelete)
         return uniqueItemIDs.count
     }
-
+ 
     private var deleteMessage: String {
         if fileCount == 0 {
             return "Delete from history?"
@@ -69,16 +71,16 @@ struct HistoryView: View {
             return "Delete from history only, or also permanently delete \(fileCount) \(imageWord)?"
         }
     }
-    
+   
     private var confirmDeleteMessage: String {
         let totalItems = entriesToDelete.reduce(into: 0) { $0 += $1.imageCount }
         return "Are you sure? \(totalItems) image\(totalItems == 1 ? "" : "s") will be deleted!"
     }
-    
+   
     var body: some View {
         content
     }
-
+ 
     private var content: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
@@ -103,7 +105,7 @@ struct HistoryView: View {
             overlayContent
         }
     }
-
+ 
     private var overlayContent: some View {
         Group {
             #if os(iOS)
@@ -152,7 +154,7 @@ struct HistoryView: View {
             #endif
         }
     }
-    
+   
     private func hideToastAfterDelay() {
         DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
             withAnimation(.easeOut(duration: 0.3)) {
@@ -161,7 +163,7 @@ struct HistoryView: View {
             }
         }
     }
-    
+   
     private var header: some View {
         #if os(macOS)
         HStack {
@@ -176,80 +178,28 @@ struct HistoryView: View {
             .buttonStyle(.plain)
             .help("Collapse history sidebar")
             .accessibilityLabel("Collapse history sidebar")
-            
+           
             Text("History")
                 .font(.system(.headline, design: .default, weight: .semibold))
                 .kerning(0.2)
                 .help("View past generated images and prompts")
-            
+           
             Spacer()
-            
+           
             commonActions
         }
         .padding(.horizontal)
-        .onDrop(of: [.text], isTargeted: nil) { providers in
-            guard let provider = providers.first else {
-                activeEntry = nil
-                return false
-            }
-            provider.loadObject(ofClass: NSString.self) { reading, _ in
-                guard let str = reading as? String else {
-                    DispatchQueue.main.async {
-                        self.toastMessage = "Drop failed: Invalid data"
-                        self.showToast = true
-                        self.hideToastAfterDelay()
-                    }
-                    return
-                }
-                let idStrings = str.split(separator: ",").map(String.init)
-                let ids = idStrings.compactMap(UUID.init(uuidString:))
-                guard !ids.isEmpty else {
-                    DispatchQueue.main.async {
-                        self.toastMessage = "Drop failed: No valid items"
-                        self.showToast = true
-                        self.hideToastAfterDelay()
-                    }
-                    return
-                }
-                DispatchQueue.main.async {
-                    var movedEntries: [HistoryEntry] = []
-                    var snapshot = appState.historyState.history
-                    for id in ids {
-                        if let entry = appState.historyState.findAndRemoveEntry(id: id, in: &snapshot) {
-                            movedEntries.append(entry)
-                        } else {
-                            print("Drag-and-drop failed to find entry with ID: \(id)")
-                        }
-                    }
-                    if movedEntries.isEmpty {
-                        self.toastMessage = "Drop failed: Items not found"
-                        self.showToast = true
-                        self.hideToastAfterDelay()
-                        return
-                    }
-                    let insertIndex = 0
-                    appState.historyState.insert(entries: movedEntries, inFolderId: nil, at: insertIndex, into: &snapshot)
-                    appState.historyState.history = snapshot
-                    appState.historyState.saveHistory()
-                    self.selectedIDs.removeAll()
-                    self.toastMessage = "Moved \(movedEntries.count) item(s) to top"
-                    self.showToast = true
-                    self.hideToastAfterDelay()
-                }
-            }
-            return true
-        }
         #else
         HStack(spacing: 8) {
             Text("History")
                 .font(.system(size: 24, weight: .semibold, design: .default))
                 .kerning(0.2)
                 .help("View past generated images and prompts")
-            
+           
             Spacer()
-            
+           
             commonActions
-            
+           
             Button(action: {
                 dismiss()
             }) {
@@ -318,7 +268,7 @@ struct HistoryView: View {
         }
         #endif
     }
-
+ 
     private var commonActions: some View {
         Group {
             Button(action: {
@@ -331,7 +281,7 @@ struct HistoryView: View {
             .buttonStyle(.borderless)
             .help("Add new folder")
             .accessibilityLabel("Add folder")
-            
+           
             if isEditingBinding.wrappedValue {
                 Button(action: {
                     if !selectedIDs.isEmpty {
@@ -347,7 +297,8 @@ struct HistoryView: View {
                 .disabled(selectedIDs.isEmpty)
                 .help("Delete selected items")
                 .accessibilityLabel("Delete selected items")
-                
+               
+                #if os(iOS)
                 Button(action: {
                     if !selectedIDs.isEmpty {
                         appState.historyState.moveToTop(entriesWithIds: Array(selectedIDs), inFolderId: nil)
@@ -365,7 +316,7 @@ struct HistoryView: View {
                 .disabled(selectedIDs.isEmpty)
                 .help("Move selected items to top")
                 .accessibilityLabel("Move selected items to top")
-                
+               
                 Button(action: {
                     if !selectedIDs.isEmpty {
                         appState.historyState.moveToBottom(entriesWithIds: Array(selectedIDs), inFolderId: nil)
@@ -383,7 +334,8 @@ struct HistoryView: View {
                 .disabled(selectedIDs.isEmpty)
                 .help("Move selected items to bottom")
                 .accessibilityLabel("Move selected items to bottom")
-                
+                #endif
+               
                 Button(action: {
                     if !selectedIDs.isEmpty {
                         var addedCount = 0
@@ -416,7 +368,7 @@ struct HistoryView: View {
                 .help("Add selected images to input")
                 .accessibilityLabel("Add selected images to input")
             }
-            
+           
             Button(action: {
                 isEditingBinding.wrappedValue.toggle()
                 if !isEditingBinding.wrappedValue {
@@ -430,7 +382,7 @@ struct HistoryView: View {
             .accessibilityLabel("Select multiple items")
         }
     }
-    
+   
     private var searchField: some View {
         TextField("Search prompts or dates...", text: $searchText)
             .textFieldStyle(.roundedBorder)
@@ -438,7 +390,7 @@ struct HistoryView: View {
             .help("Search history by prompt text or date")
             .accessibilityLabel("Search prompts or dates")
     }
-    
+   
     private var historyList: some View {
         ScrollView {
             LazyVStack(alignment: .leading) {
@@ -449,6 +401,32 @@ struct HistoryView: View {
                         .padding()
                 } else {
                     if searchText.isEmpty {
+                        #if os(macOS)
+                        ForEach(filteredHistory) { entry in
+                            TreeNodeView(
+                                entry: entry,
+                                showDeleteAlert: $showDeleteAlert,
+                                entriesToDelete: $entriesToDelete,
+                                appState: appState,
+                                selectedIDs: $selectedIDs,
+                                searchText: $searchText,
+                                activeEntry: $activeEntry,
+                                entryRowProvider: { AnyView(self.entryRow(for: $0)) },
+                                copyPromptProvider: self.copyPromptToClipboard,
+                                folderId: nil,
+                                isEditing: isEditingBinding,
+                                toastMessage: $toastMessage,
+                                showToast: $showToast,
+                                addToInputProvider: { item in
+                                    self.addToInputImages(item: item)
+                                    #if os(iOS)
+                                    self.showAddedMessage = true
+                                    self.hideToastAfterDelay()
+                                    #endif
+                                }
+                            )
+                        }
+                        #else
                         AnyView(ReorderableForEach(
                             filteredHistory,
                             active: $activeEntry,
@@ -485,37 +463,37 @@ struct HistoryView: View {
                         } moveAction: { from, to in
                             appState.historyState.move(inFolderId: nil, from: from, to: to)
                         })
+                        #endif
                     } else {
-                        AnyView(ForEach(filteredHistory) { entry in
-                            AnyView(
-                                TreeNodeView(
-                                    entry: entry,
-                                    showDeleteAlert: $showDeleteAlert,
-                                    entriesToDelete: $entriesToDelete,
-                                    appState: appState,
-                                    selectedIDs: $selectedIDs,
-                                    searchText: $searchText,
-                                    activeEntry: $activeEntry,
-                                    entryRowProvider: { AnyView(self.entryRow(for: $0)) },
-                                    copyPromptProvider: self.copyPromptToClipboard,
-                                    folderId: nil,
-                                    isEditing: isEditingBinding,
-                                    toastMessage: $toastMessage,
-                                    showToast: $showToast,
-                                    addToInputProvider: { item in
-                                        self.addToInputImages(item: item)
-                                        #if os(iOS)
-                                        self.showAddedMessage = true
-                                        self.hideToastAfterDelay()
-                                        #endif
-                                    }
-                                )
+                        ForEach(filteredHistory) { entry in
+                            TreeNodeView(
+                                entry: entry,
+                                showDeleteAlert: $showDeleteAlert,
+                                entriesToDelete: $entriesToDelete,
+                                appState: appState,
+                                selectedIDs: $selectedIDs,
+                                searchText: $searchText,
+                                activeEntry: $activeEntry,
+                                entryRowProvider: { AnyView(self.entryRow(for: $0)) },
+                                copyPromptProvider: self.copyPromptToClipboard,
+                                folderId: nil,
+                                isEditing: isEditingBinding,
+                                toastMessage: $toastMessage,
+                                showToast: $showToast,
+                                addToInputProvider: { item in
+                                    self.addToInputImages(item: item)
+                                    #if os(iOS)
+                                    self.showAddedMessage = true
+                                    self.hideToastAfterDelay()
+                                    #endif
+                                }
                             )
-                        })
+                        }
                     }
                 }
             }
             .padding(.horizontal)
+            #if os(iOS)
             .onDrop(of: [.text], isTargeted: nil) { providers in
                 guard let provider = providers.first else {
                     activeEntry = nil
@@ -568,9 +546,10 @@ struct HistoryView: View {
                 }
                 return true
             }
+            #endif
         }
     }
-
+ 
     private var isEditingBinding: Binding<Bool> {
         #if os(iOS)
         Binding(
@@ -587,7 +566,7 @@ struct HistoryView: View {
         $isEditing
         #endif
     }
-    
+   
     // Helper to find the parent folder ID of an item
     private func findParentFolderId(for itemId: UUID, in entries: [HistoryEntry]) -> UUID? {
         for entry in entries {
@@ -602,12 +581,13 @@ struct HistoryView: View {
         }
         return nil // Item is in root if no parent folder is found
     }
-    
+   
     @ViewBuilder
     private func entryRow(for entry: HistoryEntry) -> some View {
         switch entry {
         case .item(let item):
             itemRow(for: item)
+                #if os(iOS)
                 .onDrag {
                     var payload: String
                     var idsToDrag: [UUID]
@@ -619,6 +599,7 @@ struct HistoryView: View {
                     payload = idsToDrag.map { $0.uuidString }.joined(separator: ",")
                     return NSItemProvider(object: payload as NSString)
                 }
+                #endif
         case .folder(let folder):
             HStack {
                 if isEditingBinding.wrappedValue {
@@ -648,6 +629,7 @@ struct HistoryView: View {
                     }
                 }
             }
+            #if os(iOS)
             .onDrag {
                 var payload: String
                 var idsToDrag: [UUID]
@@ -659,19 +641,20 @@ struct HistoryView: View {
                 payload = idsToDrag.map { $0.uuidString }.joined(separator: ",")
                 return NSItemProvider(object: payload as NSString)
             }
+            #endif
         }
     }
-    
+   
     private func itemRow(for item: HistoryItem) -> some View {
         var creator: String? = nil
         if let mode = item.mode {
             creator = mode == .gemini ? "Gemini" : mode == .grok ? item.modelUsed ?? appState.settings.selectedGrokModel : mode == .aimlapi ? item.modelUsed ?? appState.settings.selectedAIMLModel : (item.workflowName ?? "ComfyUI")
-            
+           
             if let idx = item.indexInBatch, let tot = item.totalInBatch {
                 creator! += " #\(idx + 1) of \(tot)"
             }
         }
-        
+   
         return HStack(spacing: 12) {
             if isEditingBinding.wrappedValue {
                 Image(systemName: selectedIDs.contains(item.id) ? "checkmark.circle.fill" : "circle")
@@ -679,7 +662,7 @@ struct HistoryView: View {
                     .font(.system(size: 20))
             }
             LazyThumbnailView(item: item)
-            
+           
             VStack(alignment: .leading, spacing: 4) {
                 Text(item.prompt.prefix(50) + (item.prompt.count > 50 ? "..." : ""))
                     .font(.subheadline)
@@ -720,6 +703,7 @@ struct HistoryView: View {
                 #endif
             }
         }
+        #if os(iOS)
         .onDrag {
             var payload: String
             var idsToDrag: [UUID]
@@ -731,6 +715,7 @@ struct HistoryView: View {
             payload = idsToDrag.map { $0.uuidString }.joined(separator: ",")
             return NSItemProvider(object: payload as NSString)
         }
+        #endif
         .contextMenu {
             Group {
                 if !isEditingBinding.wrappedValue {
@@ -796,6 +781,7 @@ struct HistoryView: View {
                     }
                     #endif
                 } else if selectedIDs.contains(item.id) {
+                    #if os(iOS)
                     Button("Move to Top") {
                         appState.historyState.moveToTop(entriesWithIds: Array(selectedIDs), inFolderId: nil)
                         selectedIDs.removeAll()
@@ -812,6 +798,7 @@ struct HistoryView: View {
                         hideToastAfterDelay()
                     }
                     .accessibilityLabel("Move selected items to bottom")
+                    #endif
                     #if os(macOS)
                     Menu("Move to...") {
                         Button("Root") {
@@ -859,7 +846,7 @@ struct HistoryView: View {
             }
         }
     }
-    
+   
     private func copyPromptToClipboard(_ prompt: String) {
         #if os(macOS)
         NSPasteboard.general.clearContents()
@@ -868,25 +855,25 @@ struct HistoryView: View {
         UIPasteboard.general.string = prompt
         #endif
     }
-    
+   
     private func deleteEntries(deleteFiles: Bool) {
         if deleteFiles {
             for entry in entriesToDelete {
                 deleteFilesRecursively(entry: entry)
             }
         }
-        
+   
         var snapshot = appState.historyState.history
         for entry in entriesToDelete {
             _ = appState.historyState.findAndRemoveEntry(id: entry.id, in: &snapshot)
         }
         appState.historyState.history = snapshot
         appState.historyState.saveHistory()
-        
+   
         entriesToDelete = []
         selectedIDs.removeAll()
     }
-    
+   
     private func deleteFilesRecursively(entry: HistoryEntry) {
         switch entry {
         case .item(let item):
@@ -914,7 +901,7 @@ struct HistoryView: View {
             }
         }
     }
-    
+   
     private func loadHistoryImage(for item: HistoryItem) -> PlatformImage? {
         guard let path = item.imagePath else { return nil }
         let fileURL = URL(fileURLWithPath: path)
@@ -929,12 +916,12 @@ struct HistoryView: View {
             return PlatformImage(contentsOfFile: fileURL.path)
         }
     }
-    
+   
     private func addToInputImages(item: HistoryItem) {
         guard let img = loadHistoryImage(for: item), let path = item.imagePath else { return }
         let url = URL(fileURLWithPath: path)
         var promptNodes: [NodeInfo] = []
-        
+   
         if url.pathExtension.lowercased() == "png" {
             if let dir = appState.settings.outputDirectory {
                 do {
@@ -948,7 +935,7 @@ struct HistoryView: View {
                 promptNodes = parsePromptNodes(from: url)
             }
         }
-        
+   
         var newSlot = ImageSlot(path: path, image: img)
         if !promptNodes.isEmpty {
             newSlot.promptNodes = promptNodes.sorted { $0.id < $1.id }
@@ -956,7 +943,7 @@ struct HistoryView: View {
         }
         appState.ui.imageSlots.append(newSlot)
     }
-    
+   
     private func filterEntries(_ entries: [HistoryEntry], with search: String) -> [HistoryEntry] {
         entries.compactMap { entry in
             switch entry {
@@ -979,4 +966,22 @@ struct HistoryView: View {
             }
         }
     }
+    
+    private func sortedEntries(_ entries: [HistoryEntry]) -> [HistoryEntry] {
+        var folders: [Folder] = []
+        var items: [HistoryItem] = []
+        for entry in entries {
+            switch entry {
+            case .folder(var folder):
+                folder.children = sortedEntries(folder.children)
+                folders.append(folder)
+            case .item(let item):
+                items.append(item)
+            }
+        }
+        folders.sort { $0.name.lowercased() < $1.name.lowercased() }
+        items.sort { $0.date > $1.date }
+        return folders.map { .folder($0) } + items.map { .item($0) }
+    }
 }
+
