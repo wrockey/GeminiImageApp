@@ -16,6 +16,7 @@ struct FullHistoryItemView: View {
     @State private var showAddedMessage: Bool = false
     @State private var previousHistory: [HistoryItem] = []
     @State private var isFullScreen: Bool = false
+    @State private var recentlyDeletedId: UUID? = nil
    
     private var dateFormatter: DateFormatter {
         let formatter = DateFormatter()
@@ -60,11 +61,13 @@ struct FullHistoryItemView: View {
         .alert("Delete History Item", isPresented: $showDeleteAlert) {
             Button("Delete from History Only") {
                 if let item = currentItem {
+                    recentlyDeletedId = item.id
                     deleteHistoryItem(item: item, deleteFile: false)
                 }
             }
             Button("Delete History and File", role: .destructive) {
                 if let item = currentItem {
+                    recentlyDeletedId = item.id
                     deleteHistoryItem(item: item, deleteFile: true)
                 }
             }
@@ -131,6 +134,9 @@ struct FullHistoryItemView: View {
                         selectedId = newHistory.first?.id
                     }
                 }
+            } else if let deletedId = recentlyDeletedId, newHistory.contains(where: { $0.id == deletedId }) {
+                selectedId = deletedId
+                recentlyDeletedId = nil
             }
             previousHistory = newHistory
         }
@@ -312,6 +318,8 @@ struct FullHistoryItemView: View {
                
                 Spacer()
                
+
+                
                 Button(action: {
                     showDeleteAlert = true
                 }) {
@@ -323,6 +331,30 @@ struct FullHistoryItemView: View {
                 .buttonStyle(.plain)
                 .help("Delete this history item")
                 .accessibilityLabel("Delete item")
+                
+                Button(action: {
+                    undoManager?.undo()
+                }) {
+                    Image(systemName: "arrow.uturn.left")
+                        .font(.system(size: 24))
+                        .symbolRenderingMode(.hierarchical)
+                }
+                .buttonStyle(.plain)
+                .disabled(!(undoManager?.canUndo ?? false))
+                .help("Undo last action")
+                .accessibilityLabel("Undo")
+                
+                Button(action: {
+                    undoManager?.redo()
+                }) {
+                    Image(systemName: "arrow.uturn.right")
+                        .font(.system(size: 24))
+                        .symbolRenderingMode(.hierarchical)
+                }
+                .buttonStyle(.plain)
+                .disabled(!(undoManager?.canRedo ?? false))
+                .help("Redo last action")
+                .accessibilityLabel("Redo")
                
                 Spacer()
                
