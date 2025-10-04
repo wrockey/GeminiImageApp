@@ -1,4 +1,4 @@
-//ContentView.swift
+// ContentView.swift
 import SwiftUI
 #if os(macOS)
 import AppKit
@@ -520,7 +520,7 @@ struct ContentView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        
+       
         .background(LinearGradient(gradient: Gradient(colors: [topColor, bottomColor]), startPoint: .top, endPoint: .bottom))
         .toolbar {
             ToolbarItemGroup(placement: .automatic) {
@@ -689,4 +689,3 @@ private var toolbar: some ToolbarContent {
         UserDefaults.standard.removeObject(forKey: "batchFileBookmark")
     }
 }
-

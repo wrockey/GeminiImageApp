@@ -8,6 +8,7 @@ struct FullHistoryItemView: View {
     let initialId: UUID
     @EnvironmentObject var appState: AppState
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.undoManager) private var undoManager
     @State private var selectedId: UUID? = nil
     @State private var showDeleteAlert: Bool = false
     @State private var previousSelectedId: UUID? = nil
@@ -405,6 +406,7 @@ struct FullHistoryItemView: View {
     }
    
     private func deleteHistoryItem(item: HistoryItem, deleteFile: Bool) {
+        let oldHistory = appState.historyState.history
         let currentHistory = flattenHistory(appState.historyState.history)
         guard let oldIdx = currentHistory.firstIndex(where: { $0.id == item.id }) else { return }
    
@@ -433,9 +435,26 @@ struct FullHistoryItemView: View {
         appState.historyState.history = snapshot
         appState.historyState.saveHistory()
    
+        if let undoManager = undoManager {
+            let newHistory = appState.historyState.history
+            undoManager.registerUndo(withTarget: appState.historyState) { target in
+                let historyBeforeUndo = target.history
+                target.history = oldHistory
+                target.objectWillChange.send()
+                target.saveHistory()
+                undoManager.registerUndo(withTarget: target) { redoTarget in
+                    redoTarget.history = historyBeforeUndo
+                    redoTarget.objectWillChange.send()
+                    redoTarget.saveHistory()
+                }
+            }
+            undoManager.setActionName("Delete Item")
+        }
+   
         let newHistory = flattenHistory(appState.historyState.history)
         if newHistory.isEmpty {
             selectedId = nil
+            dismiss()
         } else {
             let newIdx = min(oldIdx, newHistory.count - 1)
             selectedId = newHistory[newIdx].id

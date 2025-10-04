@@ -208,11 +208,10 @@ class GenerationState: ObservableObject {
                 guard let nodeID = node["id"] as? Int, let classType = node["type"] as? String else { continue }
                 let nodeIDStr = String(nodeID)
     
-                if classType.lowercased().contains("text") || classType.lowercased().contains("prompt") {
+                if classType == "CLIPTextEncode" {
                     let text = (node["widgets_values"] as? [Any])?.first(where: { $0 is String }) as? String ?? ""
                     let label = text.isEmpty ? "Node \(nodeIDStr)" : "Node \(nodeIDStr): \(text.prefix(50))\(text.count > 50 ? "..." : "")"
                     promptNodes.append(NodeInfo(id: nodeIDStr, label: label, promptText: text))
-                    print (label)
                 } else if ["SaveImage", "PreviewImage"].contains(classType) {
                     let label = "Node \(nodeIDStr): \(classType)"
                     outputNodes.append(NodeInfo(id: nodeIDStr, label: label, promptText: nil))
@@ -392,9 +391,17 @@ class HistoryState: ObservableObject {
                 print("Moved \(movedCount) of \(totalAttempted) items; \(skippedCount) already in target or invalid")
             }
             if let undoManager {
+                let newHistory = history
                 undoManager.registerUndo(withTarget: self) { target in
+                    let historyBeforeUndo = target.history
                     target.history = oldHistory
                     target.objectWillChange.send()
+                    target.saveHistory()
+                    undoManager.registerUndo(withTarget: target) { redoTarget in
+                        redoTarget.history = historyBeforeUndo
+                        redoTarget.objectWillChange.send()
+                        redoTarget.saveHistory()
+                    }
                 }
                 undoManager.setActionName("Move to Folder")
             }
@@ -473,9 +480,17 @@ class HistoryState: ObservableObject {
             history = snapshot
             saveHistory()
             if let undoManager {
+                let newHistory = history
                 undoManager.registerUndo(withTarget: self) { target in
+                    let historyBeforeUndo = target.history
                     target.history = oldHistory
                     target.objectWillChange.send()
+                    target.saveHistory()
+                    undoManager.registerUndo(withTarget: target) { redoTarget in
+                        redoTarget.history = historyBeforeUndo
+                        redoTarget.objectWillChange.send()
+                        redoTarget.saveHistory()
+                    }
                 }
                 undoManager.setActionName("Move Items")
             }
@@ -519,9 +534,17 @@ class HistoryState: ObservableObject {
             history = snapshot
             saveHistory()
             if let undoManager {
+                let newHistory = history
                 undoManager.registerUndo(withTarget: self) { target in
+                    let historyBeforeUndo = target.history
                     target.history = oldHistory
                     target.objectWillChange.send()
+                    target.saveHistory()
+                    undoManager.registerUndo(withTarget: target) { redoTarget in
+                        redoTarget.history = historyBeforeUndo
+                        redoTarget.objectWillChange.send()
+                        redoTarget.saveHistory()
+                    }
                 }
                 undoManager.setActionName("Move to Top")
             }
@@ -565,9 +588,17 @@ class HistoryState: ObservableObject {
             history = snapshot
             saveHistory()
             if let undoManager {
+                let newHistory = history
                 undoManager.registerUndo(withTarget: self) { target in
+                    let historyBeforeUndo = target.history
                     target.history = oldHistory
                     target.objectWillChange.send()
+                    target.saveHistory()
+                    undoManager.registerUndo(withTarget: target) { redoTarget in
+                        redoTarget.history = historyBeforeUndo
+                        redoTarget.objectWillChange.send()
+                        redoTarget.saveHistory()
+                    }
                 }
                 undoManager.setActionName("Move to Bottom")
             }
@@ -606,9 +637,17 @@ class HistoryState: ObservableObject {
         history.append(.folder(Folder()))
         saveHistory()
         if let undoManager {
+            let newHistory = history
             undoManager.registerUndo(withTarget: self) { target in
+                let historyBeforeUndo = target.history
                 target.history = oldHistory
                 target.objectWillChange.send()
+                target.saveHistory()
+                undoManager.registerUndo(withTarget: target) { redoTarget in
+                    redoTarget.history = historyBeforeUndo
+                    redoTarget.objectWillChange.send()
+                    redoTarget.saveHistory()
+                }
             }
             undoManager.setActionName("Add Folder")
         }
@@ -619,9 +658,17 @@ class HistoryState: ObservableObject {
         history.remove(atOffsets: offsets)
         saveHistory()
         if let undoManager {
+            let newHistory = history
             undoManager.registerUndo(withTarget: self) { target in
+                let historyBeforeUndo = target.history
                 target.history = oldHistory
                 target.objectWillChange.send()
+                target.saveHistory()
+                undoManager.registerUndo(withTarget: target) { redoTarget in
+                    redoTarget.history = historyBeforeUndo
+                    redoTarget.objectWillChange.send()
+                    redoTarget.saveHistory()
+                }
             }
             undoManager.setActionName("Delete Items")
         }
@@ -632,9 +679,17 @@ class HistoryState: ObservableObject {
         history = []
         saveHistory()
         if let undoManager {
+            let newHistory = history
             undoManager.registerUndo(withTarget: self) { target in
+                let historyBeforeUndo = target.history
                 target.history = oldHistory
                 target.objectWillChange.send()
+                target.saveHistory()
+                undoManager.registerUndo(withTarget: target) { redoTarget in
+                    redoTarget.history = historyBeforeUndo
+                    redoTarget.objectWillChange.send()
+                    redoTarget.saveHistory()
+                }
             }
             undoManager.setActionName("Clear History")
         }
@@ -664,9 +719,17 @@ class HistoryState: ObservableObject {
             history = mutableHistory
             saveHistory()
             if let undoManager {
+                let newHistory = history
                 undoManager.registerUndo(withTarget: self) { target in
+                    let historyBeforeUndo = target.history
                     target.history = oldHistory
                     target.objectWillChange.send()
+                    target.saveHistory()
+                    undoManager.registerUndo(withTarget: target) { redoTarget in
+                        redoTarget.history = historyBeforeUndo
+                        redoTarget.objectWillChange.send()
+                        redoTarget.saveHistory()
+                    }
                 }
                 undoManager.setActionName("Rename Folder")
             }
@@ -797,9 +860,17 @@ class HistoryState: ObservableObject {
         saveHistory()
         
         if let undoManager {
+            let newHistory = history
             undoManager.registerUndo(withTarget: self) { target in
+                let historyBeforeUndo = target.history
                 target.history = oldHistory
                 target.objectWillChange.send()
+                target.saveHistory()
+                undoManager.registerUndo(withTarget: target) { redoTarget in
+                    redoTarget.history = historyBeforeUndo
+                    redoTarget.objectWillChange.send()
+                    redoTarget.saveHistory()
+                }
             }
             undoManager.setActionName("Delete Items")
         }
@@ -889,7 +960,7 @@ class AppState: ObservableObject {
         !settings.imgbbApiKey.isEmpty && (currentAIMLModel?.acceptsPublicURL ?? true)
     }
     
-#if os(iOS)
+    #if os(iOS)
     @Published var showFullHistoryItem: UUID? = nil
     @Published var showMarkupSlotId: UUID? = nil
     @Published var showResponseSheet: Bool = false

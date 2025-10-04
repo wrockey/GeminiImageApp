@@ -30,9 +30,6 @@ struct HistoryView: View {
     @State private var activeEntry: HistoryEntry? = nil
     @State private var selectedIDs: Set<UUID> = []
     @Environment(\.dismiss) private var dismiss
-    
-    
-    
    
     private var dateFormatter: DateFormatter {
         let formatter = DateFormatter()
@@ -293,6 +290,7 @@ struct HistoryView: View {
         .padding(.horizontal)
         .padding(.vertical, 8)
         .onDrop(of: [.text], isTargeted: nil) { providers in
+            let oldHistory = appState.historyState.history
             guard let provider = providers.first else {
                 activeEntry = nil
                 return false
@@ -340,6 +338,21 @@ struct HistoryView: View {
                     self.toastMessage = "Moved \(movedEntries.count) item(s) to top"
                     self.showToast = true
                     self.hideToastAfterDelay()
+                    if let undoManager = undoManager {
+                        let newHistory = appState.historyState.history
+                        undoManager.registerUndo(withTarget: appState.historyState) { target in
+                            let historyBeforeUndo = target.history
+                            target.history = oldHistory
+                            target.objectWillChange.send()
+                            target.saveHistory()
+                            undoManager.registerUndo(withTarget: target) { redoTarget in
+                                redoTarget.history = historyBeforeUndo
+                                redoTarget.objectWillChange.send()
+                                redoTarget.saveHistory()
+                            }
+                        }
+                        undoManager.setActionName("Move Items")
+                    }
                 }
             }
             return true
@@ -573,6 +586,7 @@ struct HistoryView: View {
             .padding(.horizontal)
             #if os(iOS)
             .onDrop(of: [.text], isTargeted: nil) { providers in
+                let oldHistory = appState.historyState.history
                 guard let provider = providers.first else {
                     activeEntry = nil
                     return false
@@ -620,6 +634,21 @@ struct HistoryView: View {
                         self.toastMessage = "Moved \(movedEntries.count) item(s)"
                         self.showToast = true
                         self.hideToastAfterDelay()
+                        if let undoManager = undoManager {
+                            let newHistory = appState.historyState.history
+                            undoManager.registerUndo(withTarget: appState.historyState) { target in
+                                let historyBeforeUndo = target.history
+                                target.history = oldHistory
+                                target.objectWillChange.send()
+                                target.saveHistory()
+                                undoManager.registerUndo(withTarget: target) { redoTarget in
+                                    redoTarget.history = historyBeforeUndo
+                                    redoTarget.objectWillChange.send()
+                                    redoTarget.saveHistory()
+                                }
+                            }
+                            undoManager.setActionName("Move Items")
+                        }
                     }
                 }
                 return true
@@ -1016,3 +1045,4 @@ struct HistoryView: View {
         return folders.map { .folder($0) } + items.map { .item($0) }
     }
 }
+
