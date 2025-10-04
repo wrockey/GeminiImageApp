@@ -390,7 +390,7 @@ struct ContentView: View {
                         .environmentObject(appState)
                 case .markupSlot(let slotId):
                     if let index = appState.ui.imageSlots.firstIndex(where: { $0.id == slotId }),
-                       let image = appState.ui.imageSlots[index].image {
+                      let image = appState.ui.imageSlots[index].image {
                         let path = appState.ui.imageSlots[index].path
                         let fileURL = URL(fileURLWithPath: path)
                         let lastComponent = fileURL.lastPathComponent
@@ -539,7 +539,8 @@ private var toolbar: some ToolbarContent {
 
 }
 #endif
-
+    
+    
     private var toolbarContent: some View {
         Group {
             Button(action: {
@@ -688,3 +689,4 @@ private var toolbar: some ToolbarContent {
         UserDefaults.standard.removeObject(forKey: "batchFileBookmark")
     }
 }
+
