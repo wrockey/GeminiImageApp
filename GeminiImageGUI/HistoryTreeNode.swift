@@ -200,6 +200,9 @@ struct TreeNodeView: View {
                 #endif
             } label: {
                 entryRowProvider(entry)
+                    #if os(iOS)
+                    .onDrop(of: [.text], delegate: FolderDropDelegate(folder: folder, appState: appState, selectedIDs: $selectedIDs, toastMessage: $toastMessage, showToast: $showToast))
+                    #endif
                     .onLongPressGesture {
                         newFolderName = folder.name
                         showRenameAlert = true
