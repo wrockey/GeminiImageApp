@@ -286,6 +286,61 @@ extension ContentView {
                     }
                 }
             }
+            let selectedImageNodes = Array(appState.generation.selectedImageNodeIDs).sorted()
+            var uploadedFilenames: [String] = []
+            if !selectedImageNodes.isEmpty && !appState.ui.imageSlots.isEmpty {
+                for i in 0..<min(selectedImageNodes.count, appState.ui.imageSlots.count) {
+                    let slot = appState.ui.imageSlots[i]
+                    if let image = slot.image, let processed = processImageForUpload(image: image, originalData: slot.originalData, format: "png") {
+                        var uploadRequest = URLRequest(url: serverURL.appendingPathComponent("upload/image"))
+                        uploadRequest.httpMethod = "POST"
+                        
+                        let boundary = "Boundary-\(UUID().uuidString)"
+                        uploadRequest.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+                        
+                        var body = Data()
+                        body.append("--\(boundary)\r\n".data(using: .utf8)!)
+                        let fileExtension = processed.mimeType == "image/jpeg" ? "jpg" : "png"
+                        body.append("Content-Disposition: form-data; name=\"image\"; filename=\"input_\(i).\(fileExtension)\"\r\n".data(using: .utf8)!)
+                        body.append("Content-Type: \(processed.mimeType)\r\n\r\n".data(using: .utf8)!)
+                        body.append(processed.data)
+                        body.append("\r\n".data(using: .utf8)!)
+                        body.append("--\(boundary)\r\n".data(using: .utf8)!)
+                        body.append("Content-Disposition: form-data; name=\"type\"\r\n\r\ninput\r\n".data(using: .utf8)!)
+                        body.append("--\(boundary)--\r\n".data(using: .utf8)!)
+                        
+                        uploadRequest.httpBody = body
+                        
+                        do {
+                            try Task.checkCancellation()
+                            let (data, _) = try await URLSession.shared.data(for: uploadRequest)
+                            if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                               let name = json["name"] as? String {
+                                uploadedFilenames.append(name)
+                            } else {
+                                throw GenerationError.uploadFailed
+                            }
+                        } catch is CancellationError {
+                            throw CancellationError()
+                        } catch {
+                            throw GenerationError.uploadFailed
+                        }
+                    }
+                }
+                
+                // Inject uploaded filenames into selected nodes
+                for i in 0..<uploadedFilenames.count {
+                    let nodeID = selectedImageNodes[i]
+                    if var node = mutableWorkflow[nodeID] as? [String: Any],
+                       var inputs = node["inputs"] as? [String: Any] {
+                        inputs["image"] = uploadedFilenames[i]
+                        node["inputs"] = inputs
+                        mutableWorkflow[nodeID] = node
+                    } else {
+                        throw GenerationError.invalidImageNode
+                    }
+                }
+            }
             
             let promptNodeID = appState.generation.comfyPromptNodeID
             let selectedPromptText = appState.generation.promptNodes.first(where: { $0.id == promptNodeID })?.promptText ?? ""

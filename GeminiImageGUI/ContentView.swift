@@ -292,6 +292,12 @@ struct ContentView: View {
             .onChange(of: appState.ui.outputImages) { _ in
                 imageScale = 1.0
             }
+            .onChange(of: appState.generation.selectedImageNodeIDs) { _ in
+                let maxSlots = appState.maxImageSlots
+                if appState.ui.imageSlots.count > maxSlots {
+                    appState.ui.imageSlots.removeLast(appState.ui.imageSlots.count - maxSlots)
+                }
+            }
         #endif
     }
 

@@ -61,8 +61,10 @@ class GenerationState: ObservableObject {
     @Published var outputNodes: [NodeInfo] = []
     @Published var imageNodes: [NodeInfo] = []
     @Published var workflowError: String? = nil
+    @Published var selectedImageNodeIDs: Set<String> = []  // Tracks checked nodes
     
     func loadWorkflowFromFile(comfyJSONURL: URL?) {
+        selectedImageNodeIDs = []
         guard let url = comfyJSONURL else {
             resetNodes(withError: "No URL provided.")
             return
@@ -267,6 +269,7 @@ private func processJSON(json: [String: Any]) {
             self.promptNodes = []
             self.outputNodes = []
             self.imageNodes = []
+            selectedImageNodeIDs = []
             return
         }
 
@@ -974,7 +977,7 @@ class AppState: ObservableObject {
         case .aimlapi:
             return currentAIMLModel?.maxInputImages ?? 0
         case .comfyUI:
-            return 1
+            return generation.selectedImageNodeIDs.count  // Limit to selected nodes
         case .grok:
             return 0
         }

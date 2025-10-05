@@ -675,7 +675,26 @@ struct ConfigurationSection: View {
                     comfyPromptNodeRow
                 }
                 if !appState.generation.imageNodes.isEmpty {
-                    comfyImageNodeRow
+                    // New: Checkbox list for multiple image nodes
+                    Section(header: Text("Input Image Nodes")
+                        .font(labelFont)
+                        .foregroundColor(.secondary)
+                        .help("Check the image nodes to use (limits input slots)")) {
+                        ForEach(appState.generation.imageNodes) { node in
+                            Toggle(node.label, isOn: Binding(
+                                get: { appState.generation.selectedImageNodeIDs.contains(node.id) },
+                                set: { isOn in
+                                    if isOn {
+                                        appState.generation.selectedImageNodeIDs.insert(node.id)
+                                    } else {
+                                        appState.generation.selectedImageNodeIDs.remove(node.id)
+                                    }
+                                }
+                            ))
+                            .font(textFont)
+                            .help("Toggle to enable this node for image input")
+                        }
+                    }
                 }
                 if !appState.generation.outputNodes.isEmpty {
                     comfyOutputNodeRow
