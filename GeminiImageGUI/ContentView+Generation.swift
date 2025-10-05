@@ -293,7 +293,21 @@ extension ContentView {
             
             if var node = mutableWorkflow[promptNodeID] as? [String: Any],
                var inputs = node["inputs"] as? [String: Any] {
-                inputs["text"] = effectivePrompt
+                var setCount = 0
+                for (key, value) in inputs {
+                    if let _ = value as? String {  // Only target string-valued inputs
+                        let lowerKey = key.lowercased()
+                        if (lowerKey.contains("prompt") && !lowerKey.contains("negativ")) ||
+                           lowerKey.contains("text") ||
+                           lowerKey.contains("positiv") {
+                            inputs[key] = effectivePrompt
+                            setCount += 1
+                        }
+                    }
+                }
+                if setCount == 0 {
+                    throw GenerationError.invalidPromptNode  // Or custom: "No injectable prompt key found in node"
+                }
                 node["inputs"] = inputs
                 mutableWorkflow[promptNodeID] = node
             } else {
