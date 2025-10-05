@@ -26,7 +26,7 @@ struct TreeNodeView: View {
     @Binding var toastMessage: String?
     @Binding var showToast: Bool
     let addToInputProvider: (HistoryItem) -> Void
-    @Environment(\.undoManager) private var undoManager
+    let undoManager: UndoManager?
     
     init(
         entry: HistoryEntry,
@@ -42,7 +42,8 @@ struct TreeNodeView: View {
         isEditing: Binding<Bool>,
         toastMessage: Binding<String?>,
         showToast: Binding<Bool>,
-        addToInputProvider: @escaping (HistoryItem) -> Void
+        addToInputProvider: @escaping (HistoryItem) -> Void,
+        undoManager: UndoManager?
     ) {
         self.entry = entry
         self._showDeleteAlert = showDeleteAlert
@@ -58,6 +59,7 @@ struct TreeNodeView: View {
         self._toastMessage = toastMessage
         self._showToast = showToast
         self.addToInputProvider = addToInputProvider
+        self.undoManager = undoManager
     }
     
     var body: some View {
@@ -81,7 +83,8 @@ struct TreeNodeView: View {
                                 isEditing: $isEditing,
                                 toastMessage: $toastMessage,
                                 showToast: $showToast,
-                                addToInputProvider: addToInputProvider
+                                addToInputProvider: addToInputProvider,
+                                undoManager: undoManager
                             )
                         }
                         #else
@@ -92,7 +95,8 @@ struct TreeNodeView: View {
                             folderId: folder.id,
                             selectedIDs: $selectedIDs,
                             toastMessage: $toastMessage,
-                            showToast: $showToast
+                            showToast: $showToast,
+                            undoManager: undoManager
                         ) { child in
                             AnyView(
                                 TreeNodeView(
@@ -109,7 +113,8 @@ struct TreeNodeView: View {
                                     isEditing: $isEditing,
                                     toastMessage: $toastMessage,
                                     showToast: $showToast,
-                                    addToInputProvider: addToInputProvider
+                                    addToInputProvider: addToInputProvider,
+                                    undoManager: undoManager
                                 )
                             )
                         } moveAction: { from, to in
@@ -133,7 +138,8 @@ struct TreeNodeView: View {
                                     isEditing: $isEditing,
                                     toastMessage: $toastMessage,
                                     showToast: $showToast,
-                                    addToInputProvider: addToInputProvider
+                                    addToInputProvider: addToInputProvider,
+                                    undoManager: undoManager
                                 )
                             )
                         }
@@ -190,7 +196,7 @@ struct TreeNodeView: View {
                                 self.toastMessage = "Moved \(movedEntries.count) item(s)"
                                 self.showToast = true
                                 self.hideToastAfterDelay()
-                                if let undoManager = undoManager {
+                                if let undoManager = self.undoManager {
                                     let newHistory = appState.historyState.history
                                     undoManager.registerUndo(withTarget: appState.historyState) { target in
                                         let historyBeforeUndo = target.history
@@ -218,7 +224,7 @@ struct TreeNodeView: View {
             } label: {
                 entryRowProvider(entry)
                     #if os(iOS)
-                    .onDrop(of: [.text], delegate: FolderDropDelegate(folder: folder, appState: appState, selectedIDs: $selectedIDs, toastMessage: $toastMessage, showToast: $showToast))
+                    .onDrop(of: [.text], delegate: FolderDropDelegate(folder: folder, appState: appState, selectedIDs: $selectedIDs, toastMessage: $toastMessage, showToast: $showToast, undoManager: undoManager))
                     #endif
                     .onLongPressGesture {
                         newFolderName = folder.name

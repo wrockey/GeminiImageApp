@@ -73,7 +73,7 @@ struct HistoryView: View {
             return "Delete from history only, or also permanently delete \(fileCount) \(imageWord)?"
         }
     }
-    
+   
     private var confirmDeleteMessage: String {
         let totalItems = entriesToDelete.reduce(into: 0) { $0 += $1.imageCount }
         return "Are you sure? \(totalItems) image\(totalItems == 1 ? "" : "s") will be deleted!"
@@ -338,7 +338,7 @@ struct HistoryView: View {
                     self.toastMessage = "Moved \(movedEntries.count) item(s) to top"
                     self.showToast = true
                     self.hideToastAfterDelay()
-                    if let undoManager = undoManager {
+                    if let undoManager {
                         let newHistory = appState.historyState.history
                         undoManager.registerUndo(withTarget: appState.historyState) { target in
                             let historyBeforeUndo = target.history
@@ -514,7 +514,8 @@ struct HistoryView: View {
                                     self.showAddedMessage = true
                                     self.hideToastAfterDelay()
                                     #endif
-                                }
+                                },
+                                undoManager: undoManager
                             )
                         }
                         #else
@@ -525,7 +526,8 @@ struct HistoryView: View {
                             folderId: nil,
                             selectedIDs: $selectedIDs,
                             toastMessage: $toastMessage,
-                            showToast: $showToast
+                            showToast: $showToast,
+                            undoManager: undoManager
                         ) { entry in
                             AnyView(
                                 TreeNodeView(
@@ -548,7 +550,8 @@ struct HistoryView: View {
                                         self.showAddedMessage = true
                                         self.hideToastAfterDelay()
                                         #endif
-                                    }
+                                    },
+                                    undoManager: undoManager
                                 )
                             )
                         } moveAction: { from, to in
@@ -577,7 +580,8 @@ struct HistoryView: View {
                                     self.showAddedMessage = true
                                     self.hideToastAfterDelay()
                                     #endif
-                                }
+                                },
+                                undoManager: undoManager
                             )
                         }
                     }
@@ -634,7 +638,7 @@ struct HistoryView: View {
                         self.toastMessage = "Moved \(movedEntries.count) item(s)"
                         self.showToast = true
                         self.hideToastAfterDelay()
-                        if let undoManager = undoManager {
+                        if let undoManager {
                             let newHistory = appState.historyState.history
                             undoManager.registerUndo(withTarget: appState.historyState) { target in
                                 let historyBeforeUndo = target.history
@@ -1045,4 +1049,3 @@ struct HistoryView: View {
         return folders.map { .folder($0) } + items.map { .item($0) }
     }
 }
-

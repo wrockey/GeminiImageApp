@@ -198,20 +198,30 @@ class GenerationState: ObservableObject {
         return workflowStr
     }
     
-    private func processJSON(json: [String: Any]) {
+private func processJSON(json: [String: Any]) {
         var promptNodes: [NodeInfo] = []
         var outputNodes: [NodeInfo] = []
         var imageNodes: [NodeInfo] = []
-    
+
         if let nodesArray = json["nodes"] as? [[String: Any]] {
             for node in nodesArray {
                 guard let nodeID = node["id"] as? Int, let classType = node["type"] as? String else { continue }
                 let nodeIDStr = String(nodeID)
-    
-                if classType == "CLIPTextEncode" {
-                    let text = (node["widgets_values"] as? [Any])?.first(where: { $0 is String }) as? String ?? ""
-                    let label = text.isEmpty ? "Node \(nodeIDStr)" : "Node \(nodeIDStr): \(text.prefix(50))\(text.count > 50 ? "..." : "")"
-                    promptNodes.append(NodeInfo(id: nodeIDStr, label: label, promptText: text))
+
+                if classType.lowercased().contains("text") {
+                    var collectedTexts: [String] = []
+                    if let widgetsValues = node["widgets_values"] as? [Any] {
+                        for value in widgetsValues {
+                            if let text = value as? String, !text.isEmpty {
+                                collectedTexts.append(text)
+                            }
+                        }
+                    }
+                    let promptText = collectedTexts.joined(separator: "\n---\n")
+                    let label = promptText.isEmpty ? "Node \(nodeIDStr)" : "Node \(nodeIDStr): \(promptText.prefix(50))\(promptText.count > 50 ? "..." : "")"
+                    if !promptText.isEmpty { // Only add if there's actual text to avoid false positives
+                        promptNodes.append(NodeInfo(id: nodeIDStr, label: label, promptText: promptText))
+                    }
                 } else if ["SaveImage", "PreviewImage"].contains(classType) {
                     let label = "Node \(nodeIDStr): \(classType)"
                     outputNodes.append(NodeInfo(id: nodeIDStr, label: label, promptText: nil))
@@ -223,11 +233,25 @@ class GenerationState: ObservableObject {
         } else {
             for (nodeID, node) in json {
                 guard let nodeDict = node as? [String: Any], let classType = nodeDict["class_type"] as? String else { continue }
-    
-                if classType == "CLIPTextEncode" {
-                    let text = (nodeDict["inputs"] as? [String: Any])?["text"] as? String ?? ""
-                    let label = text.isEmpty ? "Node \(nodeID)" : "Node \(nodeID): \(text.prefix(50))\(text.count > 50 ? "..." : "")"
-                    promptNodes.append(NodeInfo(id: nodeID, label: label, promptText: text))
+
+                if classType.lowercased().contains("text") {
+                    let inputs = nodeDict["inputs"] as? [String: Any] ?? [:]
+                    var collectedTexts: [String] = []
+                    
+                    for (key, value) in inputs {
+                        let lowerKey = key.lowercased()
+                        if lowerKey.contains("prompt") || lowerKey.contains("text") || lowerKey.contains("positiv") || lowerKey.contains("negativ") {
+                            if let text = value as? String, !text.isEmpty {
+                                collectedTexts.append(text)
+                            }
+                        }
+                    }
+                    
+                    let promptText = collectedTexts.joined(separator: "\n---\n") // Concatenate if multiple
+                    let label = promptText.isEmpty ? "Node \(nodeID)" : "Node \(nodeID): \(promptText.prefix(50))\(promptText.count > 50 ? "..." : "")"
+                    if !promptText.isEmpty { // Only add if there's actual text to avoid false positives
+                        promptNodes.append(NodeInfo(id: nodeID, label: label, promptText: promptText))
+                    }
                 } else if ["SaveImage", "PreviewImage"].contains(classType) {
                     let label = "Node \(nodeID): \(classType)"
                     outputNodes.append(NodeInfo(id: nodeID, label: label, promptText: nil))
@@ -237,7 +261,7 @@ class GenerationState: ObservableObject {
                 }
             }
         }
-    
+
         if promptNodes.isEmpty && outputNodes.isEmpty && imageNodes.isEmpty {
             workflowError = "Invalid workflow format or no relevant nodes found. Please load a valid ComfyUI JSON (API or standard format)."
             self.promptNodes = []
@@ -245,11 +269,11 @@ class GenerationState: ObservableObject {
             self.imageNodes = []
             return
         }
-    
+
         self.promptNodes = promptNodes.sorted { $0.id < $1.id }
         self.outputNodes = outputNodes.sorted { $0.id < $1.id }
         self.imageNodes = imageNodes.sorted { $0.id < $1.id }
-    
+
         comfyPromptNodeID = promptNodes.first?.id ?? ""
         comfyOutputNodeID = outputNodes.first?.id ?? ""
         comfyImageNodeID = imageNodes.first?.id ?? ""
@@ -955,8 +979,8 @@ class AppState: ObservableObject {
             return 0
         }
     }
-    
-    var preferImgBBForImages: Bool {
+
+var preferImgBBForImages: Bool {
         !settings.imgbbApiKey.isEmpty && (currentAIMLModel?.acceptsPublicURL ?? true)
     }
     

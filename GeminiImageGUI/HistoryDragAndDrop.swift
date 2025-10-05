@@ -19,6 +19,7 @@ struct ReorderableForEach<Item: Reorderable, Content: View, Preview: View>: View
     @Binding var selectedIDs: Set<UUID>
     @Binding var toastMessage: String?
     @Binding var showToast: Bool
+    let undoManager: UndoManager?
    
     init(
         _ items: [Item],
@@ -28,6 +29,7 @@ struct ReorderableForEach<Item: Reorderable, Content: View, Preview: View>: View
         selectedIDs: Binding<Set<UUID>>,
         toastMessage: Binding<String?>,
         showToast: Binding<Bool>,
+        undoManager: UndoManager?,
         @ViewBuilder content: @escaping (Item) -> Content,
         @ViewBuilder preview: @escaping (Item) -> Preview,
         moveAction: @escaping (IndexSet, Int) -> Void
@@ -42,6 +44,7 @@ struct ReorderableForEach<Item: Reorderable, Content: View, Preview: View>: View
         self._selectedIDs = selectedIDs
         self._toastMessage = toastMessage
         self._showToast = showToast
+        self.undoManager = undoManager
     }
    
     init(
@@ -52,6 +55,7 @@ struct ReorderableForEach<Item: Reorderable, Content: View, Preview: View>: View
         selectedIDs: Binding<Set<UUID>>,
         toastMessage: Binding<String?>,
         showToast: Binding<Bool>,
+        undoManager: UndoManager?,
         @ViewBuilder content: @escaping (Item) -> Content,
         moveAction: @escaping (IndexSet, Int) -> Void
     ) where Preview == EmptyView {
@@ -65,6 +69,7 @@ struct ReorderableForEach<Item: Reorderable, Content: View, Preview: View>: View
         self._selectedIDs = selectedIDs
         self._toastMessage = toastMessage
         self._showToast = showToast
+        self.undoManager = undoManager
     }
    
     var body: some View {
@@ -108,7 +113,8 @@ struct ReorderableForEach<Item: Reorderable, Content: View, Preview: View>: View
                     moveAction: moveAction,
                     selectedIDs: $selectedIDs,
                     toastMessage: $toastMessage,
-                    showToast: $showToast
+                    showToast: $showToast,
+                    undoManager: undoManager
                 )
             )
     }
@@ -127,6 +133,7 @@ struct ReorderableDragRelocateDelegate<Item: Reorderable>: DropDelegate {
     @Binding var selectedIDs: Set<UUID>
     @Binding var toastMessage: String?
     @Binding var showToast: Bool
+    let undoManager: UndoManager?
    
     init(
         item: Item,
@@ -138,7 +145,8 @@ struct ReorderableDragRelocateDelegate<Item: Reorderable>: DropDelegate {
         moveAction: @escaping (IndexSet, Int) -> Void,
         selectedIDs: Binding<Set<UUID>>,
         toastMessage: Binding<String?>,
-        showToast: Binding<Bool>
+        showToast: Binding<Bool>,
+        undoManager: UndoManager?
     ) {
         self.item = item
         self.items = items
@@ -150,6 +158,7 @@ struct ReorderableDragRelocateDelegate<Item: Reorderable>: DropDelegate {
         self._selectedIDs = selectedIDs
         self._toastMessage = toastMessage
         self._showToast = showToast
+        self.undoManager = undoManager
     }
    
     func dropEntered(info: DropInfo) {
@@ -203,13 +212,14 @@ struct ReorderableDragRelocateDelegate<Item: Reorderable>: DropDelegate {
                 return
             }
             DispatchQueue.main.async {
+                let oldHistory = appState.historyState.history
                 var movedEntries: [HistoryEntry] = []
                 var snapshot = appState.historyState.history
                 for id in ids {
                     if let entry = appState.historyState.findAndRemoveEntry(id: id, in: &snapshot) {
                         movedEntries.append(entry)
                     } else {
-                        print("Drag-and-drop failed to find entry with ID: \(id)")
+                        print("Drop failed to find entry with ID: \(id)")
                     }
                 }
                 if movedEntries.isEmpty {
@@ -226,6 +236,21 @@ struct ReorderableDragRelocateDelegate<Item: Reorderable>: DropDelegate {
                 self.toastMessage = "Moved \(movedEntries.count) item(s)"
                 self.showToast = true
                 self.hideToastAfterDelay()
+                if let undoManager = self.undoManager {
+                    let newHistory = appState.historyState.history
+                    undoManager.registerUndo(withTarget: appState.historyState) { target in
+                        let historyBeforeUndo = target.history
+                        target.history = oldHistory
+                        target.objectWillChange.send()
+                        target.saveHistory()
+                        undoManager.registerUndo(withTarget: target) { redoTarget in
+                            redoTarget.history = historyBeforeUndo
+                            redoTarget.objectWillChange.send()
+                            redoTarget.saveHistory()
+                        }
+                    }
+                    undoManager.setActionName("Move Items")
+                }
             }
         }
         return true
@@ -246,19 +271,22 @@ struct FolderDropDelegate: DropDelegate {
     @Binding var selectedIDs: Set<UUID>
     @Binding var toastMessage: String?
     @Binding var showToast: Bool
+    let undoManager: UndoManager?
    
     init(
         folder: Folder,
         appState: AppState,
         selectedIDs: Binding<Set<UUID>>,
         toastMessage: Binding<String?>,
-        showToast: Binding<Bool>
+        showToast: Binding<Bool>,
+        undoManager: UndoManager?
     ) {
         self.folder = folder
         self.appState = appState
         self._selectedIDs = selectedIDs
         self._toastMessage = toastMessage
         self._showToast = showToast
+        self.undoManager = undoManager
     }
    
     func performDrop(info: DropInfo) -> Bool {
@@ -296,6 +324,7 @@ struct FolderDropDelegate: DropDelegate {
                 return
             }
             DispatchQueue.main.async {
+                let oldHistory = appState.historyState.history
                 var movedEntries: [HistoryEntry] = []
                 var snapshot = appState.historyState.history
                 for id in ids {
@@ -320,6 +349,21 @@ struct FolderDropDelegate: DropDelegate {
                 self.toastMessage = "Moved \(movedEntries.count) item(s) to folder"
                 self.showToast = true
                 self.hideToastAfterDelay()
+                if let undoManager = self.undoManager {
+                    let newHistory = appState.historyState.history
+                    undoManager.registerUndo(withTarget: appState.historyState) { target in
+                        let historyBeforeUndo = target.history
+                        target.history = oldHistory
+                        target.objectWillChange.send()
+                        target.saveHistory()
+                        undoManager.registerUndo(withTarget: target) { redoTarget in
+                            redoTarget.history = historyBeforeUndo
+                            redoTarget.objectWillChange.send()
+                            redoTarget.saveHistory()
+                        }
+                    }
+                    undoManager.setActionName("Move to Folder")
+                }
             }
         }
         return true
@@ -340,3 +384,5 @@ extension HistoryState {
    
     // Add entry to a specific folder
  }
+
+
