@@ -477,3 +477,33 @@ extension Array {
         indices.contains(index) ? self[index] : nil
     }
 }
+struct HeightPreferenceKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
+#if os(iOS)
+extension View {
+    func dynamicHeightPresentation() -> some View {
+        modifier(DynamicHeightModifier())
+    }
+}
+
+struct DynamicHeightModifier: ViewModifier {
+    @State private var contentHeight: CGFloat = 0
+    
+    func body(content: Self.Content) -> some View {
+        content
+            .background(GeometryReader { geo in
+                Color.clear
+                    .preference(key: HeightPreferenceKey.self, value: geo.size.height)
+            })
+            .onPreferenceChange(HeightPreferenceKey.self) { height in
+                contentHeight = height
+            }
+            .presentationDetents([PresentationDetent.height(contentHeight + 60)])  // +60 for padding/title/safe areas; adjust after testing
+    }
+}
+#endif

@@ -12,26 +12,57 @@ import UniformTypeIdentifiers
 
 // No need for duplicated typealias or platformPngData extension—they're in PlatformAbstractions.swift
 
-func processImageForUpload(image: PlatformImage, originalData: Data? = nil, format: String = "jpeg", quality: CGFloat = 0.6) -> (data: Data, mimeType: String)? {
-    let lowerFormat = format.lowercased()
-    let ext = lowerFormat == "jpeg" ? "jpg" : "png"
-    let mime = lowerFormat == "jpeg" ? "image/jpeg" : "image/png"
+func processImageForUpload(image: PlatformImage, originalData: Data? = nil, format: String = "jpeg", isBase64: Bool = false, convertToJPG: Bool = false, scale50Percent: Bool = false) -> (data: Data, mimeType: String)? {
+    var processedImage = image
+    var useFormat = format
+    var quality: CGFloat = 0.6  // Default
     
-    if lowerFormat == "png", let orig = originalData, isPNGData(orig) {
+    if isBase64 {
+        if scale50Percent {
+            let newSize = CGSize(width: image.platformSize.width * 0.5, height: image.platformSize.height * 0.5)
+            #if os(macOS)
+            let resized = NSImage(size: newSize, flipped: false, drawingHandler: { _ in
+                image.draw(in: NSRect(origin: .zero, size: newSize))
+                return true
+            })
+            processedImage = resized
+            #elseif os(iOS)
+            UIGraphicsBeginImageContextWithOptions(newSize, false, 0.0)
+            image.draw(in: CGRect(origin: .zero, size: newSize))
+            if let resized = UIGraphicsGetImageFromCurrentImageContext() {
+                processedImage = resized
+            } else {
+                UIGraphicsEndImageContext()
+                return nil
+            }
+            UIGraphicsEndImageContext()
+            #endif
+        }
+        if convertToJPG {
+            useFormat = "jpeg"
+            quality = 0.8  // Higher for base64 to balance size/quality
+        }
+    }
+    
+    let lower = useFormat.lowercased()
+    let ext = lower == "jpeg" ? "jpg" : "png"
+    let mime = lower == "jpeg" ? "image/jpeg" : "image/png"
+    
+    if lower == "png", let orig = originalData, isPNGData(orig) {
         // Passthrough original PNG data to preserve metadata/chunks
         return (orig, mime)
     }
     
-    guard let imageData = image.platformData(forType: ext, compressionQuality: quality) else { return nil }
-    
-    let safeData: Data
-    if lowerFormat == "png" {
-        safeData = imageData  // Generated PNG (may lose custom chunks)
-    } else {
-        safeData = stripExif(from: imageData) ?? imageData
+    if let imageData = processedImage.platformData(forType: ext, compressionQuality: quality) {
+        let safeData: Data
+        if lower == "png" {
+            safeData = imageData  // Generated PNG (may lose custom chunks)
+        } else {
+            safeData = stripExif(from: imageData) ?? imageData
+        }
+        return (safeData, mime)
     }
-    
-    return (safeData, mime)
+    return nil
 }
 
 private func stripExif(from imageData: Data) -> Data? {
@@ -44,6 +75,7 @@ private func stripExif(from imageData: Data) -> Data? {
     guard CGImageDestinationFinalize(destination) else { return nil }
     return (destination as? NSMutableData) as Data?
 }
+// In ImageProcessor.swift (add at the end; replace any prior PNG function)
 
 /// Returns true if data is JPEG (checks signature).
 func isJPEGData(_ data: Data) -> Bool {
@@ -51,7 +83,7 @@ func isJPEGData(_ data: Data) -> Bool {
     return data[0] == 0xFF && data[1] == 0xD8
 }
 
-/// Converts image data to JPEG (if not already) and adds an EXIF UserComment (e.g., "Prompt: [prompt]\n[creator]"), preserving compatible metadata.
+/// Converts image data to JPEG (if not already) and adds an EXIF UserComment (e.g., "[prompt]\n[creator]"), preserving compatible metadata.
 /// Returns JPEG data with EXIF on success; nil on failure.
 /// Truncates prompt to maxTotalLength chars (with "..." if needed); set high for no effective limit.
 func addCommentToJPEG(inputData: Data, prompt: String, creator: String, quality: CGFloat = 0.95, maxTotalLength: Int = 255) -> Data? {
@@ -65,7 +97,8 @@ func addCommentToJPEG(inputData: Data, prompt: String, creator: String, quality:
     }
     
     let destinationData = NSMutableData()
-    guard let destination = CGImageDestinationCreateWithData(destinationData as CFMutableData, kUTTypeJPEG as CFString, count, nil) else {
+    guard let destination = CGImageDestinationCreateWithData(destinationData as CFMutableData, UTType.jpeg.identifier as CFString, count, nil)
+    else {
         return nil
     }
     
@@ -73,7 +106,7 @@ func addCommentToJPEG(inputData: Data, prompt: String, creator: String, quality:
     let reserved = 1 + creator.count  // "\n" + creator
     let maxPromptLen = maxTotalLength - reserved
     let truncatedPrompt = (prompt.count > maxPromptLen) ? String(prompt.prefix(max(0, maxPromptLen - 3))) + "..." : prompt
-    let comment = "Prompt: \(truncatedPrompt)\n\(creator)"  // Eliminated "Creator: " for space
+    let comment = "\(truncatedPrompt)\n\(creator)"  // Eliminated "Prompt: " for space
     
     for i in 0..<count {
         // Copy existing properties (preserves compatible metadata)
@@ -85,7 +118,7 @@ func addCommentToJPEG(inputData: Data, prompt: String, creator: String, quality:
         mutableProps[kCGImagePropertyExifDictionary as String] = exifDict
         
         // Set JPEG compression quality
-        let destOptions = [kCGImageDestinationMergeMetadata: true, kCGImageDestinationImageMaxPixelSize: 0, kCGImageDestinationLossyCompressionQuality: quality] as CFDictionary
+        let destOptions = [kCGImageDestinationMergeMetadata: true as CFBoolean, kCGImageDestinationImageMaxPixelSize: 0 as CFNumber, kCGImageDestinationLossyCompressionQuality: quality as CFNumber] as CFDictionary
         
         // Add image with updated props
         CGImageDestinationAddImageFromSource(destination, source, i, mutableProps as CFDictionary)

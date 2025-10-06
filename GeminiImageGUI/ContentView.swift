@@ -6,6 +6,8 @@ import AppKit
 import UIKit
 #endif
 
+let openGeneralSettingsNotification = Notification.Name("OpenGeneralSettings")
+
 struct IdentifiableData: Identifiable, Codable, Hashable {
     var id: UUID
     let data: Data
@@ -208,6 +210,9 @@ struct ContentView: View {
     @State var pendingAction: (() -> Void)? = nil
     @State var generationTask: Task<Void, Error>? = nil
     @State var promptTextView: (any PlatformTextView)? = nil
+    @State private var showGeneralOptions = false
+
+
     @AppStorage("hasLaunchedBefore") var hasLaunchedBefore: Bool = false
     @AppStorage("configExpanded") private var configExpanded: Bool = true
     @AppStorage("promptExpanded") private var promptExpanded: Bool = true
@@ -445,6 +450,15 @@ struct ContentView: View {
         .onChange(of: appState.ui.outputImages) { _ in
             imageScale = 1.0
         }
+        .onReceive(NotificationCenter.default.publisher(for: openGeneralSettingsNotification)) { _ in
+            showGeneralOptions = true
+        }
+        .sheet(isPresented: $showGeneralOptions) {
+            GeneralOptionsView(isPresented: $showGeneralOptions)
+                .dynamicHeightPresentation()  // Add this custom modifier (defined below)
+                .presentationDragIndicator(.visible)
+                .environmentObject(appState)
+        }
     }
     
     #else
@@ -491,11 +505,11 @@ struct ContentView: View {
                             // Validate bookmark before opening editor
                             do {
                                 var isStale = false
-                                #if os(macOS)
+#if os(macOS)
                                 let options: URL.BookmarkResolutionOptions = [.withSecurityScope]
-                                #else
+#else
                                 let options: URL.BookmarkResolutionOptions = []
-                                #endif
+#endif
                                 let resolvedURL = try URL(resolvingBookmarkData: bookmarkData, options: options, bookmarkDataIsStale: &isStale)
                                 if resolvedURL.startAccessingSecurityScopedResource() {
                                     defer { resolvedURL.stopAccessingSecurityScopedResource() }
@@ -526,12 +540,21 @@ struct ContentView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-       
+        
         .background(LinearGradient(gradient: Gradient(colors: [topColor, bottomColor]), startPoint: .top, endPoint: .bottom))
         .toolbar {
             ToolbarItemGroup(placement: .automatic) {
                 toolbarContent
             }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: openGeneralSettingsNotification)) { _ in
+            showGeneralOptions = true
+            
+        }
+        .sheet(isPresented: $showGeneralOptions) {
+            GeneralOptionsView(isPresented: $showGeneralOptions)
+                .frame(minWidth: 450, maxWidth: .infinity, minHeight: 200, idealHeight: .infinity, maxHeight: .infinity)
+                .environmentObject(appState)
         }
     }
     #endif
@@ -569,6 +592,12 @@ private var toolbar: some ToolbarContent {
             .help("New Session")
             .accessibilityLabel("New Session")
             .accessibilityHint("Resets the current session, clearing prompt and images.")
+            Button(action: { showGeneralOptions = true }) {
+                Image(systemName: "gear")
+            }
+            .help("General Settings")
+            .accessibilityLabel("General Settings")
+            .accessibilityHint("Opens the general settings page.")
             
             Button(action: {
                 #if os(iOS)
@@ -695,3 +724,4 @@ private var toolbar: some ToolbarContent {
         UserDefaults.standard.removeObject(forKey: "batchFileBookmark")
     }
 }
+

@@ -96,7 +96,7 @@ extension ContentView {
                 var parts: [Part] = [Part(text: appState.prompt, inlineData: nil)]
                 
                 for slot in appState.ui.imageSlots {
-                    if let image = slot.image, let processed = processImageForUpload(image: image) {
+                    if let image = slot.image, let processed = processImageForUpload(image: image, originalData: slot.originalData, format: "jpeg", isBase64: true, convertToJPG: appState.settings.base64ConvertToJPG, scale50Percent: appState.settings.base64Scale50Percent) {
                         let base64 = processed.data.base64EncodedString()
                         let inline = InlineData(mimeType: processed.mimeType, data: base64)
                         parts.append(Part(text: nil, inlineData: inline))
@@ -684,8 +684,10 @@ extension ContentView {
                 let useImgBB = appState.preferImgBBForImages && model.acceptsPublicURL
                 
                 for slot in appState.ui.imageSlots {
-                    guard let image = slot.image, let processed = processImageForUpload(image: image, originalData: slot.originalData, format: "jpeg") else { continue }
-                    
+                    guard let image = slot.image, let processed = processImageForUpload(image: image, originalData: slot.originalData, format: "jpeg", isBase64: appState.settings.imageSubmissionMethod == .base64, convertToJPG: appState.settings.base64ConvertToJPG, scale50Percent: appState.settings.base64Scale50Percent)
+                    else {
+                        continue
+                    }
                     if useImgBB {
                         guard !appState.settings.imgbbApiKey.isEmpty else {
                             throw GenerationError.apiError("ImgBB API key required for public image upload.")

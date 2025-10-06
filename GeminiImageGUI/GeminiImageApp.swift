@@ -21,6 +21,11 @@ struct NodeInfo: Identifiable {
     let promptText: String?
 }
 
+enum ImageSubmissionMethod: String, Codable, CaseIterable, Hashable {  // Added CaseIterable, Hashable
+    case imgBB = "ImgBB Links (Public URLs)"
+    case base64 = "Base64 Payload (Private)"
+}
+
 class SettingsState: ObservableObject {
     @Published var apiKey: String = KeychainHelper.loadAPIKey() ?? ""
     @Published var outputDirectory: URL? = nil
@@ -39,6 +44,9 @@ class SettingsState: ObservableObject {
     @Published var selectedImageWidth : Int = 2048
     @Published var aimlAdvancedParams: ModelParameters = ModelParameters()
     @Published var comfyBatchSize: Int = 1
+    @AppStorage("imageSubmissionMethod") var imageSubmissionMethod: ImageSubmissionMethod = .imgBB
+    @AppStorage("base64ConvertToJPG") var base64ConvertToJPG: Bool = true
+    @AppStorage("base64Scale50Percent") var base64Scale50Percent: Bool = false
     var supportsCustomResolution: Bool {
         let supportingModels = [
             "bytedance/seedream-v4-text-to-image",
@@ -1262,6 +1270,12 @@ struct GeminiImageApp: App {
                 }
                 .disabled(appState.historyState.history.isEmpty)
                 .keyboardShortcut("k", modifiers: [.command, .shift])
+            }
+            CommandMenu("Options") {
+            Button("General Settings") {
+            NotificationCenter.default.post(name: openGeneralSettingsNotification, object: nil)
+            }
+            .keyboardShortcut("o", modifiers: [.command])
             }
         }
         WindowGroup(id: "text-editor", for: Data.self) { $data in
