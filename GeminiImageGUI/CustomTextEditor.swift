@@ -1,4 +1,3 @@
-// CustomTextEditor.swift
 import SwiftUI
 #if os(macOS)
 import AppKit
@@ -82,23 +81,24 @@ struct MacCustomTextEditor: NSViewRepresentable {
     }
     
     func updateNSView(_ nsView: NSScrollView, context: Context) {
-        let textView = nsView.documentView as! CustomNSTextView
+        guard let textView = nsView.documentView as? CustomNSTextView else { return }
         textView.customUndoManager = undoManager
+        
+        // Update text only if it has changed externally (prevents cursor jump during typing)
         if textView.string != text {
+            let selectedRange = textView.selectedRange()
             textView.string = text
+            textView.setSelectedRange(selectedRange)  // Preserve cursor position
         }
-        DispatchQueue.main.async {
-            if let window = nsView.window {
-                if window.firstResponder != textView {
-                    window.makeFirstResponder(textView)
-                }
-                if let windowDelegate = windowDelegate, window.delegate !== windowDelegate {
-                    windowDelegate.window = window
-                    window.delegate = windowDelegate
-                }
-                if window.title != windowTitle && !windowTitle.isEmpty {
-                    window.title = windowTitle
-                }
+        
+        // Handle window delegate and title only once or when needed
+        if let window = nsView.window {
+            if let windowDelegate = windowDelegate, window.delegate !== windowDelegate {
+                windowDelegate.window = window
+                window.delegate = windowDelegate
+            }
+            if !windowTitle.isEmpty && window.title != windowTitle {
+                window.title = windowTitle
             }
         }
     }
@@ -155,13 +155,12 @@ struct iOSCustomTextEditor: UIViewRepresentable {
     
     func updateUIView(_ uiView: CustomUITextView, context: Context) {
         uiView.customUndoManager = undoManager
+        
+        // Update text only if it has changed externally (prevents cursor jump during typing)
         if uiView.text != text {
+            let selectedRange = uiView.selectedRange
             uiView.text = text
-        }
-        DispatchQueue.main.async {
-            if !uiView.isFirstResponder {
-                uiView.becomeFirstResponder()
-            }
+            uiView.selectedRange = selectedRange  // Preserve cursor position
         }
     }
     
