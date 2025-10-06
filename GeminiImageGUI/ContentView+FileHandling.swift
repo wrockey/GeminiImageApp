@@ -78,7 +78,7 @@ extension ContentView {
         }
     }
     
-    func saveGeneratedImage(data: Data) -> String? {
+    func saveGeneratedImage(data: Data, prompt: String, mode: GenerationMode, workflowName: String? = nil, modelUsed: String? = nil, batchIndex: Int? = nil, totalInBatch: Int? = nil) -> String? {
         let fileManager = FileManager.default
         var outputDir = appState.settings.outputDirectory
         var useFallback = false
@@ -162,14 +162,54 @@ extension ContentView {
                 throw innerListError
             }
             
-            // Generate filename
-            let generatedFiles = existingFiles.filter { $0.lastPathComponent.hasPrefix("generated_image_") && $0.pathExtension == "png" }
+            // Generate filename with mode-specific extension
+            let extensionStr = (mode == .comfyUI) ? "png" : "jpg"
+            let generatedFiles = existingFiles.filter { $0.lastPathComponent.hasPrefix("generated_image_") && $0.pathExtension == extensionStr }
             let numbers = generatedFiles.compactMap { url in
                 Int(url.deletingPathExtension().lastPathComponent.replacingOccurrences(of: "generated_image_", with: ""))
             }
             let nextNum = (numbers.max() ?? 0) + 1
-            let filename = "generated_image_\(nextNum).png"
+            let filename = "generated_image_\(nextNum).\(extensionStr)"
             let fileURL = resolvedDir.appendingPathComponent(filename)
+            
+            // NEW: Compute creator using history logic, with fallback for extensibility
+            var creatorToUse: String = mode.rawValue.capitalized  // Fallback to mode name (e.g., "Gemini", allows future modes)
+            switch mode {
+            case .gemini:
+                creatorToUse = "Gemini 2.5 Flash"  // Hardcode details if no selectedModel
+            case .grok:
+                creatorToUse = modelUsed ?? appState.settings.selectedGrokModel
+            case .aimlapi:
+                creatorToUse = modelUsed ?? appState.settings.selectedAIMLModel
+            case .comfyUI:
+                creatorToUse = workflowName ?? "ComfyUI"
+            }
+            if let idx = batchIndex, let tot = totalInBatch {
+                creatorToUse += " #\(idx + 1) of \(tot)"
+            }
+            
+            // NEW: Prepare finalData based on mode
+            var finalData = data
+            if mode == .comfyUI {
+                // For ComfyUI: Save PNG as-is (preserves embedded workflow; no addition)
+                if !isPNGData(data) {
+                    // Rare: If not PNG, convert to PNG without mods
+                    if let image = PlatformImage(platformData: data) {
+                        finalData = image.platformPngData() ?? data
+                    }
+                }
+            } else {
+                // For others: Convert to JPEG and add EXIF comment if prompt non-empty
+                if !prompt.isEmpty {
+                    finalData = addCommentToJPEG(inputData: data, prompt: prompt, creator: creatorToUse) ?? data
+                }
+                // Ensure JPEG (convert if needed)
+                if !isJPEGData(finalData) {
+                    if let image = PlatformImage(platformData: finalData) {
+                        finalData = image.platformData(forType: "jpeg", compressionQuality: 0.95) ?? finalData
+                    }
+                }
+            }
             
             // Write file
             var writeError: NSError?
@@ -177,7 +217,7 @@ extension ContentView {
             let writeOptions: NSFileCoordinator.WritingOptions = fileManager.fileExists(atPath: fileURL.path) ? .forReplacing : []
             NSFileCoordinator().coordinate(writingItemAt: fileURL, options: writeOptions, error: &writeError) { coordinatedURL in
                 do {
-                    try data.write(to: coordinatedURL)
+                    try finalData.write(to: coordinatedURL)
                 } catch {
                     innerWriteError = error
                 }
