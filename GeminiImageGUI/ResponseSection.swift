@@ -243,7 +243,7 @@ struct ResponseSection: View {
 #elseif os(iOS)
         // iOS share sheet for saving to Photos/Files
         guard let pngData = image.pngData() else {
-            errorItem = AlertError(message: "Failed to prepare image for saving.")
+            errorItem = AlertError(message: "Failed to prepare image for saving.", fullMessage: nil)
             return
         }
    
@@ -259,7 +259,7 @@ struct ResponseSection: View {
         if let topVC = UIApplication.shared.windows.first(where: { $0.isKeyWindow })?.rootViewController {
             topVC.present(activityVC, animated: true)
         } else {
-            errorItem = AlertError(message: "Unable to present save dialog.")
+            errorItem = AlertError(message: "Unable to present save dialog.", fullMessage: nil)
         }
 #endif
     }

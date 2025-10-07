@@ -543,7 +543,7 @@ struct ImageSlotItemView: View {
                             onAnnotate(slot.id)
                         } else {
                             print("DEBUG: Annotate tapped but no image in slot \(slot.id)")
-                            errorItem = AlertError(message: "No image loaded to annotate.")
+                            errorItem = AlertError(message: "No image loaded to annotate.", fullMessage: nil)
                         }
                     } label: {
                         Image(systemName: "square.and.pencil")
