@@ -118,11 +118,11 @@ struct ResponseSection: View {
                         .disabled(index == 0)
                         .buttonStyle(.bordered)
                         .tint(.blue)
-                
+                        
                         Text("\(index + 1) of \(count)")
                             .font(.subheadline)
                             .foregroundColor(.secondary)
-                
+                        
                         Button {
                             if index < count - 1 { appState.ui.currentOutputIndex += 1 }
                         } label: {
@@ -157,7 +157,7 @@ struct ResponseSection: View {
                     .shadow(radius: 2)
                     .help("Copy the image to the clipboard")
                     .accessibilityLabel("Copy image")
-                
+                    
                     Button {
                         saveImageAs(image: platformImage)
                     } label: {
@@ -169,7 +169,7 @@ struct ResponseSection: View {
                     .shadow(radius: 2)
                     .help("Save the image to a file")
                     .accessibilityLabel("Save image as")
-                
+                    
                     Button {
                         showDeleteAlert = true
                     } label: {
@@ -229,7 +229,7 @@ struct ResponseSection: View {
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.png]
         panel.nameFieldStringValue = "generated_image.png"
-    
+        
         if panel.runModal() == .OK, let url = panel.url {
             if let data = image.platformTiffRepresentation(), let bitmap = NSBitmapImageRep(data: data), let pngData = bitmap.representation(using: .png, properties: [:]) {
                 do {
@@ -244,15 +244,15 @@ struct ResponseSection: View {
             errorItem = AlertError(message: "Failed to prepare image for saving.", fullMessage: nil)
             return
         }
-    
+        
         let activityVC = UIActivityViewController(activityItems: [pngData], applicationActivities: nil)
-    
+        
         if UIDevice.current.userInterfaceIdiom == .pad {
             activityVC.popoverPresentationController?.sourceView = UIApplication.shared.windows.first?.rootViewController?.view
             activityVC.popoverPresentationController?.sourceRect = CGRect(x: UIScreen.main.bounds.midX, y: UIScreen.main.bounds.midY, width: 0, height: 0)
             activityVC.popoverPresentationController?.permittedArrowDirections = []
         }
-    
+        
         if let topVC = UIApplication.shared.windows.first(where: { $0.isKeyWindow })?.rootViewController {
             topVC.present(activityVC, animated: true)
         } else {
@@ -267,7 +267,11 @@ struct ResponseSection: View {
             // Store state for undo
             let image = appState.ui.outputImages[safe: index]
             let text = appState.ui.outputTexts[safe: index]
-            let historyEntry = appState.historyState.findAndRemoveEntry(matching: { $0.imagePath == path })
+            let oldHistory = appState.historyState.history
+            let historyEntryRemoved = appState.historyState.findAndRemoveEntry(matching: { $0.imagePath == path })
+            
+            print("Deleting image at index \(index), path: \(path), history entry removed: \(historyEntryRemoved)")
+            print("History before deletion: \(appState.historyState.history.map { $0.id })")
             
             #if os(macOS)
             // Register undo action
@@ -276,9 +280,9 @@ struct ResponseSection: View {
                 let oldTexts = appState.ui.outputTexts
                 let oldPaths = appState.ui.outputPaths
                 let oldIndex = appState.ui.currentOutputIndex
-                let oldHistory = appState.historyState.history
                 
                 undoManager.registerUndo(withTarget: appState) { target in
+                    print("Undoing delete: Restoring history with \(oldHistory.count) entries: \(oldHistory.map { $0.id })")
                     // Restore UI state
                     target.ui.outputImages = oldImages
                     target.ui.outputTexts = oldTexts
@@ -289,7 +293,9 @@ struct ResponseSection: View {
                     target.historyState.history = oldHistory
                     target.historyState.saveHistory()
                     target.historyState.objectWillChange.send()
-                    target.ui.objectWillChange.send() // Ensure UI updates
+                    target.ui.objectWillChange.send()
+                    
+                    print("History after undo: \(target.historyState.history.map { $0.id })")
                     
                     // Register redo action
                     undoManager.registerUndo(withTarget: target) { redoTarget in
@@ -303,7 +309,9 @@ struct ResponseSection: View {
                                         try withSecureAccess(to: dir) {
                                             try fileManager.removeItem(at: fileURL)
                                         }
-                                    } catch { /* log error */ }
+                                    } catch {
+                                        print("Redo: Failed to delete file: \(error)")
+                                    }
                                 }
                             }
                             
@@ -324,7 +332,8 @@ struct ResponseSection: View {
                             
                             redoTarget.ui.objectWillChange.send()
                             redoTarget.historyState.saveHistory()
-                            redoTarget.historyState.objectWillChange.send() // Ensure history panel updates
+                            redoTarget.historyState.objectWillChange.send()
+                            print("Redo: History after deletion: \(redoTarget.historyState.history.map { $0.id })")
                         }
                     }
                     undoManager.setActionName("Delete Response")
@@ -340,7 +349,9 @@ struct ResponseSection: View {
                         try withSecureAccess(to: dir) {
                             try fileManager.removeItem(at: fileURL)
                         }
-                    } catch { /* log error */ }
+                    } catch {
+                        print("Failed to delete file: \(error)")
+                    }
                 }
             }
             
@@ -358,7 +369,8 @@ struct ResponseSection: View {
             
             appState.ui.objectWillChange.send()
             appState.historyState.saveHistory()
-            appState.historyState.objectWillChange.send() // Ensure history panel updates
+            appState.historyState.objectWillChange.send()
+            print("History after deletion: \(appState.historyState.history.map { $0.id })")
         }
     }
 }

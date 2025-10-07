@@ -22,13 +22,14 @@ struct HistoryView: View {
     #endif
     #if os(macOS)
     @State private var isEditing: Bool = false
-    @State private var showClearHistoryConfirmation: Bool = false // Added for macOS clear history confirmation
+    @State private var showClearHistoryConfirmation: Bool = false
     #if swift(>=5.7)
     @Environment(\.openWindow) private var openWindow
     #endif
     #endif
     @State private var activeEntry: HistoryEntry? = nil
     @State private var selectedIDs: Set<UUID> = []
+    @State private var refreshTrigger: UUID = UUID() // New refresh trigger
     @Environment(\.dismiss) private var dismiss
     
     private var dateFormatter: DateFormatter {
@@ -101,6 +102,14 @@ struct HistoryView: View {
                 Text("This will remove all history entries but keep your files intact. Are you sure?")
             }
             #endif
+            .onChange(of: appState.historyState.history) { _ in
+                // Reset local state and trigger refresh
+                selectedIDs.removeAll()
+                activeEntry = nil
+                refreshTrigger = UUID() // Force re-render
+                print("History changed: \(appState.historyState.history.map { $0.id })")
+            }
+            .id(refreshTrigger) // Force re-render of the entire view
     }
     
     private var content: some View {
