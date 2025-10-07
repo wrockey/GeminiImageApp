@@ -29,7 +29,6 @@ struct HistoryView: View {
     #endif
     @State private var activeEntry: HistoryEntry? = nil
     @State private var selectedIDs: Set<UUID> = []
-    @State private var refreshTrigger: UUID = UUID() // New refresh trigger
     @Environment(\.dismiss) private var dismiss
     
     private var dateFormatter: DateFormatter {
@@ -103,13 +102,16 @@ struct HistoryView: View {
             }
             #endif
             .onChange(of: appState.historyState.history) { _ in
-                // Reset local state and trigger refresh
+                // Reset local state to ensure consistency with restored history
                 selectedIDs.removeAll()
                 activeEntry = nil
-                refreshTrigger = UUID() // Force re-render
+                #if os(iOS)
+                if let editMode = editMode {
+                    editMode.wrappedValue = .inactive
+                }
+                #endif
                 print("History changed: \(appState.historyState.history.map { $0.id })")
             }
-            .id(refreshTrigger) // Force re-render of the entire view
     }
     
     private var content: some View {
@@ -255,8 +257,6 @@ struct HistoryView: View {
             .accessibilityLabel("Redo")
             
             commonActions
-            
-
         }
         .padding(.horizontal)
         #else
@@ -305,8 +305,6 @@ struct HistoryView: View {
             .accessibilityLabel("Redo")
             
             commonActions
-            
-
             
             Button(action: {
                 dismiss()
@@ -363,12 +361,12 @@ struct HistoryView: View {
                         self.hideToastAfterDelay()
                         return
                     }
-                    let insertIndex = 0
+                    let insertIndex = appState.historyState.history.count
                     appState.historyState.insert(entries: movedEntries, inFolderId: nil, at: insertIndex, into: &snapshot)
                     appState.historyState.history = snapshot
                     appState.historyState.saveHistory()
                     self.selectedIDs.removeAll()
-                    self.toastMessage = "Moved \(movedEntries.count) item(s) to top"
+                    self.toastMessage = "Moved \(movedEntries.count) item(s)"
                     self.showToast = true
                     self.hideToastAfterDelay()
                     if let undoManager {

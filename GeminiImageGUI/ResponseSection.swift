@@ -1,4 +1,7 @@
 import SwiftUI
+#if os(macOS)
+import AppKit
+#endif
 
 struct ResponseSection: View {
     @EnvironmentObject var appState: AppState
@@ -10,6 +13,7 @@ struct ResponseSection: View {
     @State private var finalScale: CGFloat = 1.0
     @State private var showCopiedOverlay: Bool = false
     @State private var showDeleteAlert: Bool = false
+    @State private var showUndoButton: Bool = false // New state for undo button
     
     var body: some View {
         VStack(spacing: 16) {
@@ -181,6 +185,26 @@ struct ResponseSection: View {
                     .shadow(radius: 2)
                     .help("Delete the response")
                     .accessibilityLabel("Delete response")
+                    
+                    #if os(iOS)
+                    if showUndoButton {
+                        Button {
+                            undoManager?.undo()
+                            withAnimation {
+                                showUndoButton = false
+                            }
+                        } label: {
+                            Image(systemName: "arrow.uturn.left")
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(.blue)
+                        .cornerRadius(10)
+                        .shadow(radius: 2)
+                        .help("Undo last deletion")
+                        .accessibilityLabel("Undo deletion")
+                        .disabled(!(undoManager?.canUndo ?? false))
+                    }
+                    #endif
                 }
             }
             .frame(maxWidth: .infinity)
@@ -273,7 +297,6 @@ struct ResponseSection: View {
             print("Deleting image at index \(index), path: \(path), history entry removed: \(historyEntryRemoved)")
             print("History before deletion: \(appState.historyState.history.map { $0.id })")
             
-            #if os(macOS)
             // Register undo action
             if let undoManager = undoManager {
                 let oldImages = appState.ui.outputImages
@@ -339,7 +362,6 @@ struct ResponseSection: View {
                     undoManager.setActionName("Delete Response")
                 }
             }
-            #endif
             
             // Delete file if chosen
             if deleteFile, let fileURL = path.flatMap({ URL(fileURLWithPath: $0) }) {
@@ -366,6 +388,18 @@ struct ResponseSection: View {
             } else {
                 appState.ui.currentOutputIndex = 0
             }
+            
+            // Show undo button on iOS
+            #if os(iOS)
+            withAnimation {
+                showUndoButton = true
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
+                withAnimation {
+                    showUndoButton = false
+                }
+            }
+            #endif
             
             appState.ui.objectWillChange.send()
             appState.historyState.saveHistory()
