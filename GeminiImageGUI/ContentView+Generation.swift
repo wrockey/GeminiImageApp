@@ -53,6 +53,27 @@ extension ContentView {
             return
         }
         
+        // Validate API keys before proceeding
+            switch appState.settings.mode {
+            case .gemini:
+                guard !appState.settings.apiKey.isEmpty else {
+                    errorItem = AlertError(message: "Gemini API key is missing.", fullMessage: nil)
+                    return
+                }
+            case .grok:
+                guard !appState.settings.grokApiKey.isEmpty else {
+                    errorItem = AlertError(message: "Grok API key is missing.", fullMessage: nil)
+                    return
+                }
+            case .aimlapi:
+                guard !appState.settings.aimlapiKey.isEmpty else {
+                    errorItem = AlertError(message: "AI/ML API key is missing.", fullMessage: nil)
+                    return
+                }
+            default:
+                break
+            }
+        
         isLoading = true
         errorItem = nil
         appState.ui.outputImages = []
@@ -77,17 +98,16 @@ extension ContentView {
                         switch genError {
                         case .queueFailed(let details), .uploadFailed(let details), .fetchFailed(let details):
                             print("Detailed Error Message: \(details)")
-                            errorItem = AlertError(message: details, fullMessage: nil)
+                            let summary = details.contains("missing") ? "ComfyUI error: Workflow issue (e.g., missing nodes)." : "ComfyUI request failed."
+                            errorItem = AlertError(message: summary, fullMessage: details)
                         default:
                             errorItem = AlertError(message: error.localizedDescription ?? "Unknown error", fullMessage: nil)
                         }
-                    } else {
-                        errorItem = AlertError(message: error.localizedDescription ?? "Unknown error", fullMessage: nil)
-                    }
                     }
                 }
             }
         }
+    }
     
     func asyncGenerate() async throws {
             try Task.checkCancellation()
@@ -190,368 +210,372 @@ extension ContentView {
                     appState.historyState.history.append(.item(newItem))
                 }
                 appState.historyState.saveHistory()
-                
-            case .comfyUI:
-                guard let workflow = appState.generation.comfyWorkflow else {
-                    throw GenerationError.noWorkflow
-                }
-                
-                guard let serverURL = URL(string: appState.settings.comfyServerURL) else {
-                    throw GenerationError.invalidServerURL
-                }
-                
-                var mutableWorkflow = workflow
-                
-                // NEW: Find sampler node ID (assume first KSampler or similar)
-                var samplerNodeID: String? = nil
-                for (nodeID, node) in mutableWorkflow {
-                    guard let nodeDict = node as? [String: Any], let classType = nodeDict["class_type"] as? String else { continue }
-                    if classType.contains("KSampler") {  // Adjust if your workflows use other samplers, e.g., "KSamplerAdvanced"
-                        samplerNodeID = nodeID
-                        break
+
+                case .comfyUI:
+                    guard let workflow = appState.generation.comfyWorkflow else {
+                        throw GenerationError.noWorkflow
                     }
-                }
-                guard let samplerNodeID = samplerNodeID else {
-                    throw GenerationError.noSamplerNode
-                }
-                
-                // UPDATED: Always set batch_size to 1 on EmptyLatentImage (if present) to force single per run
-                var hasEmptyLatent = false
-                for (nodeID, node) in mutableWorkflow {
-                    guard let nodeDict = node as? [String: Any], let classType = nodeDict["class_type"] as? String else { continue }
-                    if classType == "EmptyLatentImage" {
-                        if var inputs = nodeDict["inputs"] as? [String: Any] {
-                            inputs["batch_size"] = 1  // Force 1 to use loop for batching with new seeds
-                            var updatedNode = nodeDict
-                            updatedNode["inputs"] = inputs
-                            mutableWorkflow[nodeID] = updatedNode
-                            hasEmptyLatent = true
-                            print("Batch size forced to 1 in node \(nodeID) for per-run seeding")
+                    
+                    guard let serverURL = URL(string: appState.settings.comfyServerURL) else {
+                        throw GenerationError.invalidServerURL
+                    }
+                    
+                    var mutableWorkflow = workflow
+                    
+                    // NEW: Find sampler node ID (assume first KSampler or similar)
+                    var samplerNodeID: String? = nil
+                    for (nodeID, node) in mutableWorkflow {
+                        guard let nodeDict = node as? [String: Any], let classType = nodeDict["class_type"] as? String else { continue }
+                        if classType.contains("KSampler") {  // Adjust if your workflows use other samplers, e.g., "KSamplerAdvanced"
+                            samplerNodeID = nodeID
                             break
                         }
                     }
-                }
-                if !hasEmptyLatent {
-                    print("No EmptyLatentImage node found; assuming i2i or custom workflow. Proceeding with single per run.")
-                }
-                
-                // Generate clientId early for WebSocket
-                let clientId = UUID().uuidString
-                
-                // Append ?clientId to WebSocket URL for progress routing
-                let wsBase = appState.settings.comfyServerURL.replacingOccurrences(of: "http", with: "ws") + "/ws?clientId=\(clientId)"
-                guard let wsURL = URL(string: wsBase) else {
-                    throw GenerationError.invalidWebSocketURL
-                }
-                let session = URLSession(configuration: .default)
-                webSocketTask = session.webSocketTask(with: wsURL)
-                webSocketTask?.resume()
-                isCancelled = false
-                
-                // Listen for messages in a loop (unchanged)
-                Task {
-                    var isComplete = false
-                    while let task = webSocketTask, !isCancelled {
-                        try Task.checkCancellation()
-                        
-                        do {
-                            let message = try await task.receive()
-                            switch message {
-                            case .string(let text):
-                                if let data = text.data(using: .utf8),
-                                   let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                                   let type = json["type"] as? String {
-                                    if type == "progress",
-                                       let value = json["data"] as? [String: Any],
-                                       let current = value["value"] as? Double,
-                                       let max = value["max"] as? Double {
-                                        await MainActor.run {
-                                            progress = current / max
-                                        }
-                                    } else if type == "executing",
-                                              let value = json["data"] as? [String: Any],
-                                              let node = value["node"] as? String {
-                                        print("Executing node: \(node)")
-                                    } else if type == "executing",
-                                              let value = json["data"] as? [String: Any],
-                                              value["node"] == nil { // Completion indicator: node is null
-                                        isComplete = true
-                                    } else if type == "execution_success" { // Alternative completion indicator
-                                        isComplete = true
-                                    }
-                                }
-                            default: break
+                    guard let samplerNodeID = samplerNodeID else {
+                        throw GenerationError.noSamplerNode
+                    }
+                    
+                    // UPDATED: Always set batch_size to 1 on EmptyLatentImage (if present) to force single per run
+                    var hasEmptyLatent = false
+                    for (nodeID, node) in mutableWorkflow {
+                        guard let nodeDict = node as? [String: Any], let classType = nodeDict["class_type"] as? String else { continue }
+                        if classType == "EmptyLatentImage" {
+                            if var inputs = nodeDict["inputs"] as? [String: Any] {
+                                inputs["batch_size"] = 1  // Force 1 to use loop for batching with new seeds
+                                var updatedNode = nodeDict
+                                updatedNode["inputs"] = inputs
+                                mutableWorkflow[nodeID] = updatedNode
+                                hasEmptyLatent = true
+                                print("Batch size forced to 1 in node \(nodeID) for per-run seeding")
+                                break
                             }
-                        } catch is CancellationError {
-                            break
-                        } catch {
-                            await MainActor.run {
-                                let nsError = error as NSError
-                                print("WebSocket error caught: domain=\(nsError.domain), code=\(nsError.code), desc=\(error.localizedDescription), isCancelled=\(isCancelled), isComplete=\(isComplete)")
-                                if !((isCancelled || isComplete) && nsError.domain == NSPOSIXErrorDomain && nsError.code == 57) {
-                                    errorItem = AlertError(message: error.localizedDescription, fullMessage: nil)
-                                }
-                            }
-                            break
                         }
                     }
-                }
-                let selectedImageNodes = Array(appState.generation.selectedImageNodeIDs).sorted()
-                var uploadedFilenames: [String] = []
-                if !selectedImageNodes.isEmpty && !appState.ui.imageSlots.isEmpty {
-                    for i in 0..<min(selectedImageNodes.count, appState.ui.imageSlots.count) {
-                        let slot = appState.ui.imageSlots[i]
-                        if let image = slot.image, let processed = processImageForUpload(image: image, originalData: slot.originalData, format: "png") {
-                            var uploadRequest = URLRequest(url: serverURL.appendingPathComponent("upload/image"))
-                            uploadRequest.httpMethod = "POST"
-                            
-                            let boundary = "Boundary-\(UUID().uuidString)"
-                            uploadRequest.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
-                            
-                            var body = Data()
-                            body.append("--\(boundary)\r\n".data(using: .utf8)!)
-                            let fileExtension = processed.mimeType == "image/jpeg" ? "jpg" : "png"
-                            body.append("Content-Disposition: form-data; name=\"image\"; filename=\"input_\(i).\(fileExtension)\"\r\n".data(using: .utf8)!)
-                            body.append("Content-Type: \(processed.mimeType)\r\n\r\n".data(using: .utf8)!)
-                            body.append(processed.data)
-                            body.append("\r\n".data(using: .utf8)!)
-                            body.append("--\(boundary)\r\n".data(using: .utf8)!)
-                            body.append("Content-Disposition: form-data; name=\"type\"\r\n\r\ninput\r\n".data(using: .utf8)!)
-                            body.append("--\(boundary)--\r\n".data(using: .utf8)!)
-                            
-                            uploadRequest.httpBody = body
+                    if !hasEmptyLatent {
+                        print("No EmptyLatentImage node found; assuming i2i or custom workflow. Proceeding with single per run.")
+                    }
+                    
+                    // Generate clientId early for WebSocket
+                    let clientId = UUID().uuidString
+                    
+                    // Append ?clientId to WebSocket URL for progress routing
+                    let wsBase = appState.settings.comfyServerURL.replacingOccurrences(of: "http", with: "ws") + "/ws?clientId=\(clientId)"
+                    guard let wsURL = URL(string: wsBase) else {
+                        throw GenerationError.invalidWebSocketURL
+                    }
+                    let session = URLSession(configuration: .default)
+                    webSocketTask = session.webSocketTask(with: wsURL)
+                    webSocketTask?.resume()
+                    isCancelled = false
+                    
+                    // Listen for messages in a loop
+                    Task {
+                        var isComplete = false
+                        while let task = webSocketTask, !isCancelled {
+                            try Task.checkCancellation()
                             
                             do {
-                                try Task.checkCancellation()
-                                let (data, response) = try await URLSession.shared.data(for: uploadRequest)
-                                if let httpResponse = response as? HTTPURLResponse, (200...299).contains(httpResponse.statusCode) {
-                                    if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                                       let name = json["name"] as? String {
-                                        uploadedFilenames.append(name)
-                                    } else {
-                                        let bodyString = String(data: data, encoding: .utf8) ?? "No body"
-                                        print("Upload response: \(bodyString)")
-                                        throw GenerationError.uploadFailed(bodyString)
+                                let message = try await task.receive()
+                                switch message {
+                                case .string(let text):
+                                    if let data = text.data(using: .utf8),
+                                       let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                                       let type = json["type"] as? String {
+                                        if type == "progress",
+                                           let value = json["data"] as? [String: Any],
+                                           let current = value["value"] as? Double,
+                                           let max = value["max"] as? Double {
+                                            await MainActor.run {
+                                                progress = current / max
+                                            }
+                                        } else if type == "executing",
+                                                  let value = json["data"] as? [String: Any],
+                                                  let node = value["node"] as? String {
+                                            print("Executing node: \(node)")
+                                        } else if type == "executing",
+                                                  let value = json["data"] as? [String: Any],
+                                                  value["node"] == nil { // Completion indicator: node is null
+                                            isComplete = true
+                                        } else if type == "execution_success" { // Alternative completion indicator
+                                            isComplete = true
+                                        }
                                     }
-                                } else {
-                                    let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
-                                    let bodyString = String(data: data, encoding: .utf8) ?? "No body"
-                                    print("Upload failed with status \(statusCode): \(bodyString)")
-                                    throw GenerationError.uploadFailed("Status \(statusCode): \(bodyString)")
+                                default: break
                                 }
+                            } catch is CancellationError {
+                                break
                             } catch {
-                                print("Upload error: \(error.localizedDescription)")
-                                throw error
+                                await MainActor.run {
+                                    let nsError = error as NSError
+                                    print("WebSocket error caught: domain=\(nsError.domain), code=\(nsError.code), desc=\(error.localizedDescription), isCancelled=\(isCancelled), isComplete=\(isComplete)")
+                                    if !((isCancelled || isComplete) && nsError.domain == NSPOSIXErrorDomain && nsError.code == 57) {
+                                        errorItem = AlertError(message: error.localizedDescription, fullMessage: nil)
+                                    }
+                                }
+                                break
                             }
                         }
                     }
-                    
-                    // Inject uploaded filenames into selected nodes
-                    for i in 0..<uploadedFilenames.count {
-                        let nodeID = selectedImageNodes[i]
-                        if var node = mutableWorkflow[nodeID] as? [String: Any],
-                           var inputs = node["inputs"] as? [String: Any] {
-                            inputs["image"] = uploadedFilenames[i]
-                            node["inputs"] = inputs
-                            mutableWorkflow[nodeID] = node
-                        } else {
-                            throw GenerationError.invalidImageNode
-                        }
-                    }
-                }
-                
-                let promptNodeID = appState.generation.comfyPromptNodeID
-                let selectedPromptText = appState.generation.promptNodes.first(where: { $0.id == promptNodeID })?.promptText ?? ""
-                let effectivePrompt = appState.prompt.isEmpty ? selectedPromptText : appState.prompt
-                
-                if var node = mutableWorkflow[promptNodeID] as? [String: Any],
-                   var inputs = node["inputs"] as? [String: Any] {
-                    var setCount = 0
-                    for (key, value) in inputs {
-                        if let _ = value as? String {  // Only target string-valued inputs
-                            let lowerKey = key.lowercased()
-                            if (lowerKey.contains("prompt") && !lowerKey.contains("negativ")) ||
-                               lowerKey.contains("text") ||
-                               lowerKey.contains("positiv") {
-                                inputs[key] = effectivePrompt
-                                setCount += 1
+                    let selectedImageNodes = Array(appState.generation.selectedImageNodeIDs).sorted()
+                    var uploadedFilenames: [String] = []
+                    if !selectedImageNodes.isEmpty && !appState.ui.imageSlots.isEmpty {
+                        for i in 0..<min(selectedImageNodes.count, appState.ui.imageSlots.count) {
+                            let slot = appState.ui.imageSlots[i]
+                            if let image = slot.image, let processed = processImageForUpload(image: image, originalData: slot.originalData, format: "png") {
+                                var uploadRequest = URLRequest(url: serverURL.appendingPathComponent("upload/image"))
+                                uploadRequest.httpMethod = "POST"
+                                
+                                let boundary = "Boundary-\(UUID().uuidString)"
+                                uploadRequest.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+                                
+                                var body = Data()
+                                body.append("--\(boundary)\r\n".data(using: .utf8)!)
+                                let fileExtension = processed.mimeType == "image/jpeg" ? "jpg" : "png"
+                                body.append("Content-Disposition: form-data; name=\"image\"; filename=\"input_\(i).\(fileExtension)\"\r\n".data(using: .utf8)!)
+                                body.append("Content-Type: \(processed.mimeType)\r\n\r\n".data(using: .utf8)!)
+                                body.append(processed.data)
+                                body.append("\r\n".data(using: .utf8)!)
+                                body.append("--\(boundary)\r\n".data(using: .utf8)!)
+                                body.append("Content-Disposition: form-data; name=\"type\"\r\n\r\ninput\r\n".data(using: .utf8)!)
+                                body.append("--\(boundary)--\r\n".data(using: .utf8)!)
+                                
+                                uploadRequest.httpBody = body
+                                
+                                do {
+                                    try Task.checkCancellation()
+                                    let (data, response) = try await URLSession.shared.data(for: uploadRequest)
+                                    if let httpResponse = response as? HTTPURLResponse, (200...299).contains(httpResponse.statusCode) {
+                                        if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                                           let name = json["name"] as? String {
+                                            uploadedFilenames.append(name)
+                                        } else {
+                                            let bodyString = String(data: data, encoding: .utf8) ?? "No body"
+                                            print("Upload response: \(bodyString)")
+                                            throw GenerationError.uploadFailed(bodyString)
+                                        }
+                                    } else {
+                                        let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
+                                        let bodyString = String(data: data, encoding: .utf8) ?? "No body"
+                                        print("Upload failed with status \(statusCode): \(bodyString)")
+                                        throw GenerationError.uploadFailed("Status \(statusCode): \(bodyString)")
+                                    }
+                                } catch {
+                                    print("Upload error: \(error.localizedDescription)")
+                                    throw error
+                                }
                             }
                         }
-                    }
-                    if setCount == 0 {
-                        throw GenerationError.invalidPromptNode  // Or custom: "No injectable prompt key found in node"
-                    }
-                    node["inputs"] = inputs
-                    mutableWorkflow[promptNodeID] = node
-                } else {
-                    throw GenerationError.invalidPromptNode
-                }
-                
-                // NEW: Arrays for multiples (moved up)
-                var outputImages: [PlatformImage?] = []
-                var outputTexts: [String] = []
-                var outputPaths: [String?] = []
-                
-                // NEW: Loop for each batch item
-                let batchSize = appState.settings.comfyBatchSize
-                let workflowName = URL(fileURLWithPath: appState.settings.comfyJSONPath).deletingPathExtension().lastPathComponent  // MOVED UP: Define before loop
-                for batchIndex in 0..<batchSize {
-                    try Task.checkCancellation()
-                    
-                    // Clone workflow for this run to avoid mutating shared state
-                    var runWorkflow = mutableWorkflow
-                    
-                    // Set new random seed in sampler
-                    let newSeed = Int.random(in: 0...Int.max)  // Or use UInt64 if your sampler expects it
-                    if var samplerNode = runWorkflow[samplerNodeID] as? [String: Any],
-                       var inputs = samplerNode["inputs"] as? [String: Any] {
-                        inputs["seed"] = newSeed  // Or "noise_seed" if using KSamplerAdvanced
-                        samplerNode["inputs"] = inputs
-                        runWorkflow[samplerNodeID] = samplerNode
-                        print("Set new seed \(newSeed) for batch item \(batchIndex + 1)")
-                    }
-                    
-                    // Queue prompt (adapted from existing)
-                    let promptBody: [String: Any] = ["prompt": runWorkflow, "client_id": clientId]
-                    var promptRequest = URLRequest(url: serverURL.appendingPathComponent("prompt"))
-                    promptRequest.httpMethod = "POST"
-                    promptRequest.addValue("application/json", forHTTPHeaderField: "Content-Type")
-                    do {
-                        promptRequest.httpBody = try JSONSerialization.data(withJSONObject: promptBody)
-                    } catch {
-                        throw GenerationError.encodingFailed(error.localizedDescription)
-                    }
-                    
-                    var promptId: String?
-                    do {
-                        try Task.checkCancellation()
-                        let (promptData, response) = try await URLSession.shared.data(for: promptRequest)
-                        if let httpResponse = response as? HTTPURLResponse, (200...299).contains(httpResponse.statusCode) {
-                            if let json = try? JSONSerialization.jsonObject(with: promptData) as? [String: Any],
-                               let id = json["prompt_id"] as? String {
-                                promptId = id
+                        
+                        // Inject uploaded filenames into selected nodes
+                        for i in 0..<uploadedFilenames.count {
+                            let nodeID = selectedImageNodes[i]
+                            if var node = mutableWorkflow[nodeID] as? [String: Any],
+                               var inputs = node["inputs"] as? [String: Any] {
+                                inputs["image"] = uploadedFilenames[i]
+                                node["inputs"] = inputs
+                                mutableWorkflow[nodeID] = node
                             } else {
-                                let bodyString = String(data: promptData, encoding: .utf8) ?? "No body"
-                                print("Queue prompt response: \(bodyString)")
-                                throw GenerationError.queueFailed(bodyString)
+                                throw GenerationError.invalidImageNode
                             }
-                        } else {
-                            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
-                            let bodyString = String(data: promptData, encoding: .utf8) ?? "No body"
-                            print("Queue prompt failed with status \(statusCode): \(bodyString)")
-                            throw GenerationError.queueFailed("Queue prompt failed with status \(statusCode): \(bodyString)")
                         }
-                    } catch {
-                        print("Queue prompt error: \(error.localizedDescription)")
-                        throw error
                     }
                     
-                    guard let promptId = promptId else { throw GenerationError.queueFailed("No prompt ID") }
+                    let promptNodeID = appState.generation.comfyPromptNodeID
+                    let selectedPromptText = appState.generation.promptNodes.first(where: { $0.id == promptNodeID })?.promptText ?? ""
+                    let effectivePrompt = appState.prompt.isEmpty ? selectedPromptText : appState.prompt
                     
-                    // Wait for history (adapted from existing)
-                    var history: [String: Any]? = nil
-                    while history == nil {
+                    if var node = mutableWorkflow[promptNodeID] as? [String: Any],
+                       var inputs = node["inputs"] as? [String: Any] {
+                        var setCount = 0
+                        for (key, value) in inputs {
+                            if let _ = value as? String {  // Only target string-valued inputs
+                                let lowerKey = key.lowercased()
+                                if (lowerKey.contains("prompt") && !lowerKey.contains("negativ")) ||
+                                   lowerKey.contains("text") ||
+                                   lowerKey.contains("positiv") {
+                                    inputs[key] = effectivePrompt
+                                    setCount += 1
+                                }
+                            }
+                        }
+                        if setCount == 0 {
+                            throw GenerationError.invalidPromptNode  // Or custom: "No injectable prompt key found in node"
+                        }
+                        node["inputs"] = inputs
+                        mutableWorkflow[promptNodeID] = node
+                    } else {
+                        throw GenerationError.invalidPromptNode
+                    }
+                    
+                    // NEW: Arrays for multiples (moved up)
+                    var outputImages: [PlatformImage?] = []
+                    var outputTexts: [String] = []
+                    var outputPaths: [String?] = []
+                    
+                    // NEW: Loop for each batch item
+                    let batchSize = appState.settings.comfyBatchSize
+                    let workflowName = URL(fileURLWithPath: appState.settings.comfyJSONPath).deletingPathExtension().lastPathComponent  // MOVED UP: Define before loop
+                    for batchIndex in 0..<batchSize {
                         try Task.checkCancellation()
-                        try await Task.sleep(nanoseconds: 2_000_000_000)
-                        let historyURL = serverURL.appendingPathComponent("history/\(promptId)")
-                        var historyRequest = URLRequest(url: historyURL)
+                        
+                        // Clone workflow for this run to avoid mutating shared state
+                        var runWorkflow = mutableWorkflow
+                        
+                        // Set new random seed in sampler
+                        let newSeed = Int.random(in: 0...Int.max)  // Or use UInt64 if your sampler expects it
+                        if var samplerNode = runWorkflow[samplerNodeID] as? [String: Any],
+                           var inputs = samplerNode["inputs"] as? [String: Any] {
+                            inputs["seed"] = newSeed  // Or "noise_seed" if using KSamplerAdvanced
+                            samplerNode["inputs"] = inputs
+                            runWorkflow[samplerNodeID] = samplerNode
+                            print("Set new seed \(newSeed) for batch item \(batchIndex + 1)")
+                        }
+                        
+                        // Queue prompt
+                        let promptBody: [String: Any] = ["prompt": runWorkflow, "client_id": clientId]
+                        var promptRequest = URLRequest(url: serverURL.appendingPathComponent("prompt"))
+                        promptRequest.httpMethod = "POST"
+                        promptRequest.addValue("application/json", forHTTPHeaderField: "Content-Type")
+                        do {
+                            promptRequest.httpBody = try JSONSerialization.data(withJSONObject: promptBody)
+                        } catch {
+                            throw GenerationError.encodingFailed(error.localizedDescription)
+                        }
+                        
+                        var promptId: String?
                         do {
                             try Task.checkCancellation()
-                            let (historyData, response) = try await URLSession.shared.data(for: historyRequest)
+                            let (promptData, response) = try await URLSession.shared.data(for: promptRequest)
                             if let httpResponse = response as? HTTPURLResponse, (200...299).contains(httpResponse.statusCode) {
-                                if let json = try? JSONSerialization.jsonObject(with: historyData) as? [String: Any],
-                                   let entry = json[promptId] as? [String: Any],
-                                   let status = entry["status"] as? [String: Any],
-                                   let completed = status["completed"] as? Bool, completed {
-                                    history = entry
+                                if let json = try? JSONSerialization.jsonObject(with: promptData) as? [String: Any],
+                                   let id = json["prompt_id"] as? String {
+                                    promptId = id
+                                } else {
+                                    let bodyString = String(data: promptData, encoding: .utf8) ?? "No body"
+                                    print("Queue prompt response: \(bodyString)")
+                                    throw GenerationError.queueFailed("Queue prompt failed with status \(httpResponse.statusCode): \(bodyString)")
                                 }
                             } else {
                                 let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
-                                let bodyString = String(data: historyData, encoding: .utf8) ?? "No body"
-                                print("History fetch failed with status \(statusCode): \(bodyString)")
+                                if statusCode == 400, let json = try? JSONSerialization.jsonObject(with: promptData) as? [String: Any],
+                                   let errorMsg = json["error"] as? String {
+                                    print("Queue prompt failed with status 400: \(errorMsg)")
+                                    throw GenerationError.queueFailed("Status 400: \(errorMsg)")
+                                } else {
+                                    let bodyString = String(data: promptData, encoding: .utf8) ?? "No body"
+                                    print("Queue prompt failed with status \(statusCode): \(bodyString)")
+                                    throw GenerationError.queueFailed("Status \(statusCode): \(bodyString)")
+                                }
                             }
                         } catch {
-                            print("History fetch error: \(error.localizedDescription)")
+                            print("Queue prompt error: \(error.localizedDescription)")
+                            throw error
                         }
-                    }
-                    
-                    guard let unwrappedHistory = history else {
-                        throw GenerationError.noOutputImage
-                    }
-                    guard let outputs = unwrappedHistory["outputs"] as? [String: Any],
-                          let outputNode = outputs[appState.generation.comfyOutputNodeID] as? [String: Any],
-                          let images = outputNode["images"] as? [[String: Any]] else {
-                        throw GenerationError.noOutputImage
-                    }
-                    
-                    print("Fetched images count for batch \(batchIndex + 1): \(images.count)")  // Debug
-                    
-                    // Fetch image (expect 1 per run)
-                    guard let imageDict = images.first else { continue }  // Skip if no image
-                    guard let filename = imageDict["filename"] as? String,
-                          let subfolder = imageDict["subfolder"] as? String,
-                          let type = imageDict["type"] as? String else { continue }
-                    
-                    var components = URLComponents(url: serverURL.appendingPathComponent("view"), resolvingAgainstBaseURL: false)!
-                    components.queryItems = [
-                        URLQueryItem(name: "filename", value: filename),
-                        URLQueryItem(name: "subfolder", value: subfolder),
-                        URLQueryItem(name: "type", value: type)
-                    ]
-                    guard let viewURL = components.url else {
-                        throw GenerationError.invalidViewURL
-                    }
-                    
-                    var viewRequest = URLRequest(url: viewURL)
-                    do {
-                        try Task.checkCancellation()
-                        let (viewData, response) = try await URLSession.shared.data(for: viewRequest)
-                        if let httpResponse = response as? HTTPURLResponse, (200...299).contains(httpResponse.statusCode) {
-                            if let platformImage = PlatformImage(platformData: viewData) {
-                                let savedPath = saveGeneratedImage(data: viewData, prompt: effectivePrompt, mode: .comfyUI, workflowName: workflowName, batchIndex: batchIndex, totalInBatch: batchSize)
-                                outputImages.append(platformImage)
-                                outputTexts.append("Batch image \(batchIndex + 1) generated with ComfyUI (seed: \(newSeed)). Saved to \(savedPath ?? "unknown")")
-                                outputPaths.append(savedPath)
-                                
-                                // NEW: Update UI incrementally after each image (shows in response section as they generate)
-                                await MainActor.run {
-                                    appState.ui.outputImages = outputImages
-                                    appState.ui.outputTexts = outputTexts
-                                    appState.ui.outputPaths = outputPaths
-                                    appState.ui.currentOutputIndex = outputImages.count - 1  // Optional: Switch to the latest one
-                                    print("Updated UI with \(outputImages.count) images so far")  // Debug: Confirm in console
+                        
+                        guard let promptId = promptId else { throw GenerationError.queueFailed("No prompt ID") }
+                        
+                        // Wait for history (adapted from existing)
+                        var history: [String: Any]? = nil
+                        while history == nil {
+                            try Task.checkCancellation()
+                            try await Task.sleep(nanoseconds: 2_000_000_000)
+                            let historyURL = serverURL.appendingPathComponent("history/\(promptId)")
+                            var historyRequest = URLRequest(url: historyURL)
+                            do {
+                                try Task.checkCancellation()
+                                let (historyData, response) = try await URLSession.shared.data(for: historyRequest)
+                                if let httpResponse = response as? HTTPURLResponse, (200...299).contains(httpResponse.statusCode) {
+                                    if let json = try? JSONSerialization.jsonObject(with: historyData) as? [String: Any],
+                                       let entry = json[promptId] as? [String: Any],
+                                       let status = entry["status"] as? [String: Any],
+                                       let completed = status["completed"] as? Bool, completed {
+                                        history = entry
+                                    }
+                                } else {
+                                    let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
+                                    let bodyString = String(data: historyData, encoding: .utf8) ?? "No body"
+                                    print("History fetch failed with status \(statusCode): \(bodyString)")
+                                }
+                            } catch {
+                                print("History fetch error: \(error.localizedDescription)")
+                            }
+                        }
+                        
+                        guard let unwrappedHistory = history else {
+                            throw GenerationError.noOutputImage
+                        }
+                        guard let outputs = unwrappedHistory["outputs"] as? [String: Any],
+                              let outputNode = outputs[appState.generation.comfyOutputNodeID] as? [String: Any],
+                              let images = outputNode["images"] as? [[String: Any]] else {
+                            throw GenerationError.noOutputImage
+                        }
+                        
+                        print("Fetched images count for batch \(batchIndex + 1): \(images.count)")  // Debug
+                        
+                        // Fetch image (expect 1 per run)
+                        guard let imageDict = images.first else { continue }  // Skip if no image
+                        guard let filename = imageDict["filename"] as? String,
+                              let subfolder = imageDict["subfolder"] as? String,
+                              let type = imageDict["type"] as? String else { continue }
+                        
+                        var components = URLComponents(url: serverURL.appendingPathComponent("view"), resolvingAgainstBaseURL: false)!
+                        components.queryItems = [
+                            URLQueryItem(name: "filename", value: filename),
+                            URLQueryItem(name: "subfolder", value: subfolder),
+                            URLQueryItem(name: "type", value: type)
+                        ]
+                        guard let viewURL = components.url else {
+                            throw GenerationError.invalidViewURL
+                        }
+                        
+                        var viewRequest = URLRequest(url: viewURL)
+                        do {
+                            try Task.checkCancellation()
+                            let (viewData, response) = try await URLSession.shared.data(for: viewRequest)
+                            if let httpResponse = response as? HTTPURLResponse, (200...299).contains(httpResponse.statusCode) {
+                                if let platformImage = PlatformImage(platformData: viewData) {
+                                    let savedPath = saveGeneratedImage(data: viewData, prompt: effectivePrompt, mode: .comfyUI, workflowName: workflowName, batchIndex: batchIndex, totalInBatch: batchSize)
+                                    outputImages.append(platformImage)
+                                    outputTexts.append("Batch image \(batchIndex + 1) generated with ComfyUI (seed: \(newSeed)). Saved to \(savedPath ?? "unknown")")
+                                    outputPaths.append(savedPath)
+                                    
+                                    // NEW: Update UI incrementally after each image
+                                    await MainActor.run {
+                                        appState.ui.outputImages = outputImages
+                                        appState.ui.outputTexts = outputTexts
+                                        appState.ui.outputPaths = outputPaths
+                                        appState.ui.currentOutputIndex = outputImages.count - 1  // Optional: Switch to the latest one
+                                        print("Updated UI with \(outputImages.count) images so far")  // Debug: Confirm in console
+                                    }
+                                } else {
+                                    throw GenerationError.decodeFailed
                                 }
                             } else {
-                                throw GenerationError.decodeFailed
+                                let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
+                                let bodyString = String(data: viewData, encoding: .utf8) ?? "No body"
+                                print("Image view failed with status \(statusCode): \(bodyString)")
+                                throw GenerationError.fetchFailed("Status \(statusCode): \(bodyString)")
                             }
-                        } else {
-                            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
-                            let bodyString = String(data: viewData, encoding: .utf8) ?? "No body"
-                            print("Image view failed with status \(statusCode): \(bodyString)")
-                            throw GenerationError.fetchFailed("Status \(statusCode): \(bodyString)")
+                        } catch {
+                            print("Image view error: \(error.localizedDescription)")
+                            throw error
                         }
-                    } catch {
-                        print("Image view error: \(error.localizedDescription)")
-                        throw error
                     }
-                }
-                
-                // Remove the old bulk UI set (now handled incrementally)
-                
-                // Add to history
-                let batchId = outputImages.count > 1 ? UUID() : nil
-                let total = outputImages.count
-                for i in 0..<total {
-                    let newItem = HistoryItem(prompt: appState.prompt, responseText: outputTexts[i], imagePath: outputPaths[i], date: Date(), mode: appState.settings.mode, workflowName: workflowName, modelUsed: nil, batchId: batchId, indexInBatch: i, totalInBatch: total)
-                    appState.historyState.history.append(.item(newItem))
-                }
-                appState.historyState.saveHistory()
-                
-                // Cleanup (unchanged)
-                isCancelled = true
-                webSocketTask?.cancel(with: .goingAway, reason: nil)
-                webSocketTask = nil
-                progress = 0.0
+                    
+                    // Add to history
+                    let batchId = outputImages.count > 1 ? UUID() : nil
+                    let total = outputImages.count
+                    for i in 0..<total {
+                        let newItem = HistoryItem(prompt: appState.prompt, responseText: outputTexts[i], imagePath: outputPaths[i], date: Date(), mode: appState.settings.mode, workflowName: workflowName, modelUsed: nil, batchId: batchId, indexInBatch: i, totalInBatch: total)
+                        appState.historyState.history.append(.item(newItem))
+                    }
+                    appState.historyState.saveHistory()
+                    
+                    // Cleanup
+                    isCancelled = true
+                    webSocketTask?.cancel(with: .goingAway, reason: nil)
+                    webSocketTask = nil
+                    progress = 0.0
                 
             case .grok:
                 // Show consent alert on first Grok use
