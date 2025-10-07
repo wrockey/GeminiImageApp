@@ -7,7 +7,7 @@ extension ContentView {
         switch result {
         case .success(let urls):
             guard let url = urls.first else {
-                errorItem = AlertError(message: "No file selected.")
+                errorItem = AlertError(message: "No file selected.", fullMessage: nil)
                 return
 
             }
@@ -45,7 +45,7 @@ extension ContentView {
                 UserDefaults.standard.set(bookmarkData, forKey: "batchFileBookmark")
             } catch {
                 print("Bookmark error: \(error)")
-                errorItem = AlertError(message: "Failed to save bookmark for batch file: \(error.localizedDescription)")
+                errorItem = AlertError(message: "Failed to save bookmark for batch file: \(error.localizedDescription)", fullMessage: nil)
                 return
             }
             var loadError: NSError?
@@ -66,16 +66,16 @@ extension ContentView {
                 }
             }
             if let loadError = loadError {
-                errorItem = AlertError(message: "Failed to load batch file: \(loadError.localizedDescription)")
+                errorItem = AlertError(message: "Failed to load batch file: \(loadError.localizedDescription)", fullMessage: nil)
                 return
             }
             if let innerLoadError = innerLoadError {
-                errorItem = AlertError(message: "Failed to load batch file: \(innerLoadError.localizedDescription)")
+                errorItem = AlertError(message: "Failed to load batch file: \(innerLoadError.localizedDescription)", fullMessage: nil)
                 return
             }
         case .failure(let error):
             print("Selection error: \(error)")
-            errorItem = AlertError(message: "Failed to select batch file: \(error.localizedDescription)")
+            errorItem = AlertError(message: "Failed to select batch file: \(error.localizedDescription)", fullMessage: nil)
         }
     }
 
@@ -96,7 +96,7 @@ extension ContentView {
             appState.batchFileURL = resolvedURL
             batchFilePath = resolvedURL.path
         } catch {
-            errorItem = AlertError(message: "Failed to load batch file: \(error.localizedDescription)")
+            errorItem = AlertError(message: "Failed to load batch file: \(error.localizedDescription)", fullMessage: nil)
         }
     }
 
@@ -121,14 +121,14 @@ extension ContentView {
                         let phrasesList = promptInfo.phrases.joined(separator: ", ")
                         return "Prompt '\(promptInfo.prompt)' contains: \(phrasesList)"
                     }.joined(separator: "\n")
-                    errorItem = AlertError(message: "One or more prompts contain inappropriate content:\n\(errorDetails).\nPlease revise and try again.")
+                    errorItem = AlertError(message: "One or more prompts contain inappropriate content:\n\(errorDetails).\nPlease revise and try again.", fullMessage: nil)
                     return
                 }
         
         let start = batchStartIndex
         let end = batchEndIndex
         guard start <= end else {
-            errorItem = AlertError(message: "Starting prompt must be less than or equal to ending prompt.")
+            errorItem = AlertError(message: "Starting prompt must be less than or equal to ending prompt.", fullMessage: nil)
             return
         }
         var failures: [(Int, String, String)] = [] // (index, prompt, errorDesc)
@@ -166,7 +166,7 @@ extension ContentView {
                     showSuccessAlert = true
                 } else {
                     let failedText = failures.map { "\($0.0): \($0.1) - \($0.2)" }.joined(separator: "\n")
-                    errorItem = AlertError(message: "Failed to generate the following prompts:\n\(failedText)")
+                    errorItem = AlertError(message: "Failed to generate the following prompts:\n\(failedText)", fullMessage: nil)
                 }
             }
         }

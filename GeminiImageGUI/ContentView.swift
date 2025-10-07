@@ -79,16 +79,7 @@ extension View {
         .accessibilityLabel("Workflow Error Alert")
     }
     
-    func errorAlert(errorItem: Binding<AlertError?>) -> some View {
-        alert(item: errorItem) { error in
-            Alert(
-                title: Text("Error"),
-                message: Text(error.message),
-                dismissButton: .default(Text("OK"))
-            )
-        }
-        .accessibilityLabel("Error Alert")
-    }
+
     
     func successAlert(showSuccessAlert: Binding<Bool>, successMessage: String) -> some View {
         alert("Success", isPresented: showSuccessAlert) {
@@ -126,7 +117,13 @@ extension View {
     }
 }
 
-enum GenerationError: Error {
+struct AlertError: Identifiable {
+    let id = UUID()
+    let message: String
+    let fullMessage: String?  // New: Optional full details for "More Info"
+}
+
+enum GenerationError: LocalizedError {
     case invalidURL
     case encodingFailed(String)
     case apiError(String)
@@ -134,16 +131,16 @@ enum GenerationError: Error {
     case invalidServerURL
     case invalidWebSocketURL
     case invalidPromptNode
-    case uploadFailed
-    case queueFailed
     case noOutputImage
     case decodeFailed
     case fetchFailed(String)
     case invalidViewURL
     case invalidImageNode
     case noSamplerNode
+    case uploadFailed(String)
+    case queueFailed(String)
     
-    var localizedDescription: String {
+    var errorDescription: String? {
         switch self {
         case .invalidURL:
             return "Invalid API URL. Please check your configuration and ensure the endpoint is correct."
@@ -159,10 +156,6 @@ enum GenerationError: Error {
             return "Invalid WebSocket URL for progress updates. Verify your server URL and ensure the ComfyUI server is accessible."
         case .invalidPromptNode:
             return "Invalid prompt node in workflow. Select a different prompt node or reload the workflow."
-        case .uploadFailed:
-            return "Failed to upload image to server. Check file size/format (PNG/JPG recommended) and server permissions."
-        case .queueFailed:
-            return "Failed to queue the generation task on the server. Ensure the ComfyUI server is running and not overloaded."
         case .noOutputImage:
             return "No output image generated. Verify your workflow has a valid output node (e.g., SaveImage) and try again."
         case .decodeFailed:
@@ -175,11 +168,15 @@ enum GenerationError: Error {
             return "Invalid image input node in workflow. Select a different image node or ensure your workflow supports image inputs."
         case .noSamplerNode:
             return "No sampler node (e.g., KSampler) found in workflow. Please use a workflow that includes a sampler for generation."
+        case .uploadFailed(let message):
+            return "Image upload failed: \(message)"
+        case .queueFailed(let message):
+            return "Prompt queue failed: \(message)"
         }
     }
 }
 
-struct AlertError: Identifiable {
+struct DetailedError: Identifiable {
     let id = UUID()
     let message: String
 }
@@ -211,6 +208,7 @@ struct ContentView: View {
     @State var generationTask: Task<Void, Error>? = nil
     @State var promptTextView: (any PlatformTextView)? = nil
     @State private var showGeneralOptions = false
+    @State private var detailedError: DetailedError? = nil
 
 
     @AppStorage("hasLaunchedBefore") var hasLaunchedBefore: Bool = false
@@ -237,327 +235,177 @@ struct ContentView: View {
     }
 
     var body: some View {
-        #if os(iOS)
-        iOSLayout
-            .workflowErrorAlert(appState: appState)
-            .errorAlert(errorItem: $errorItem)
-            .successAlert(showSuccessAlert: $showSuccessAlert, successMessage: successMessage)
-            .onboardingSheet(showOnboarding: $showOnboarding)
-            .helpSheet(showHelp: $showHelp, mode: appState.settings.mode)
-            .selectFolderAlert(isPresented: $showSelectFolderAlert) {
-                print("Showing output folder picker from alert")
-                PlatformFilePicker.presentOpenPanel(allowedTypes: [.folder], allowsMultiple: false, canChooseDirectories: true) { result in
-                    handleOutputFolderSelection(result)
-                    if !outputPath.isEmpty {
-                        pendingAction?()
-                        pendingAction = nil
-                    }
-                }
-            }
-            .sheet(item: $showTextEditorBookmark) { identifiable in
-                TextEditorView(bookmarkData: identifiable.data, batchFilePath: $batchFilePath)
-                    .presentationDetents([.large])
-                    .presentationDragIndicator(.visible)
-                    .environmentObject(appState)
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .batchFileUpdated)) { _ in
-                loadBatchPrompts()
-            }
-            .onAppear {
-                performOnAppear()
-                validateBatchFileBookmark()
-            }
-            .onChange(of: appState.ui.outputImages) { _ in
-                imageScale = 1.0
-            }
-        #else
-        macOSLayout
-            .workflowErrorAlert(appState: appState)
-            .errorAlert(errorItem: $errorItem)
-            .successAlert(showSuccessAlert: $showSuccessAlert, successMessage: successMessage)
-            .onboardingSheet(showOnboarding: $showOnboarding)
-            .helpSheet(showHelp: $showHelp, mode: appState.settings.mode)
-            .selectFolderAlert(isPresented: $showSelectFolderAlert) {
-                print("Showing output folder picker from alert")
-                PlatformFilePicker.presentOpenPanel(allowedTypes: [.folder], allowsMultiple: false, canChooseDirectories: true) { result in
-                    handleOutputFolderSelection(result)
-                    if !outputPath.isEmpty {
-                        pendingAction?()
-                        pendingAction = nil
-                    }
-                }
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .batchFileUpdated)) { _ in
-                loadBatchPrompts()
-            }
-            .onAppear {
-                performOnAppear()
-                validateBatchFileBookmark()
-            }
-            .onChange(of: appState.ui.outputImages) { _ in
-                imageScale = 1.0
-            }
-            .onChange(of: appState.generation.selectedImageNodeIDs) { _ in
-                let maxSlots = appState.maxImageSlots
-                if appState.ui.imageSlots.count > maxSlots {
-                    appState.ui.imageSlots.removeLast(appState.ui.imageSlots.count - maxSlots)
-                }
-            }
-        #endif
-    }
-
-    #if os(iOS)
-    @ViewBuilder
-    private var iOSLayout: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(spacing: 16) {
-                    MainFormView(
-                        configExpanded: $configExpanded,
-                        promptExpanded: $promptExpanded,
-                        inputImagesExpanded: $inputImagesExpanded,
-                        responseExpanded: $responseExpanded,
-                        prompt: $appState.prompt,
-                        showApiKey: $showApiKey,
-                        apiKeyPath: $apiKeyPath,
-                        outputPath: $outputPath,
-                        isTestingApi: $isTestingApi,
-                        errorItem: $errorItem,
-                        imageScale: $imageScale,
-                        promptTextView: $promptTextView,
-                        isLoading: isLoading,
-                        progress: progress,
-                        isCancelled: $isCancelled,
-                        onSubmit: submitPrompt,
-                        onStop: stopGeneration,
-                        onPopOut: {
-                            appState.presentedModal = .responseSheet
-                        },
-                        onAnnotate: { slotId in
-                            appState.presentedModal = .markupSlot(slotId)
-                        },
-                        onApiKeySelected: handleApiKeySelection,
-                        onOutputFolderSelected: handleOutputFolderSelection,
-                        onComfyJSONSelected: handleComfyJSONSelection,
-                        onBatchFileSelected: handleBatchFileSelection,
-                        onBatchSubmit: batchSubmit,
-                        onEditBatchFile: {
-                            if batchFilePath.isEmpty {
-                                appState.presentedModal = .textEditor(IdentifiableData(data: Data()))
-                            } else if let bookmarkData = UserDefaults.standard.data(forKey: "batchFileBookmark") {
-                                // Validate bookmark before opening editor
-                                do {
-                                    var isStale = false
-                                    #if os(macOS)
-                                    let options: URL.BookmarkResolutionOptions = [.withSecurityScope]
-                                    #else
-                                    let options: URL.BookmarkResolutionOptions = []
-                                    #endif
-                                    let resolvedURL = try URL(resolvingBookmarkData: bookmarkData, options: options, bookmarkDataIsStale: &isStale)
-                                    if resolvedURL.startAccessingSecurityScopedResource() {
-                                        defer { resolvedURL.stopAccessingSecurityScopedResource() }
-                                        if FileManager.default.fileExists(atPath: resolvedURL.path) {
-                                            appState.presentedModal = .textEditor(IdentifiableData(data: bookmarkData))
-                                        } else {
-                                            clearBatchFile()
-                                            appState.presentedModal = .textEditor(IdentifiableData(data: Data()))
-                                        }
-                                    } else {
-                                        clearBatchFile()
-                                        appState.presentedModal = .textEditor(IdentifiableData(data: Data()))
-                                    }
-                                } catch {
-                                    clearBatchFile()
-                                    appState.presentedModal = .textEditor(IdentifiableData(data: Data()))
-                                }
-                            } else {
-                                errorItem = AlertError(message: "Failed to access batch file. Please check your file permissions or select a new file.")
-                            }
-                        },
-                        batchFilePath: $batchFilePath,
-                        batchStartIndex: $batchStartIndex,
-                        batchEndIndex: $batchEndIndex
-                    )
-                    .environmentObject(appState)
-                    .padding(.horizontal, 20)
-                }
-            }
-            .background(LinearGradient(gradient: Gradient(colors: [topColor, bottomColor]), startPoint: .top, endPoint: .bottom))
-            .navigationTitle("")
-            .toolbar {
-                toolbar
-            }
-            // Consolidated single fullScreenCover
-            .fullScreenCover(item: $appState.presentedModal) { modal in
-                switch modal {
-                case .history:
-                    HistoryView(imageSlots: $appState.ui.imageSlots, columnVisibility: $columnVisibility)
-                        .environmentObject(appState)
-                case .responseSheet:
-                    PopOutView()
-                        .environmentObject(appState)
-                case .fullHistoryItem(let id):
-                    FullHistoryItemView(initialId: id)
-                        .environmentObject(appState)
-                case .markupSlot(let slotId):
-                    if let index = appState.ui.imageSlots.firstIndex(where: { $0.id == slotId }),
-                      let image = appState.ui.imageSlots[index].image {
-                        let path = appState.ui.imageSlots[index].path
-                        let fileURL = URL(fileURLWithPath: path)
-                        let lastComponent = fileURL.lastPathComponent
-                        let components = lastComponent.components(separatedBy: ".")
-                        let baseFileName = components.count > 1 ? components.dropLast().joined(separator: ".") : (lastComponent.isEmpty ? "image" : lastComponent)
-                        let fileExtension = components.count > 1 ? components.last! : "png"
-                        MarkupView(image: image, baseFileName: baseFileName, fileExtension: fileExtension) { updatedImage in
-                            appState.ui.imageSlots[index].image = updatedImage
+            #if os(iOS)
+            iOSLayout
+                .workflowErrorAlert(appState: appState)
+                .errorAlert(errorItem: $errorItem, detailedError: $detailedError)
+                .successAlert(showSuccessAlert: $showSuccessAlert, successMessage: successMessage)
+                .onboardingSheet(showOnboarding: $showOnboarding)
+                .helpSheet(showHelp: $showHelp, mode: appState.settings.mode)
+                .selectFolderAlert(isPresented: $showSelectFolderAlert) {
+                    print("Showing output folder picker from alert")
+                    PlatformFilePicker.presentOpenPanel(allowedTypes: [.folder], allowsMultiple: false, canChooseDirectories: true) { result in
+                        handleOutputFolderSelection(result)
+                        if !outputPath.isEmpty {
+                            pendingAction?()
+                            pendingAction = nil
                         }
-                        .navigationTitle("Annotate Image")
                     }
-                case .textEditor(let identifiable):
+                }
+                .sheet(item: $showTextEditorBookmark) { identifiable in
                     TextEditorView(bookmarkData: identifiable.data, batchFilePath: $batchFilePath)
                         .presentationDetents([.large])
                         .presentationDragIndicator(.visible)
                         .environmentObject(appState)
-                case .advancedSettings:
-                    AdvancedAIMLSettingsView(model: appState.currentAIMLModel ?? AIMLModel(id: "", isI2I: false, maxInputImages: 0, supportedParams: [], supportsCustomResolution: false, defaultImageSize: "", imageInputParam: "", acceptsMultiImages: false, acceptsBase64: false, acceptsPublicURL: false, maxWidth: nil, maxHeight: nil), params: $appState.settings.aimlAdvancedParams)
-                        .presentationDetents([.large])  // Full-page like on iOS
-                        .presentationDragIndicator(.visible)
                 }
-            }
-        }
-        .workflowErrorAlert(appState: appState)
-        .errorAlert(errorItem: $errorItem)
-        .successAlert(showSuccessAlert: $showSuccessAlert, successMessage: successMessage)
-        .onboardingSheet(showOnboarding: $showOnboarding)
-        .helpSheet(showHelp: $showHelp, mode: appState.settings.mode)
-        .selectFolderAlert(isPresented: $showSelectFolderAlert) {
-            print("Showing output folder picker from alert")
-            PlatformFilePicker.presentOpenPanel(allowedTypes: [.folder], allowsMultiple: false, canChooseDirectories: true) { result in
-                handleOutputFolderSelection(result)
-                if !outputPath.isEmpty {
-                    pendingAction?()
-                    pendingAction = nil
+                .onReceive(NotificationCenter.default.publisher(for: .batchFileUpdated)) { _ in
+                    loadBatchPrompts()
                 }
-            }
+                .onAppear {
+                    performOnAppear()
+                    validateBatchFileBookmark()
+                }
+                .onChange(of: appState.ui.outputImages) { _ in
+                    imageScale = 1.0
+                }
+            #else
+            macOSLayout
+                .workflowErrorAlert(appState: appState)
+                .errorAlert(errorItem: $errorItem, detailedError: $detailedError)
+                .successAlert(showSuccessAlert: $showSuccessAlert, successMessage: successMessage)
+                .onboardingSheet(showOnboarding: $showOnboarding)
+                .helpSheet(showHelp: $showHelp, mode: appState.settings.mode)
+                .selectFolderAlert(isPresented: $showSelectFolderAlert) {
+                    print("Showing output folder picker from alert")
+                    PlatformFilePicker.presentOpenPanel(allowedTypes: [.folder], allowsMultiple: false, canChooseDirectories: true) { result in
+                        handleOutputFolderSelection(result)
+                        if !outputPath.isEmpty {
+                            pendingAction?()
+                            pendingAction = nil
+                        }
+                    }
+                }
+                .onReceive(NotificationCenter.default.publisher(for: .batchFileUpdated)) { _ in
+                    loadBatchPrompts()
+                }
+                .onAppear {
+                    performOnAppear()
+                    validateBatchFileBookmark()
+                }
+                .onChange(of: appState.ui.outputImages) { _ in
+                    imageScale = 1.0
+                }
+                .onChange(of: appState.generation.selectedImageNodeIDs) { _ in
+                    let maxSlots = appState.maxImageSlots
+                    if appState.ui.imageSlots.count > maxSlots {
+                        appState.ui.imageSlots.removeLast(appState.ui.imageSlots.count - maxSlots)
+                    }
+                }
+            #endif
         }
-        .onReceive(NotificationCenter.default.publisher(for: .batchFileUpdated)) { _ in
-            loadBatchPrompts()
-        }
-        .onAppear {
-            performOnAppear()
-            validateBatchFileBookmark()
-        }
-        .onChange(of: appState.ui.outputImages) { _ in
-            imageScale = 1.0
-        }
-        .onReceive(NotificationCenter.default.publisher(for: openGeneralSettingsNotification)) { _ in
-            showGeneralOptions = true
-        }
-        .sheet(isPresented: $showGeneralOptions) {
-            GeneralOptionsView(isPresented: $showGeneralOptions)
-                .dynamicHeightPresentation()  // Add this custom modifier (defined below)
-                .presentationDragIndicator(.visible)
-                .environmentObject(appState)
-        }
-    }
-    
-    #else
-    @ViewBuilder
-    private var macOSLayout: some View {
-        NavigationSplitView(columnVisibility: $columnVisibility) {
-            HistoryView(imageSlots: $appState.ui.imageSlots, columnVisibility: $columnVisibility)
-                .environmentObject(appState)
-        } detail: {
-            ScrollView {
-                MainFormView(
-                    configExpanded: $configExpanded,
-                    promptExpanded: $promptExpanded,
-                    inputImagesExpanded: $inputImagesExpanded,
-                    responseExpanded: $responseExpanded,
-                    prompt: $appState.prompt,
-                    showApiKey: $showApiKey,
-                    apiKeyPath: $apiKeyPath,
-                    outputPath: $outputPath,
-                    isTestingApi: $isTestingApi,
-                    errorItem: $errorItem,
-                    imageScale: $imageScale,
-                    promptTextView: $promptTextView,
-                    isLoading: isLoading,
-                    progress: progress,
-                    isCancelled: $isCancelled,
-                    onSubmit: submitPrompt,
-                    onStop: stopGeneration,
-                    onPopOut: {
-                        openWindow(id: "response-window")
-                    },
-                    onAnnotate: { slotId in
-                        openWindow(value: slotId)
-                    },
-                    onApiKeySelected: handleApiKeySelection,
-                    onOutputFolderSelected: handleOutputFolderSelection,
-                    onComfyJSONSelected: handleComfyJSONSelection,
-                    onBatchFileSelected: handleBatchFileSelection,
-                    onBatchSubmit: batchSubmit,
-                    onEditBatchFile: {
-                        if batchFilePath.isEmpty {
-                            openWindow(id: "text-editor", value: Data())
-                        } else if let bookmarkData = UserDefaults.standard.data(forKey: "batchFileBookmark") {
-                            // Validate bookmark before opening editor
-                            do {
-                                var isStale = false
+
 #if os(macOS)
-                                let options: URL.BookmarkResolutionOptions = [.withSecurityScope]
-#else
-                                let options: URL.BookmarkResolutionOptions = []
-#endif
-                                let resolvedURL = try URL(resolvingBookmarkData: bookmarkData, options: options, bookmarkDataIsStale: &isStale)
-                                if resolvedURL.startAccessingSecurityScopedResource() {
-                                    defer { resolvedURL.stopAccessingSecurityScopedResource() }
-                                    if FileManager.default.fileExists(atPath: resolvedURL.path) {
-                                        openWindow(id: "text-editor", value: bookmarkData)
-                                    } else {
-                                        clearBatchFile()
-                                        openWindow(id: "text-editor", value: Data())
-                                    }
+@ViewBuilder
+private var macOSLayout: some View {
+    NavigationSplitView(columnVisibility: $columnVisibility) {
+        HistoryView(imageSlots: $appState.ui.imageSlots, columnVisibility: $columnVisibility)
+            .environmentObject(appState)
+    } detail: {
+        ScrollView {
+            MainFormView(
+                configExpanded: $configExpanded,
+                promptExpanded: $promptExpanded,
+                inputImagesExpanded: $inputImagesExpanded,
+                responseExpanded: $responseExpanded,
+                prompt: $appState.prompt,
+                showApiKey: $showApiKey,
+                apiKeyPath: $apiKeyPath,
+                outputPath: $outputPath,
+                isTestingApi: $isTestingApi,
+                errorItem: $errorItem,
+                imageScale: $imageScale,
+                promptTextView: $promptTextView,
+                isLoading: isLoading,
+                progress: progress,
+                isCancelled: $isCancelled,
+                onSubmit: submitPrompt,
+                onStop: { stopGeneration() },
+                onPopOut: {
+                    openWindow(id: "response-window")
+                },
+                onAnnotate: { slotId in
+                    openWindow(value: slotId)
+                },
+                onApiKeySelected: handleApiKeySelection,
+                onOutputFolderSelected: handleOutputFolderSelection,
+                onComfyJSONSelected: handleComfyJSONSelection,
+                onBatchFileSelected: handleBatchFileSelection,
+                onBatchSubmit: batchSubmit,
+                onEditBatchFile: {
+                    if batchFilePath.isEmpty {
+                        openWindow(id: "text-editor", value: Data())
+                    } else if let bookmarkData = UserDefaults.standard.data(forKey: "batchFileBookmark") {
+                        // Validate bookmark before opening editor
+                        do {
+                            var isStale = false
+                            let options: URL.BookmarkResolutionOptions = [.withSecurityScope]
+                            let resolvedURL = try URL(resolvingBookmarkData: bookmarkData, options: options, bookmarkDataIsStale: &isStale)
+                            if resolvedURL.startAccessingSecurityScopedResource() {
+                                defer { resolvedURL.stopAccessingSecurityScopedResource() }
+                                if FileManager.default.fileExists(atPath: resolvedURL.path) {
+                                    openWindow(id: "text-editor", value: bookmarkData)
                                 } else {
                                     clearBatchFile()
                                     openWindow(id: "text-editor", value: Data())
                                 }
-                            } catch {
+                            } else {
                                 clearBatchFile()
                                 openWindow(id: "text-editor", value: Data())
                             }
-                        } else {
-                            errorItem = AlertError(message: "Failed to access batch file. Please check your file permissions or select a new file.")
+                        } catch {
+                            clearBatchFile()
+                            openWindow(id: "text-editor", value: Data())
                         }
-                    },
-                    batchFilePath: $batchFilePath,
-                    batchStartIndex: $batchStartIndex,
-                    batchEndIndex: $batchEndIndex
-                )
-                .environmentObject(appState)
-                .padding(.horizontal, 20)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    } else {
+                        errorItem = AlertError(message: "Failed to access batch file. Please check your file permissions or select a new file.", fullMessage: nil)
+                    }
+                },
+                batchFilePath: $batchFilePath,
+                batchStartIndex: $batchStartIndex,
+                batchEndIndex: $batchEndIndex
+            )
+            .environmentObject(appState)
+            .padding(.horizontal, 20)
         }
-        
-        .background(LinearGradient(gradient: Gradient(colors: [topColor, bottomColor]), startPoint: .top, endPoint: .bottom))
-        .toolbar {
-            ToolbarItemGroup(placement: .automatic) {
-                toolbarContent
-            }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: openGeneralSettingsNotification)) { _ in
-            showGeneralOptions = true
-            
-        }
-        .sheet(isPresented: $showGeneralOptions) {
-            GeneralOptionsView(isPresented: $showGeneralOptions)
-                .frame(minWidth: 450, maxWidth: .infinity, minHeight: 200, idealHeight: .infinity, maxHeight: .infinity)
-                .environmentObject(appState)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+    
+    .background(LinearGradient(gradient: Gradient(colors: [topColor, bottomColor]), startPoint: .top, endPoint: .bottom))
+    .toolbar {
+        ToolbarItemGroup(placement: .automatic) {
+            toolbarContent
         }
     }
-    #endif
+    .onReceive(NotificationCenter.default.publisher(for: openGeneralSettingsNotification)) { _ in
+        showGeneralOptions = true
+        
+    }
+    .sheet(isPresented: $showGeneralOptions) {
+        GeneralOptionsView(isPresented: $showGeneralOptions)
+            .frame(minWidth: 450, maxWidth: .infinity, minHeight: 200, idealHeight: .infinity, maxHeight: .infinity)
+            .environmentObject(appState)
+    }
+    .alert(item: $detailedError) { detail in
+        Alert(
+            title: Text("Error Details"),
+            message: Text(detail.message),
+            dismissButton: .default(Text("OK"))
+        )
+    }
+}
+#endif
+
+
 
 #if os(iOS)
 @ToolbarContentBuilder
@@ -724,4 +572,3 @@ private var toolbar: some ToolbarContent {
         UserDefaults.standard.removeObject(forKey: "batchFileBookmark")
     }
 }
-

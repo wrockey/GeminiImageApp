@@ -361,7 +361,7 @@ struct InputImagesSection: View {
         if imageSlots.count < appState.maxImageSlots {
             imageSlots.append(ImageSlot())
         } else {
-            errorItem = AlertError(message: "Maximum number of image slots reached for this model (\(appState.maxImageSlots)).")
+            errorItem = AlertError(message: "Maximum number of image slots reached for this model (\(appState.maxImageSlots)).", fullMessage: nil)
         }
     }
     
@@ -563,7 +563,7 @@ struct ImageSlotItemView: View {
                         onAnnotate(slot.id)
                     } else {
                         print("DEBUG: Annotate tapped but no image in slot \(slot.id)")
-                        errorItem = AlertError(message: "No image loaded to annotate.")
+                        errorItem = AlertError(message: "No image loaded to annotate.", fullMessage: nil)
                     }
                 } label: {
                     Image(systemName: "square.and.pencil")
@@ -653,7 +653,7 @@ struct ImageSlotItemView: View {
                 guard let url = urls.first else { return }
                 loadImageFromURL(url)
             case .failure(let error):
-                errorItem = AlertError(message: "Failed to select image: \(error.localizedDescription)")
+                errorItem = AlertError(message: "Failed to select image: \(error.localizedDescription)", fullMessage: nil)
             }
         }
     }
@@ -664,7 +664,7 @@ struct ImageSlotItemView: View {
         result.itemProvider.loadDataRepresentation(forTypeIdentifier: UTType.image.identifier) { data, error in
             if let error = error {
                 DispatchQueue.main.async {
-                    self.errorItem = AlertError(message: "Failed to load image: \(error.localizedDescription)")
+                    self.errorItem = AlertError(message: "Failed to load image: \(error.localizedDescription)", fullMessage: nil)
                 }
                 return
             }
@@ -726,7 +726,7 @@ struct ImageSlotItemView: View {
         #endif
         
         guard let pastedImage = image else {
-            errorItem = AlertError(message: "No image data in clipboard")
+            errorItem = AlertError(message: "No image data in clipboard", fullMessage: nil)
             return
         }
         
@@ -756,7 +756,7 @@ struct ImageSlotItemView: View {
             provider.loadFileRepresentation(forTypeIdentifier: UTType.fileURL.identifier) { url, error in
                 if let error = error {
                     DispatchQueue.main.async {
-                        self.errorItem = AlertError(message: "Drop error: \(error.localizedDescription)")
+                        self.errorItem = AlertError(message: "Drop error: \(error.localizedDescription)", fullMessage: nil)
                     }
                     return
                 }
@@ -778,7 +778,7 @@ struct ImageSlotItemView: View {
             provider.loadDataRepresentation(forTypeIdentifier: imageType) { data, error in
                 if let error = error {
                     DispatchQueue.main.async {
-                        self.errorItem = AlertError(message: "Drop error: \(error.localizedDescription)")
+                        self.errorItem = AlertError(message: "Drop error: \(error.localizedDescription)", fullMessage: nil)
                     }
                     return
                 }
@@ -837,10 +837,10 @@ struct ImageSlotItemView: View {
                     slot.selectedPromptIndex = 0
                 }
             } else {
-                errorItem = AlertError(message: "Failed to load image.")
+                errorItem = AlertError(message: "Failed to load image.", fullMessage: nil)
             }
         } catch {
-            errorItem = AlertError(message: "Failed to access image: \(error.localizedDescription)")
+            errorItem = AlertError(message: "Failed to access image: \(error.localizedDescription)", fullMessage: nil)
         }
     }
     

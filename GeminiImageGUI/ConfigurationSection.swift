@@ -27,22 +27,23 @@ struct ConfigurationSection: View {
     let onComfyJSONSelected: (Result<[URL], Error>) -> Void
     
     @EnvironmentObject var appState: AppState
-    @Environment(\.horizontalSizeClass) private var sizeClass
-    
-    @State private var showSuccessAlert: Bool = false
-    @State private var successMessage: String = ""
-    @State private var showCopiedMessage: Bool = false
-    @State private var showServerSuccessAlert: Bool = false
-    @State private var showServerErrorAlert: Bool = false
-    @State private var serverErrorMessage: String = ""
-    @State private var isTestingServer: Bool = false
-    @State private var showGrokApiKey: Bool = false
-    @State private var showAIMLApiKey: Bool = false
-    @State private var showImgBBApiKey: Bool = false
-    @State private var availableModels: [String] = []
-    @State private var isFetchingModels: Bool = false
-    @State private var showAdvanced: Bool = false
-    @State private var showHelp: Bool = false
+        @Environment(\.horizontalSizeClass) private var sizeClass
+        
+        @State private var showSuccessAlert: Bool = false
+        @State private var successMessage: String = ""
+        @State private var showCopiedMessage: Bool = false
+        @State private var showServerSuccessAlert: Bool = false
+        @State private var showServerErrorAlert: Bool = false
+        @State private var serverErrorMessage: String = ""
+        @State private var isTestingServer: Bool = false
+        @State private var showGrokApiKey: Bool = false
+        @State private var showAIMLApiKey: Bool = false
+        @State private var showImgBBApiKey: Bool = false
+        @State private var availableModels: [String] = []
+        @State private var isFetchingModels: Bool = false
+        @State private var showAdvanced: Bool = false
+        @State private var showHelp: Bool = false
+        @State private var detailedError: DetailedError? = nil
     
     private var isCompact: Bool {
         sizeClass == .compact
@@ -108,44 +109,51 @@ struct ConfigurationSection: View {
     }
     
     var body: some View {
-        mainContent
-            .onChange(of: appState.settings.mode) { newMode in
-                if newMode == .aimlapi && !appState.settings.aimlapiKey.isEmpty {
-                    fetchAvailableModels()
+            mainContent
+                .onChange(of: appState.settings.mode) { newMode in
+                    if newMode == .aimlapi && !appState.settings.aimlapiKey.isEmpty {
+                        fetchAvailableModels()
+                    }
                 }
-            }
-            .onChange(of: appState.settings.selectedAIMLModel) { _ in
-                if !appState.canAddImages {
-                    appState.ui.imageSlots.removeAll()
+                .onChange(of: appState.settings.selectedAIMLModel) { _ in
+                    if !appState.canAddImages {
+                        appState.ui.imageSlots.removeAll()
+                    }
+                    // Reset advanced params to defaults
+                    appState.settings.aimlAdvancedParams = ModelParameters()
                 }
-                // Reset advanced params to defaults
-                appState.settings.aimlAdvancedParams = ModelParameters()
-            }
-            .alert("Success", isPresented: $showSuccessAlert) {
-                Button("OK") {}
-            } message: {
-                Text(successMessage)
-            }
-            .alert("Server Available", isPresented: $showServerSuccessAlert) {
-                Button("OK") {}
-            } message: {
-                Text("The ComfyUI server is reachable and responding.")
-            }
-            .alert("Server Error", isPresented: $showServerErrorAlert) {
-                Button("OK") {}
-            } message: {
-                Text(serverErrorMessage)
-            }
-            .errorAlert(errorItem: $errorItem)
-            .sheet(isPresented: $showAdvanced) {
-                if let model = appState.currentAIMLModel {
-                    AdvancedAIMLSettingsView(model: model, params: $appState.settings.aimlAdvancedParams)
+                .alert("Success", isPresented: $showSuccessAlert) {
+                    Button("OK") {}
+                } message: {
+                    Text(successMessage)
                 }
-            }
-            .sheet(isPresented: $showHelp) {
-                HelpView(mode: appState.settings.mode)
-            }
-    }
+                .alert("Server Available", isPresented: $showServerSuccessAlert) {
+                    Button("OK") {}
+                } message: {
+                    Text("The ComfyUI server is reachable and responding.")
+                }
+                .alert("Server Error", isPresented: $showServerErrorAlert) {
+                    Button("OK") {}
+                } message: {
+                    Text(serverErrorMessage)
+                }
+                .errorAlert(errorItem: $errorItem, detailedError: $detailedError)
+                .alert(item: $detailedError) { detail in
+                    Alert(
+                        title: Text("Error Details"),
+                        message: Text(detail.message),
+                        dismissButton: .default(Text("OK"))
+                    )
+                }
+                .sheet(isPresented: $showAdvanced) {
+                    if let model = appState.currentAIMLModel {
+                        AdvancedAIMLSettingsView(model: model, params: $appState.settings.aimlAdvancedParams)
+                    }
+                }
+                .sheet(isPresented: $showHelp) {
+                    HelpView(mode: appState.settings.mode)
+                }
+        }
     
     @ViewBuilder
     private var outputFolderSection: some View {
@@ -1038,7 +1046,7 @@ struct ConfigurationSection: View {
             defer { isTestingApi = false }
             
             guard let url = URL(string: "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image-preview:generateContent") else {
-                errorItem = AlertError(message: "Invalid URL")
+                errorItem = AlertError(message: "Invalid URL", fullMessage: nil)
                 return
             }
             
@@ -1052,7 +1060,7 @@ struct ConfigurationSection: View {
             do {
                 request.httpBody = try JSONEncoder().encode(requestBody)
             } catch {
-                errorItem = AlertError(message: "Failed to encode test request: \(error.localizedDescription)")
+                errorItem = AlertError(message: "Failed to encode test request: \(error.localizedDescription)", fullMessage: nil)
                 return
             }
             
@@ -1062,10 +1070,10 @@ struct ConfigurationSection: View {
                     successMessage = "API test successful!"
                     showSuccessAlert = true
                 } else {
-                    errorItem = AlertError(message: "API test failed. Check your key.")
+                    errorItem = AlertError(message: "API test failed. Check your key.", fullMessage: nil)
                 }
             } catch {
-                errorItem = AlertError(message: "Test error: \(error.localizedDescription)")
+                errorItem = AlertError(message: "Test error: \(error.localizedDescription)", fullMessage: nil)
             }
         }
     }
@@ -1078,7 +1086,7 @@ struct ConfigurationSection: View {
             defer { isTestingApi = false }
             
             guard let url = URL(string: "https://api.x.ai/v1/models") else {
-                errorItem = AlertError(message: "Invalid URL")
+                errorItem = AlertError(message: "Invalid URL", fullMessage: nil)
                 return
             }
             
@@ -1092,10 +1100,10 @@ struct ConfigurationSection: View {
                     successMessage = "Grok API test successful!"
                     showSuccessAlert = true
                 } else {
-                    errorItem = AlertError(message: "Grok API test failed. Check your key.")
+                    errorItem = AlertError(message: "Grok API test failed. Check your key.", fullMessage: nil)
                 }
             } catch {
-                errorItem = AlertError(message: "Test error: \(error.localizedDescription)")
+                errorItem = AlertError(message: "Test error: \(error.localizedDescription)", fullMessage: nil)
             }
         }
     }
@@ -1145,7 +1153,7 @@ struct ConfigurationSection: View {
         } else if KeychainHelper.saveAPIKey(newValue) {
             // Optional: Add a saved message if desired
         } else {
-            errorItem = AlertError(message: "Failed to securely store API key.")
+            errorItem = AlertError(message: "Failed to securely store API key.", fullMessage: nil)
         }
     }
     
@@ -1155,7 +1163,7 @@ struct ConfigurationSection: View {
         } else if KeychainHelper.saveGrokAPIKey(newValue) {
             // Optional: Add a saved message if desired
         } else {
-            errorItem = AlertError(message: "Failed to securely store Grok API key.")
+            errorItem = AlertError(message: "Failed to securely store Grok API key.", fullMessage: nil)
         }
     }
     
@@ -1193,7 +1201,7 @@ struct ConfigurationSection: View {
         } else if KeychainHelper.saveAIMLAPIKey(newValue) {
             // Optional: Add saved message
         } else {
-            errorItem = AlertError(message: "Failed to securely store AI/ML API key.")
+            errorItem = AlertError(message: "Failed to securely store AI/ML API key.", fullMessage: nil)
         }
     }
     
@@ -1220,7 +1228,7 @@ struct ConfigurationSection: View {
             
             let baseURL = "https://api.aimlapi.com/v1/models"
             guard let url = URL(string: "\(baseURL)/models") else {  // Test endpoint (lists models)
-                errorItem = AlertError(message: "Invalid URL")
+                errorItem = AlertError(message: "Invalid URL", fullMessage: nil)
                 return
             }
             
@@ -1234,10 +1242,10 @@ struct ConfigurationSection: View {
                     successMessage = "AI/ML API test successful!"
                     showSuccessAlert = true
                 } else {
-                    errorItem = AlertError(message: "AI/ML API test failed. Check your key.")
+                    errorItem = AlertError(message: "AI/ML API test failed. Check your key.", fullMessage: nil)
                 }
             } catch {
-                errorItem = AlertError(message: "Test error: \(error.localizedDescription)")
+                errorItem = AlertError(message: "Test error: \(error.localizedDescription)", fullMessage: nil)
             }
         }
     }
@@ -1249,7 +1257,7 @@ struct ConfigurationSection: View {
         } else if KeychainHelper.saveImgBBAPIKey(newValue) {
             // Optional: Add saved message
         } else {
-            errorItem = AlertError(message: "Failed to securely store ImgBB API key.")
+            errorItem = AlertError(message: "Failed to securely store ImgBB API key.", fullMessage: nil)
         }
     }
     
@@ -1270,7 +1278,7 @@ struct ConfigurationSection: View {
     private func fetchAvailableModels() {
         // Existing... but filter with ModelRegistry if needed
         guard !appState.settings.aimlapiKey.isEmpty else {
-            errorItem = AlertError(message: "Enter API key first")
+            errorItem = AlertError(message: "Enter API key first", fullMessage: nil)
             return
         }
         
@@ -1281,7 +1289,7 @@ struct ConfigurationSection: View {
             defer { isFetchingModels = false }
             
             guard let url = URL(string: "https://api.aimlapi.com/models") else {
-                errorItem = AlertError(message: "Invalid URL")
+                errorItem = AlertError(message: "Invalid URL", fullMessage: nil)
                 return
             }
             
@@ -1309,14 +1317,38 @@ struct ConfigurationSection: View {
                         appState.settings.selectedAIMLModel = imageModels.first!
                     }
                     if imageModels.isEmpty {
-                        errorItem = AlertError(message: "No image models found")
+                        errorItem = AlertError(message: "No image models found", fullMessage: nil)
                     }
                 }
             } catch {
                 await MainActor.run {
-                    errorItem = AlertError(message: "Fetch error: \(error.localizedDescription)")
+                    errorItem = AlertError(message: "Fetch error: \(error.localizedDescription)", fullMessage: nil)
                 }
             }
         }
+    }
+}
+
+extension View {
+    func errorAlert(errorItem: Binding<AlertError?>, detailedError: Binding<DetailedError?>) -> some View {
+        alert(item: errorItem) { error in
+            if let full = error.fullMessage {
+                Alert(
+                    title: Text("Operation Failed"),
+                    message: error.message.isEmpty ? nil : Text(error.message),
+                    primaryButton: .default(Text("OK")),
+                    secondaryButton: .default(Text("More Info")) {
+                        detailedError.wrappedValue = DetailedError(message: full)
+                    }
+                )
+            } else {
+                Alert(
+                    title: Text("Operation Failed"),
+                    message: error.message.isEmpty ? nil : Text(error.message),
+                    dismissButton: .default(Text("OK"))
+                )
+            }
+        }
+        .accessibilityLabel("Error Alert")
     }
 }

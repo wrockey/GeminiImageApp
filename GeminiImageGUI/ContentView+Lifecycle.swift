@@ -57,7 +57,7 @@ extension ContentView {
                 UserDefaults.standard.removeObject(forKey: "outputDirBookmark")
                 appState.settings.outputDirectory = nil
                 DispatchQueue.main.async {
-                    self.errorItem = AlertError(message: "Output directory bookmark is stale. Please reselect the folder.")
+                    self.errorItem = AlertError(message: "Output directory bookmark is stale. Please reselect the folder.", fullMessage: nil)
                 }
             } else {
                 if FileManager.default.fileExists(atPath: resolvedURL.path) {
@@ -78,7 +78,7 @@ extension ContentView {
                 errorMsg = "Failed to resolve output directory: \(err.localizedDescription)"
             }
             DispatchQueue.main.async {
-                self.errorItem = AlertError(message: errorMsg)
+                self.errorItem = AlertError(message: errorMsg, fullMessage: nil)
             }
             UserDefaults.standard.removeObject(forKey: "outputDirBookmark")
             appState.settings.outputDirectory = nil
@@ -263,7 +263,7 @@ extension ContentView {
                 errorMsg = "Failed to resolve or access ComfyUI JSON: \(err.localizedDescription)"
             }
             DispatchQueue.main.async {
-                self.errorItem = AlertError(message: errorMsg)
+                self.errorItem = AlertError(message: errorMsg,  fullMessage: nil)
             }
             UserDefaults.standard.removeObject(forKey: "comfyJSONBookmark")
             appState.settings.comfyJSONURL = nil
@@ -355,7 +355,7 @@ extension ContentView {
                 errorMsg = "Failed to resolve or access batch file: \(err.localizedDescription)"
             }
             DispatchQueue.main.async {
-                self.errorItem = AlertError(message: errorMsg)
+                self.errorItem = AlertError(message: errorMsg, fullMessage: nil)
             }
             UserDefaults.standard.removeObject(forKey: "batchFileBookmark")
             appState.batchFileURL = nil

@@ -236,7 +236,7 @@ struct ResponseSection: View {
                 do {
                     try pngData.write(to: url)
                 } catch {
-                    errorItem = AlertError(message: "Failed to save image: \(error.localizedDescription)")
+                    errorItem = AlertError(message: "Failed to save image: \(error.localizedDescription)", fullMessage: nil)
                 }
             }
         }

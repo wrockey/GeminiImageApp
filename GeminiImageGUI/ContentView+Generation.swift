@@ -49,7 +49,7 @@ extension ContentView {
         let (isSafe, offendingPhrases) = ContentView.isPromptSafe(appState.prompt)
         if !isSafe {
             let phrasesList = offendingPhrases.joined(separator: ", ")
-            errorItem = AlertError(message: "Prompt contains inappropriate content. Offending phrase(s): \(phrasesList). Please revise and try again.")
+            errorItem = AlertError(message: "Prompt contains inappropriate content. Offending phrase(s): \(phrasesList). Please revise and try again.", fullMessage: nil)
             return
         }
         
@@ -73,11 +73,21 @@ extension ContentView {
                 // Handle cancellation
             } catch {
                 DispatchQueue.main.async {
-                    errorItem = AlertError(message: error.localizedDescription)
+                    if let genError = error as? GenerationError {
+                        switch genError {
+                        case .queueFailed(let details), .uploadFailed(let details), .fetchFailed(let details):
+                            print("Detailed Error Message: \(details)")
+                            errorItem = AlertError(message: details, fullMessage: nil)
+                        default:
+                            errorItem = AlertError(message: error.localizedDescription ?? "Unknown error", fullMessage: nil)
+                        }
+                    } else {
+                        errorItem = AlertError(message: error.localizedDescription ?? "Unknown error", fullMessage: nil)
+                    }
+                    }
                 }
             }
         }
-    }
     
     func asyncGenerate() async throws {
             try Task.checkCancellation()
@@ -279,7 +289,7 @@ extension ContentView {
                                 let nsError = error as NSError
                                 print("WebSocket error caught: domain=\(nsError.domain), code=\(nsError.code), desc=\(error.localizedDescription), isCancelled=\(isCancelled), isComplete=\(isComplete)")
                                 if !((isCancelled || isComplete) && nsError.domain == NSPOSIXErrorDomain && nsError.code == 57) {
-                                    errorItem = AlertError(message: error.localizedDescription)
+                                    errorItem = AlertError(message: error.localizedDescription, fullMessage: nil)
                                 }
                             }
                             break
@@ -313,17 +323,25 @@ extension ContentView {
                             
                             do {
                                 try Task.checkCancellation()
-                                let (data, _) = try await URLSession.shared.data(for: uploadRequest)
-                                if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                                   let name = json["name"] as? String {
-                                    uploadedFilenames.append(name)
+                                let (data, response) = try await URLSession.shared.data(for: uploadRequest)
+                                if let httpResponse = response as? HTTPURLResponse, (200...299).contains(httpResponse.statusCode) {
+                                    if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                                       let name = json["name"] as? String {
+                                        uploadedFilenames.append(name)
+                                    } else {
+                                        let bodyString = String(data: data, encoding: .utf8) ?? "No body"
+                                        print("Upload response: \(bodyString)")
+                                        throw GenerationError.uploadFailed(bodyString)
+                                    }
                                 } else {
-                                    throw GenerationError.uploadFailed
+                                    let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
+                                    let bodyString = String(data: data, encoding: .utf8) ?? "No body"
+                                    print("Upload failed with status \(statusCode): \(bodyString)")
+                                    throw GenerationError.uploadFailed("Status \(statusCode): \(bodyString)")
                                 }
-                            } catch is CancellationError {
-                                throw CancellationError()
                             } catch {
-                                throw GenerationError.uploadFailed
+                                print("Upload error: \(error.localizedDescription)")
+                                throw error
                             }
                         }
                     }
@@ -407,20 +425,28 @@ extension ContentView {
                     var promptId: String?
                     do {
                         try Task.checkCancellation()
-                        let (promptData, _) = try await URLSession.shared.data(for: promptRequest)
-                        if let json = try? JSONSerialization.jsonObject(with: promptData) as? [String: Any],
-                           let id = json["prompt_id"] as? String {
-                            promptId = id
+                        let (promptData, response) = try await URLSession.shared.data(for: promptRequest)
+                        if let httpResponse = response as? HTTPURLResponse, (200...299).contains(httpResponse.statusCode) {
+                            if let json = try? JSONSerialization.jsonObject(with: promptData) as? [String: Any],
+                               let id = json["prompt_id"] as? String {
+                                promptId = id
+                            } else {
+                                let bodyString = String(data: promptData, encoding: .utf8) ?? "No body"
+                                print("Queue prompt response: \(bodyString)")
+                                throw GenerationError.queueFailed(bodyString)
+                            }
                         } else {
-                            throw GenerationError.queueFailed
+                            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
+                            let bodyString = String(data: promptData, encoding: .utf8) ?? "No body"
+                            print("Queue prompt failed with status \(statusCode): \(bodyString)")
+                            throw GenerationError.queueFailed("Queue prompt failed with status \(statusCode): \(bodyString)")
                         }
-                    } catch is CancellationError {
-                        throw CancellationError()
                     } catch {
-                        throw GenerationError.queueFailed
+                        print("Queue prompt error: \(error.localizedDescription)")
+                        throw error
                     }
                     
-                    guard let promptId = promptId else { throw GenerationError.queueFailed }
+                    guard let promptId = promptId else { throw GenerationError.queueFailed("No prompt ID") }
                     
                     // Wait for history (adapted from existing)
                     var history: [String: Any]? = nil
@@ -431,16 +457,22 @@ extension ContentView {
                         var historyRequest = URLRequest(url: historyURL)
                         do {
                             try Task.checkCancellation()
-                            let (historyData, _) = try await URLSession.shared.data(for: historyRequest)
-                            if let json = try? JSONSerialization.jsonObject(with: historyData) as? [String: Any],
-                               let entry = json[promptId] as? [String: Any],
-                               let status = entry["status"] as? [String: Any],
-                               let completed = status["completed"] as? Bool, completed {
-                                history = entry
+                            let (historyData, response) = try await URLSession.shared.data(for: historyRequest)
+                            if let httpResponse = response as? HTTPURLResponse, (200...299).contains(httpResponse.statusCode) {
+                                if let json = try? JSONSerialization.jsonObject(with: historyData) as? [String: Any],
+                                   let entry = json[promptId] as? [String: Any],
+                                   let status = entry["status"] as? [String: Any],
+                                   let completed = status["completed"] as? Bool, completed {
+                                    history = entry
+                                }
+                            } else {
+                                let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
+                                let bodyString = String(data: historyData, encoding: .utf8) ?? "No body"
+                                print("History fetch failed with status \(statusCode): \(bodyString)")
                             }
-                        } catch is CancellationError {
-                            throw CancellationError()
-                        } catch {}
+                        } catch {
+                            print("History fetch error: \(error.localizedDescription)")
+                        }
                     }
                     
                     guard let unwrappedHistory = history else {
@@ -473,28 +505,34 @@ extension ContentView {
                     var viewRequest = URLRequest(url: viewURL)
                     do {
                         try Task.checkCancellation()
-                        let (viewData, _) = try await URLSession.shared.data(for: viewRequest)
-                        if let platformImage = PlatformImage(platformData: viewData) {
-                            let savedPath = saveGeneratedImage(data: viewData, prompt: effectivePrompt, mode: .comfyUI, workflowName: workflowName, batchIndex: batchIndex, totalInBatch: batchSize)
-                            outputImages.append(platformImage)
-                            outputTexts.append("Batch image \(batchIndex + 1) generated with ComfyUI (seed: \(newSeed)). Saved to \(savedPath ?? "unknown")")
-                            outputPaths.append(savedPath)
-                            
-                            // NEW: Update UI incrementally after each image (shows in response section as they generate)
-                            await MainActor.run {
-                                appState.ui.outputImages = outputImages
-                                appState.ui.outputTexts = outputTexts
-                                appState.ui.outputPaths = outputPaths
-                                appState.ui.currentOutputIndex = outputImages.count - 1  // Optional: Switch to the latest one
-                                print("Updated UI with \(outputImages.count) images so far")  // Debug: Confirm in console
+                        let (viewData, response) = try await URLSession.shared.data(for: viewRequest)
+                        if let httpResponse = response as? HTTPURLResponse, (200...299).contains(httpResponse.statusCode) {
+                            if let platformImage = PlatformImage(platformData: viewData) {
+                                let savedPath = saveGeneratedImage(data: viewData, prompt: effectivePrompt, mode: .comfyUI, workflowName: workflowName, batchIndex: batchIndex, totalInBatch: batchSize)
+                                outputImages.append(platformImage)
+                                outputTexts.append("Batch image \(batchIndex + 1) generated with ComfyUI (seed: \(newSeed)). Saved to \(savedPath ?? "unknown")")
+                                outputPaths.append(savedPath)
+                                
+                                // NEW: Update UI incrementally after each image (shows in response section as they generate)
+                                await MainActor.run {
+                                    appState.ui.outputImages = outputImages
+                                    appState.ui.outputTexts = outputTexts
+                                    appState.ui.outputPaths = outputPaths
+                                    appState.ui.currentOutputIndex = outputImages.count - 1  // Optional: Switch to the latest one
+                                    print("Updated UI with \(outputImages.count) images so far")  // Debug: Confirm in console
+                                }
+                            } else {
+                                throw GenerationError.decodeFailed
                             }
                         } else {
-                            throw GenerationError.decodeFailed
+                            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
+                            let bodyString = String(data: viewData, encoding: .utf8) ?? "No body"
+                            print("Image view failed with status \(statusCode): \(bodyString)")
+                            throw GenerationError.fetchFailed("Status \(statusCode): \(bodyString)")
                         }
-                    } catch is CancellationError {
-                        throw CancellationError()
                     } catch {
-                        throw GenerationError.fetchFailed(error.localizedDescription)
+                        print("Image view error: \(error.localizedDescription)")
+                        throw error
                     }
                 }
                 
@@ -514,6 +552,7 @@ extension ContentView {
                 webSocketTask?.cancel(with: .goingAway, reason: nil)
                 webSocketTask = nil
                 progress = 0.0
+                
             case .grok:
                 // Show consent alert on first Grok use
                 if !UserDefaults.standard.bool(forKey: "hasShownGrokConsent") {
@@ -850,11 +889,12 @@ extension ContentView {
         URLSession.shared.dataTask(with: request) { _, response, error in
             DispatchQueue.main.async {
                 if let error = error {
-                    errorItem = AlertError(message: "Stop error: \(error.localizedDescription)")
+                    errorItem = AlertError(message: "Stop error: \(error.localizedDescription)", fullMessage: nil)
                 } else if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 {
-                    errorItem = AlertError(message: "Generation stopped.")
+                    errorItem = AlertError(message: "Generation stopped.", fullMessage: nil)
                 }
             }
         }.resume()
     }
 }
+

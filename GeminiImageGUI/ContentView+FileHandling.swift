@@ -7,7 +7,7 @@ extension ContentView {
         case .success(let urls):
             print("Selected URLs: \(urls)")
             guard let selectedURL = urls.first else 
-            { errorItem = AlertError(message: "No folder selected.")
+            { errorItem = AlertError(message: "No folder selected.", fullMessage: nil)
                 return }
             do {
                 #if os(macOS)
@@ -48,11 +48,11 @@ extension ContentView {
                 outputPath = selectedURL.path
             } catch {
                 print("Bookmark error: \(error)")
-                errorItem = AlertError(message: "Failed to create bookmark for output folder: \(error.localizedDescription)")
+                errorItem = AlertError(message: "Failed to create bookmark for output folder: \(error.localizedDescription)", fullMessage: nil)
             }
         case .failure(let error):
             print("Selection error: \(error)")
-            errorItem = AlertError(message: "Failed to select output folder: \(error.localizedDescription)")
+            errorItem = AlertError(message: "Failed to select output folder: \(error.localizedDescription)", fullMessage: nil)
         }
     }
     
@@ -67,14 +67,14 @@ extension ContentView {
                     // Optional: successMessage = "API key loaded and stored securely."
                     // showSuccessAlert = true
                 } else {
-                    errorItem = AlertError(message: "Failed to store API key securely.")
+                    errorItem = AlertError(message: "Failed to store API key securely.", fullMessage: nil)
                 }
                 apiKeyPath = url.path  // Update UI if keeping the display
             } catch {
-                errorItem = AlertError(message: "Failed to read API key file: \(error.localizedDescription)")
+                errorItem = AlertError(message: "Failed to read API key file: \(error.localizedDescription)", fullMessage: nil)
             }
         case .failure(let error):
-            errorItem = AlertError(message: "File selection error: \(error.localizedDescription)")
+            errorItem = AlertError(message: "File selection error: \(error.localizedDescription)", fullMessage: nil)
         }
     }
     
@@ -137,7 +137,7 @@ extension ContentView {
                 let values = try resolvedDir.resourceValues(forKeys: [.ubiquitousItemDownloadingStatusKey])
                 if let status = values.ubiquitousItemDownloadingStatus, status != .current {
                     try fileManager.startDownloadingUbiquitousItem(at: resolvedDir)
-                    errorItem = AlertError(message: "Folder syncing—try again soon.")
+                    errorItem = AlertError(message: "Folder syncing—try again soon.", fullMessage: nil)
                     return nil
                 }
             } catch {
@@ -230,7 +230,7 @@ extension ContentView {
             }
             return fileURL.path
         } catch {
-            errorItem = AlertError(message: "Failed to save image: \(error.localizedDescription). Check folder permissions and reselect if needed.")
+            errorItem = AlertError(message: "Failed to save image: \(error.localizedDescription). Check folder permissions and reselect if needed.", fullMessage: nil)
             // Emergency temp save
             let tempURL = fileManager.temporaryDirectory.appendingPathComponent("generated_image_\(Date().timeIntervalSince1970).png")
             try? data.write(to: tempURL)

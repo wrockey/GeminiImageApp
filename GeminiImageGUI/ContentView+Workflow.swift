@@ -6,7 +6,7 @@ extension ContentView {
         switch result {
         case .success(let urls):
             guard let url = urls.first else {
-                errorItem = AlertError(message: "No file selected.")
+                errorItem = AlertError(message: "No file selected.", fullMessage: nil)
                 return
             }
             do {
@@ -46,7 +46,7 @@ extension ContentView {
                 UserDefaults.standard.set(bookmarkData, forKey: "comfyJSONBookmark")
             } catch {
                 print("Bookmark error: \(error)")
-                errorItem = AlertError(message: "Failed to save bookmark for file: \(error.localizedDescription)")
+                errorItem = AlertError(message: "Failed to save bookmark for file: \(error.localizedDescription)", fullMessage: nil)
                 return
             }
             var loadError: NSError?
@@ -82,15 +82,15 @@ extension ContentView {
                 }
             }
             if let loadError = loadError {
-                errorItem = AlertError(message: "Failed to load workflow: \(loadError.localizedDescription)")
+                errorItem = AlertError(message: "Failed to load workflow: \(loadError.localizedDescription)", fullMessage: nil)
                 return
             }
             if let innerLoadError = innerLoadError {
-                errorItem = AlertError(message: "Failed to load workflow: \(innerLoadError.localizedDescription)")
+                errorItem = AlertError(message: "Failed to load workflow: \(innerLoadError.localizedDescription)", fullMessage: nil)
                 return
             }
             guard let json = json else {
-                errorItem = AlertError(message: "Invalid workflow.")
+                errorItem = AlertError(message: "Invalid workflow.", fullMessage: nil)
                 return
             }
             
@@ -98,13 +98,13 @@ extension ContentView {
 
             if let _ = json["nodes"] as? [[String: Any]],
                let _ = json["links"] as? [[Any]] {
-                errorItem = AlertError(message: "The selected workflow is not in API format. Please export the workflow in API format from ComfyUI and try again.")
+                errorItem = AlertError(message: "The selected workflow is not in API format. Please export the workflow in API format from ComfyUI and try again.", fullMessage: nil)
                 return
             }
 
             // Now use workflowToUse instead of json
             if workflowToUse.isEmpty {
-                errorItem = AlertError(message: "Invalid or empty workflow after processing.")
+                errorItem = AlertError(message: "Invalid or empty workflow after processing.", fullMessage: nil)
                 return
             }
 
@@ -123,20 +123,20 @@ extension ContentView {
                     }
                 }
                 if let nodeError = nodeError {
-                    errorItem = AlertError(message: "Failed to load workflow nodes: \(nodeError.localizedDescription)")
+                    errorItem = AlertError(message: "Failed to load workflow nodes: \(nodeError.localizedDescription)", fullMessage: nil)
                     return
                 }
                 if let innerNodeError = innerNodeError {
-                    errorItem = AlertError(message: "Failed to load workflow nodes: \(innerNodeError.localizedDescription)")
+                    errorItem = AlertError(message: "Failed to load workflow nodes: \(innerNodeError.localizedDescription)", fullMessage: nil)
                     return
                 }
                 if let error = appState.generation.workflowError {
-                    errorItem = AlertError(message: error)
+                    errorItem = AlertError(message: error, fullMessage: nil)
                 }
             
         case .failure(let error):
             print("Selection error: \(error)")
-            errorItem = AlertError(message: "Failed to select workflow file: \(error.localizedDescription)")
+            errorItem = AlertError(message: "Failed to select workflow file: \(error.localizedDescription)", fullMessage: nil)
         }
     }
 }
