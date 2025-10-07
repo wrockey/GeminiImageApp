@@ -1,3 +1,4 @@
+//ResponseSection.swift
 import SwiftUI
 #if os(macOS)
 import AppKit
@@ -10,10 +11,11 @@ struct ResponseSection: View {
     @Environment(\.colorScheme) var colorScheme
     @Environment(\.undoManager) private var undoManager
     
+    @Binding var showUndoButton: Bool // Changed to Binding
+    
     @State private var finalScale: CGFloat = 1.0
     @State private var showCopiedOverlay: Bool = false
     @State private var showDeleteAlert: Bool = false
-    @State private var showUndoButton: Bool = false // New state for undo button
     
     var body: some View {
         VStack(spacing: 16) {
@@ -185,26 +187,6 @@ struct ResponseSection: View {
                     .shadow(radius: 2)
                     .help("Delete the response")
                     .accessibilityLabel("Delete response")
-                    
-                    #if os(iOS)
-                    if showUndoButton {
-                        Button {
-                            undoManager?.undo()
-                            withAnimation {
-                                showUndoButton = false
-                            }
-                        } label: {
-                            Image(systemName: "arrow.uturn.left")
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .tint(.blue)
-                        .cornerRadius(10)
-                        .shadow(radius: 2)
-                        .help("Undo last deletion")
-                        .accessibilityLabel("Undo deletion")
-                        .disabled(!(undoManager?.canUndo ?? false))
-                    }
-                    #endif
                 }
             }
             .frame(maxWidth: .infinity)
@@ -389,17 +371,10 @@ struct ResponseSection: View {
                 appState.ui.currentOutputIndex = 0
             }
             
-            // Show undo button on iOS
-            #if os(iOS)
+            // Show undo button
             withAnimation {
                 showUndoButton = true
             }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
-                withAnimation {
-                    showUndoButton = false
-                }
-            }
-            #endif
             
             appState.ui.objectWillChange.send()
             appState.historyState.saveHistory()

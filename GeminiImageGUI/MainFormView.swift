@@ -46,6 +46,8 @@ struct MainFormView: View {
     
     @Environment(\.horizontalSizeClass) private var sizeClass
     
+    @State private var showUndoButton: Bool = false // New state for undo button
+    
     private var isCompact: Bool {
         sizeClass == .compact
     }
@@ -520,13 +522,31 @@ struct MainFormView: View {
                 DisclosureGroup(isExpanded: $responseExpanded) {
                     ResponseSection(
                         imageScale: $imageScale,
-                        errorItem: $errorItem
+                        errorItem: $errorItem,
+                        showUndoButton: $showUndoButton
                     )
                 } label: {
                     HStack {
                         Text("Response")
                             .font(.system(size: 20, weight: .semibold))
                             .help("View generated images and responses from the AI")
+                        if showUndoButton {
+                            Button {
+                                undoManager?.undo()
+                                withAnimation {
+                                    showUndoButton = false
+                                }
+                            } label: {
+                                Image(systemName: "arrow.uturn.left")
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .tint(.blue)
+                            .cornerRadius(10)
+                            .shadow(radius: 2)
+                            .help("Undo last deletion")
+                            .accessibilityLabel("Undo deletion")
+                            .disabled(!(undoManager?.canUndo ?? false))
+                        }
                         Spacer()
                         Button(action: onPopOut) {
                             Image(systemName: "arrow.up.forward.square")
