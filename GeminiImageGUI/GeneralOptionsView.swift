@@ -5,19 +5,49 @@ struct GeneralOptionsView: View {
     @EnvironmentObject var appState: AppState
     @Binding var isPresented: Bool
     
+    private var allowsBase64: Bool {
+        switch appState.settings.mode {
+        case .gemini:
+            return true
+        case .aimlapi:
+            if let model = appState.currentAIMLModel {
+                return model.acceptsBase64
+            }
+            return true
+        default:
+            return true
+        }
+    }
+    
+    private var allowsImgBB: Bool {
+        switch appState.settings.mode {
+        case .gemini:
+            return false
+        case .aimlapi:
+            if let model = appState.currentAIMLModel {
+                return model.acceptsPublicURL
+            }
+            return true
+        default:
+            return true
+        }
+    }
+    
+    private func updateSelection() {
+        let current = appState.settings.imageSubmissionMethod
+        if (current == .base64 && !allowsBase64) || (current == .imgBB && !allowsImgBB) {
+            appState.settings.imageSubmissionMethod = allowsBase64 ? .base64 : (allowsImgBB ? .imgBB : .base64)
+        }
+    }
+    
     var body: some View {
         NavigationStack {
             Form {
                 Section {
-                    Picker("Method", selection: $appState.settings.imageSubmissionMethod) {
-                        Text("ImgBB Links (Public URLs)").tag(ImageSubmissionMethod.imgBB)
-                        Text("Base64 Payload (Private)").tag(ImageSubmissionMethod.base64)
+                    VStack(alignment: .leading, spacing: 8) {
+                        methodRow(method: .base64, title: "Base64 Payload (Private)", disabled: !allowsBase64)
+                        methodRow(method: .imgBB, title: "ImgBB Links (Public URLs)", disabled: !allowsImgBB)
                     }
-                #if os(macOS)
-                .pickerStyle(.radioGroup)
-                #else
-                .pickerStyle(.inline)
-                #endif
                 } header: {
                     Text("Image Submission Method")
                 } footer: {
@@ -45,7 +75,32 @@ struct GeneralOptionsView: View {
                     }
                 }
             }
+            .onAppear {
+                updateSelection()
+            }
+            .onChange(of: appState.settings.mode) { _ in
+                updateSelection()
+            }
+            .onChange(of: appState.settings.selectedAIMLModel) { _ in
+                updateSelection()
+            }
         }
-
+    }
+    
+    @ViewBuilder
+    private func methodRow(method: ImageSubmissionMethod, title: String, disabled: Bool) -> some View {
+        HStack {
+            Image(systemName: appState.settings.imageSubmissionMethod == method ? "circle.fill" : "circle")
+                .foregroundColor(disabled ? .gray : .accentColor)
+            Text(title)
+        }
+        .foregroundColor(disabled ? .gray : .primary)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            if !disabled {
+                appState.settings.imageSubmissionMethod = method
+            }
+        }
     }
 }
+

@@ -15,7 +15,7 @@ struct AIMLModel {
     let maxHeight: Int?  // Nil if no limit or enum-only
 }
 
-enum AIMLParam: String, CaseIterable {
+enum AIMLParam: String, CaseIterable, Hashable {
     case strength
     case numInferenceSteps
     case guidanceScale
@@ -321,3 +321,6 @@ struct ModelRegistry {
         }
     }
 }
+
+
+

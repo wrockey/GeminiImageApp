@@ -228,6 +228,9 @@ struct ConfigurationSection: View {
     private var geminiConfiguration: some View {
         VStack(alignment: .leading, spacing: isCompact ? 12 : 16) {  // Align to left
             geminiApiKeyRow
+            Text("Using base64 for inline image data.")
+                .font(.caption)
+                .foregroundColor(.secondary)
         }
     }
     
@@ -392,7 +395,9 @@ struct ConfigurationSection: View {
     private var aimlConfiguration: some View {
         VStack(alignment: .leading, spacing: isCompact ? 12 : 16) {
             aimlApiKeyRow
-            aimlImgBBApiKeyRow
+            if allowsImgBB {
+                aimlImgBBApiKeyRow
+            }
             aimlModelRow
             if appState.currentAIMLModel?.supportsCustomResolution ?? false {
                 aimlResolutionRow
@@ -414,6 +419,34 @@ struct ConfigurationSection: View {
                     .font(.caption)
                     .foregroundColor(.orange)
             }
+        }
+    }
+    
+    private var allowsImgBB: Bool {
+        switch appState.settings.mode {
+        case .gemini:
+            return false
+        case .aimlapi:
+            if let model = appState.currentAIMLModel {
+                return model.acceptsPublicURL
+            }
+            return true
+        default:
+            return true
+        }
+    }
+    
+    private var allowsBase64: Bool {
+        switch appState.settings.mode {
+        case .gemini:
+            return true
+        case .aimlapi:
+            if let model = appState.currentAIMLModel {
+                return model.acceptsBase64
+            }
+            return true
+        default:
+            return true
         }
     }
     
@@ -598,39 +631,39 @@ struct ConfigurationSection: View {
     }
     
     @ViewBuilder
-        private var aimlResolutionRow: some View {
-            HStack(spacing: isCompact ? 8 : 16) {
-                Text("Resolution:")
-                    .font(labelFont)
-                    .foregroundColor(.secondary)
-                    .help("Select a common resolution (multiples of 32)")
-                    .fixedSize()
-                Picker("", selection: $appState.settings.selectedResolutionString) {
-                    ForEach(filteredResolutions, id: \.value) { res in
-                        Text(res.label).tag(res.value)
-                    }
+    private var aimlResolutionRow: some View {
+        HStack(spacing: isCompact ? 8 : 16) {
+            Text("Resolution:")
+                .font(labelFont)
+                .foregroundColor(.secondary)
+                .help("Select a common resolution (multiples of 32)")
+                .fixedSize()
+            Picker("", selection: $appState.settings.selectedResolutionString) {
+                ForEach(filteredResolutions, id: \.value) { res in
+                    Text(res.label).tag(res.value)
                 }
-                .pickerStyle(.menu)
-                .frame(width: 300)  // Increased width to accommodate longer labels
-                .help("Choose resolution; model-dependent, multiples of 32")
-                .accessibilityLabel("Resolution selector")
-                .onChange(of: appState.settings.selectedResolutionString) { newValue in
-                    let parts = newValue.split(separator: "x")
-                    let trimmedParts = parts.map { $0.trimmingCharacters(in: .whitespaces) }
-                    if trimmedParts.count == 2,
-                       let width = Int(trimmedParts[0]),
-                       let height = Int(trimmedParts[1]) {
-                        appState.settings.selectedImageWidth = width
-                        appState.settings.selectedImageHeight = height
-                    }
+            }
+            .pickerStyle(.menu)
+            .frame(width: 300)  // Increased width to accommodate longer labels
+            .help("Choose resolution; model-dependent, multiples of 32")
+            .accessibilityLabel("Resolution selector")
+            .onChange(of: appState.settings.selectedResolutionString) { newValue in
+                let parts = newValue.split(separator: "x")
+                let trimmedParts = parts.map { $0.trimmingCharacters(in: .whitespaces) }
+                if trimmedParts.count == 2,
+                   let width = Int(trimmedParts[0]),
+                   let height = Int(trimmedParts[1]) {
+                    appState.settings.selectedImageWidth = width
+                    appState.settings.selectedImageHeight = height
                 }
-                .onAppear {
-                    if appState.settings.selectedResolutionString.isEmpty {
-                        appState.settings.selectedResolutionString = "2048x2048"
-                    }
+            }
+            .onAppear {
+                if appState.settings.selectedResolutionString.isEmpty {
+                    appState.settings.selectedResolutionString = "2048x2048"
                 }
             }
         }
+    }
 
     private var filteredResolutions: [(label: String, value: String)] {
         let allResolutions: [(label: String, value: String)] = [
@@ -710,6 +743,11 @@ struct ConfigurationSection: View {
                     .cornerRadius(10)
                     .transition(.opacity)
                     .help("Confirmation that text was copied to clipboard")
+            }
+        }
+        .onChange(of: appState.generation.imageNodes) { newNodes in
+            if newNodes.count == 1 && !appState.generation.selectedImageNodeIDs.contains(newNodes[0].id) {
+                appState.generation.selectedImageNodeIDs.insert(newNodes[0].id)
             }
         }
     }

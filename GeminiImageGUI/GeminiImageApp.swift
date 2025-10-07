@@ -15,7 +15,7 @@ enum GenerationMode: String, Codable, CaseIterable {
     case aimlapi
 }
 
-struct NodeInfo: Identifiable {
+struct NodeInfo: Identifiable, Equatable {
     let id: String
     let label: String
     let promptText: String?
