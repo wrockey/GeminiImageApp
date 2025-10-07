@@ -1,23 +1,23 @@
-//ResponseSection.swift
 import SwiftUI
- 
+
 struct ResponseSection: View {
     @EnvironmentObject var appState: AppState
     @Binding var imageScale: CGFloat
     @Binding var errorItem: AlertError?
     @Environment(\.colorScheme) var colorScheme
-   
+    @Environment(\.undoManager) private var undoManager
+    
     @State private var finalScale: CGFloat = 1.0
     @State private var showCopiedOverlay: Bool = false
     @State private var showDeleteAlert: Bool = false
-   
+    
     var body: some View {
-        VStack(spacing: 16) {  // Changed to VStack for vertical layout
+        VStack(spacing: 16) {
             imageContent
             textContent
         }
-        .frame(minHeight: 250)  // Slightly taller min height for balance
-        .padding(16)  // Outer padding for section spacing
+        .frame(minHeight: 250)
+        .padding(16)
         .cornerRadius(16)
         .onChange(of: appState.ui.outputImages) { _ in
             finalScale = 1.0
@@ -35,52 +35,52 @@ struct ResponseSection: View {
             Text("Do you want to delete the image from history only or also delete the file?")
         }
     }
-   
+    
     private var backgroundColor: Color {
         #if os(iOS)
         Color(.systemGray6)
         #else
-        Color.gray  // Fallback for macOS
+        Color.gray
         #endif
     }
-   
+    
     private var secondaryBackgroundColor: Color {
         #if os(iOS)
         Color(.systemGray6)
         #else
-        Color.gray  // Fallback for macOS
+        Color.gray
         #endif
     }
-   
+    
     private var systemBackgroundColor: Color {
         #if os(iOS)
         Color(.systemBackground)
         #else
-        Color(NSColor.windowBackgroundColor)  // macOS equivalent
+        Color(NSColor.windowBackgroundColor)
         #endif
     }
-   
+    
     private var secondarySystemBackgroundColor: Color {
         #if os(iOS)
         Color(.secondarySystemBackground)
         #else
-        Color(NSColor.controlBackgroundColor)  // macOS equivalent
+        Color(NSColor.controlBackgroundColor)
         #endif
     }
-   
+    
     @ViewBuilder
     private var imageContent: some View {
         let count = appState.ui.outputImages.count
         let index = appState.ui.currentOutputIndex
         if count > 0, let optionalImage = appState.ui.outputImages[safe: index], let platformImage = optionalImage {
-            VStack(spacing: 12) {  // Changed to VStack for buttons below image
+            VStack(spacing: 12) {
                 Image(platformImage: platformImage)
                     .resizable()
                     .aspectRatio(contentMode: .fit)
                     .frame(maxWidth: .infinity)
                     .scaleEffect(imageScale)
-                    .cornerRadius(16)  // Softer corners
-                    .shadow(color: .black.opacity(0.15), radius: 6, x: 0, y: 3)  // Enhanced shadow for pop
+                    .cornerRadius(16)
+                    .shadow(color: .black.opacity(0.15), radius: 6, x: 0, y: 3)
                     .gesture(MagnificationGesture()
                         .onChanged { value in
                             imageScale = finalScale * value
@@ -107,8 +107,7 @@ struct ResponseSection: View {
                             }
                         }
                     )
-           
-                // +++ NEW: Navigation if multiples
+                
                 if count > 1 {
                     HStack(spacing: 12) {
                         Button {
@@ -119,11 +118,11 @@ struct ResponseSection: View {
                         .disabled(index == 0)
                         .buttonStyle(.bordered)
                         .tint(.blue)
-           
+                
                         Text("\(index + 1) of \(count)")
                             .font(.subheadline)
                             .foregroundColor(.secondary)
-           
+                
                         Button {
                             if index < count - 1 { appState.ui.currentOutputIndex += 1 }
                         } label: {
@@ -136,8 +135,8 @@ struct ResponseSection: View {
                     .help("Navigate between generated images")
                     .accessibilityLabel("Image navigation")
                 }
-           
-                HStack(spacing: 12) {  // HStack for buttons below image
+                
+                HStack(spacing: 12) {
                     Button {
                         PlatformPasteboard.clearContents()
                         PlatformPasteboard.writeImage(platformImage)
@@ -158,7 +157,7 @@ struct ResponseSection: View {
                     .shadow(radius: 2)
                     .help("Copy the image to the clipboard")
                     .accessibilityLabel("Copy image")
-           
+                
                     Button {
                         saveImageAs(image: platformImage)
                     } label: {
@@ -170,7 +169,7 @@ struct ResponseSection: View {
                     .shadow(radius: 2)
                     .help("Save the image to a file")
                     .accessibilityLabel("Save image as")
-           
+                
                     Button {
                         showDeleteAlert = true
                     } label: {
@@ -185,7 +184,7 @@ struct ResponseSection: View {
                 }
             }
             .frame(maxWidth: .infinity)
-            .padding(12)  // Internal padding for cleanliness
+            .padding(12)
         } else {
             VStack {
                 Text("No image generated.")
@@ -197,6 +196,7 @@ struct ResponseSection: View {
             .frame(maxWidth: .infinity)
         }
     }
+    
     @ViewBuilder
     private var textContent: some View {
         let index = appState.ui.currentOutputIndex
@@ -204,7 +204,7 @@ struct ResponseSection: View {
         if text.isEmpty {
             Rectangle()
                 .fill(secondarySystemBackgroundColor)
-                .frame(maxWidth: .infinity, minHeight: 60, maxHeight: 60)  // Small initial height (decreased by ~75% from typical 60)
+                .frame(maxWidth: .infinity, minHeight: 60, maxHeight: 60)
                 .cornerRadius(12)
                 .shadow(radius: 2)
                 .help("Placeholder for response text")
@@ -223,14 +223,13 @@ struct ResponseSection: View {
                 .accessibilityLabel("Response text: \(text)")
         }
     }
-   
+    
     private func saveImageAs(image: PlatformImage) {
-        // Platform-abstracted save panel (macOS-specific for now)
-#if os(macOS)
+        #if os(macOS)
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.png]
         panel.nameFieldStringValue = "generated_image.png"
-   
+    
         if panel.runModal() == .OK, let url = panel.url {
             if let data = image.platformTiffRepresentation(), let bitmap = NSBitmapImageRep(data: data), let pngData = bitmap.representation(using: .png, properties: [:]) {
                 do {
@@ -240,34 +239,99 @@ struct ResponseSection: View {
                 }
             }
         }
-#elseif os(iOS)
-        // iOS share sheet for saving to Photos/Files
+        #elseif os(iOS)
         guard let pngData = image.pngData() else {
             errorItem = AlertError(message: "Failed to prepare image for saving.", fullMessage: nil)
             return
         }
-   
+    
         let activityVC = UIActivityViewController(activityItems: [pngData], applicationActivities: nil)
-   
-        // Fix popover source for iPad
+    
         if UIDevice.current.userInterfaceIdiom == .pad {
             activityVC.popoverPresentationController?.sourceView = UIApplication.shared.windows.first?.rootViewController?.view
             activityVC.popoverPresentationController?.sourceRect = CGRect(x: UIScreen.main.bounds.midX, y: UIScreen.main.bounds.midY, width: 0, height: 0)
             activityVC.popoverPresentationController?.permittedArrowDirections = []
         }
-   
+    
         if let topVC = UIApplication.shared.windows.first(where: { $0.isKeyWindow })?.rootViewController {
             topVC.present(activityVC, animated: true)
         } else {
             errorItem = AlertError(message: "Unable to present save dialog.", fullMessage: nil)
         }
-#endif
+        #endif
     }
-   
-    // NEW: Delete handler for current image
+    
     private func deleteCurrentImage(deleteFile: Bool) {
         let index = appState.ui.currentOutputIndex
         if index < appState.ui.outputImages.count, let path = appState.ui.outputPaths[safe: index] {
+            // Store state for undo
+            let image = appState.ui.outputImages[safe: index]
+            let text = appState.ui.outputTexts[safe: index]
+            let historyEntry = appState.historyState.findAndRemoveEntry(matching: { $0.imagePath == path })
+            
+            #if os(macOS)
+            // Register undo action
+            if let undoManager = undoManager {
+                let oldImages = appState.ui.outputImages
+                let oldTexts = appState.ui.outputTexts
+                let oldPaths = appState.ui.outputPaths
+                let oldIndex = appState.ui.currentOutputIndex
+                let oldHistory = appState.historyState.history
+                
+                undoManager.registerUndo(withTarget: appState) { target in
+                    // Restore UI state
+                    target.ui.outputImages = oldImages
+                    target.ui.outputTexts = oldTexts
+                    target.ui.outputPaths = oldPaths
+                    target.ui.currentOutputIndex = oldIndex
+                    
+                    // Restore history state
+                    target.historyState.history = oldHistory
+                    target.historyState.saveHistory()
+                    target.historyState.objectWillChange.send()
+                    target.ui.objectWillChange.send() // Ensure UI updates
+                    
+                    // Register redo action
+                    undoManager.registerUndo(withTarget: target) { redoTarget in
+                        let redoIndex = redoTarget.ui.currentOutputIndex
+                        if redoIndex < redoTarget.ui.outputImages.count, let redoPath = redoTarget.ui.outputPaths[safe: redoIndex] {
+                            // Redo file deletion if applicable
+                            if deleteFile, let fileURL = redoPath.flatMap({ URL(fileURLWithPath: $0) }) {
+                                let fileManager = FileManager.default
+                                if let dir = redoTarget.settings.outputDirectory {
+                                    do {
+                                        try withSecureAccess(to: dir) {
+                                            try fileManager.removeItem(at: fileURL)
+                                        }
+                                    } catch { /* log error */ }
+                                }
+                            }
+                            
+                            // Redo history entry removal
+                            _ = redoTarget.historyState.findAndRemoveEntry(matching: { $0.imagePath == redoPath })
+                            
+                            // Redo UI array removals
+                            redoTarget.ui.outputImages.remove(at: redoIndex)
+                            redoTarget.ui.outputTexts.remove(at: redoIndex)
+                            redoTarget.ui.outputPaths.remove(at: redoIndex)
+                            
+                            // Adjust index for redo
+                            if !redoTarget.ui.outputImages.isEmpty {
+                                redoTarget.ui.currentOutputIndex = min(redoIndex, redoTarget.ui.outputImages.count - 1)
+                            } else {
+                                redoTarget.ui.currentOutputIndex = 0
+                            }
+                            
+                            redoTarget.ui.objectWillChange.send()
+                            redoTarget.historyState.saveHistory()
+                            redoTarget.historyState.objectWillChange.send() // Ensure history panel updates
+                        }
+                    }
+                    undoManager.setActionName("Delete Response")
+                }
+            }
+            #endif
+            
             // Delete file if chosen
             if deleteFile, let fileURL = path.flatMap({ URL(fileURLWithPath: $0) }) {
                 let fileManager = FileManager.default
@@ -279,26 +343,22 @@ struct ResponseSection: View {
                     } catch { /* log error */ }
                 }
             }
-           
-            // Find and remove matching history item
-            _ = appState.historyState.findAndRemoveEntry(matching: { $0.imagePath == path })
-        }
-   
-        // Remove from UI arrays
-        appState.ui.outputImages.remove(at: index)
-        appState.ui.outputTexts.remove(at: index)
-        appState.ui.outputPaths.remove(at: index)
-   
-        // Adjust index
-        if !appState.ui.outputImages.isEmpty {
-            appState.ui.currentOutputIndex = min(index, appState.ui.outputImages.count - 1)
-        } else {
-            appState.ui.currentOutputIndex = 0
+            
+            // Remove from UI arrays
+            appState.ui.outputImages.remove(at: index)
+            appState.ui.outputTexts.remove(at: index)
+            appState.ui.outputPaths.remove(at: index)
+            
+            // Adjust index
+            if !appState.ui.outputImages.isEmpty {
+                appState.ui.currentOutputIndex = min(index, appState.ui.outputImages.count - 1)
+            } else {
+                appState.ui.currentOutputIndex = 0
+            }
+            
+            appState.ui.objectWillChange.send()
+            appState.historyState.saveHistory()
+            appState.historyState.objectWillChange.send() // Ensure history panel updates
         }
     }
 }
-
-
-
-
-

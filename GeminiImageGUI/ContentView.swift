@@ -533,26 +533,7 @@ struct ContentView: View {
 
     private var toolbarContent: some View {
         Group {
-            Button(action: {
-                print("Showing output folder picker from toolbar")
-                PlatformFilePicker.presentOpenPanel(allowedTypes: [.folder], allowsMultiple: false, canChooseDirectories: true) { result in
-                    handleOutputFolderSelection(result)
-                }
-            }) {
-                Image(systemName: "folder")
-                    .symbolRenderingMode(.hierarchical)
-            }
-            .help("Select Output Folder")
-            .accessibilityLabel("Select Output Folder")
-            .accessibilityHint("Opens a folder picker to choose where generated images are saved.")
 
-            Button(action: resetAppState) {
-                Image(systemName: "arrow.counterclockwise")
-                    .symbolRenderingMode(.hierarchical)
-            }
-            .help("New Session")
-            .accessibilityLabel("New Session")
-            .accessibilityHint("Resets the current session, clearing prompt and images.")
 
             Button(action: { showGeneralOptions = true }) {
                 Image(systemName: "gear")

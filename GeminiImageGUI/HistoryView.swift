@@ -1,4 +1,3 @@
-// HistoryView.swift
 import SwiftUI
 #if os(macOS)
 import AppKit
@@ -23,6 +22,7 @@ struct HistoryView: View {
     #endif
     #if os(macOS)
     @State private var isEditing: Bool = false
+    @State private var showClearHistoryConfirmation: Bool = false // Added for macOS clear history confirmation
     #if swift(>=5.7)
     @Environment(\.openWindow) private var openWindow
     #endif
@@ -30,14 +30,14 @@ struct HistoryView: View {
     @State private var activeEntry: HistoryEntry? = nil
     @State private var selectedIDs: Set<UUID> = []
     @Environment(\.dismiss) private var dismiss
-   
+    
     private var dateFormatter: DateFormatter {
         let formatter = DateFormatter()
         formatter.dateStyle = .short
         formatter.timeStyle = .short
         return formatter
     }
-   
+    
     private var filteredHistory: [HistoryEntry] {
         let base = searchText.isEmpty ? appState.historyState.history : filterEntries(appState.historyState.history, with: searchText)
         #if os(macOS)
@@ -46,7 +46,7 @@ struct HistoryView: View {
         return base
         #endif
     }
-   
+    
     private var fileCount: Int {
         var uniqueItemIDs = Set<UUID>()
         
@@ -64,7 +64,7 @@ struct HistoryView: View {
         collectUniqueItems(from: entriesToDelete)
         return uniqueItemIDs.count
     }
-  
+    
     private var deleteMessage: String {
         if fileCount == 0 {
             return "Delete from history?"
@@ -73,15 +73,25 @@ struct HistoryView: View {
             return "Delete from history only, or also permanently delete \(fileCount) \(imageWord)?"
         }
     }
-   
+    
     private var confirmDeleteMessage: String {
         let totalItems = entriesToDelete.reduce(into: 0) { $0 += $1.imageCount }
         return "Are you sure? \(totalItems) image\(totalItems == 1 ? "" : "s") will be deleted!"
     }
-   
+    
     var body: some View {
         content
             #if os(iOS)
+            .alert("Clear History", isPresented: $showClearHistoryConfirmation) {
+                Button("Clear", role: .destructive) {
+                    appState.historyState.clearHistory(undoManager: undoManager)
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("This will remove all history entries but keep your files intact. Are you sure?")
+            }
+            #endif
+            #if os(macOS)
             .alert("Clear History", isPresented: $showClearHistoryConfirmation) {
                 Button("Clear", role: .destructive) {
                     appState.historyState.clearHistory(undoManager: undoManager)
@@ -102,13 +112,13 @@ struct HistoryView: View {
         .frame(minWidth: 300, maxWidth: .infinity, maxHeight: .infinity)
         .alert("Delete History Entries", isPresented: $showDeleteAlert) {
             Button("Delete from History Only") {
-                appState.historyState.deleteEntries(entriesToDelete, deleteFiles: false, undoManager: undoManager)  // Updated to register undo
+                appState.historyState.deleteEntries(entriesToDelete, deleteFiles: false, undoManager: undoManager)
                 entriesToDelete = []
                 selectedIDs.removeAll()
             }
             if fileCount > 0 {
                 Button("Delete History and Files", role: .destructive) {
-                    appState.historyState.deleteEntries(entriesToDelete, deleteFiles: true, undoManager: undoManager)  // Updated to register undo
+                    appState.historyState.deleteEntries(entriesToDelete, deleteFiles: true, undoManager: undoManager)
                     entriesToDelete = []
                     selectedIDs.removeAll()
                 }
@@ -199,6 +209,17 @@ struct HistoryView: View {
                 .font(.system(.headline, design: .default, weight: .semibold))
                 .kerning(0.2)
                 .help("View past generated images and prompts")
+            Button(action: {
+                showClearHistoryConfirmation = true
+            }) {
+                Image(systemName: "trash.circle.fill")
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundColor(.red.opacity(0.8))
+            }
+            .buttonStyle(.borderless)
+            .disabled(filteredHistory.isEmpty)
+            .help("Clear all history entries")
+            .accessibilityLabel("Clear history")
             
             Spacer()
             
@@ -225,6 +246,8 @@ struct HistoryView: View {
             .accessibilityLabel("Redo")
             
             commonActions
+            
+
         }
         .padding(.horizontal)
         #else
@@ -233,35 +256,6 @@ struct HistoryView: View {
                 .font(.system(size: 24, weight: .semibold, design: .default))
                 .kerning(0.2)
                 .help("View past generated images and prompts")
-            
-            Spacer()
-            
-            Button(action: {
-                undoManager?.undo()
-            }) {
-                Image(systemName: "arrow.uturn.left")
-                    .font(.system(size: 24))
-                    .symbolRenderingMode(.hierarchical)
-            }
-            .buttonStyle(.plain)
-            .disabled(!(undoManager?.canUndo ?? false))
-            .help("Undo last action")
-            .accessibilityLabel("Undo")
-            
-            Button(action: {
-                undoManager?.redo()
-            }) {
-                Image(systemName: "arrow.uturn.right")
-                    .font(.system(size: 24))
-                    .symbolRenderingMode(.hierarchical)
-            }
-            .buttonStyle(.plain)
-            .disabled(!(undoManager?.canRedo ?? false))
-            .help("Redo last action")
-            .accessibilityLabel("Redo")
-            
-            commonActions
-            
             Button(action: {
                 showClearHistoryConfirmation = true
             }) {
@@ -274,6 +268,36 @@ struct HistoryView: View {
             .disabled(filteredHistory.isEmpty)
             .help("Clear all history entries")
             .accessibilityLabel("Clear history")
+            
+            Spacer()
+            
+            Button(action: {
+                undoManager?.undo()
+            }) {
+                Image(systemName: "arrow.uturn.left")
+                    .font(.system(size: 24))
+                    .symbolRenderingMode(.hierarchical)
+            }
+            .buttonStyle(.plain)
+            .disabled(!(undoManager?.canUndo ?? false))
+            .help("Undo last action")
+            .accessibilityLabel("Undo")
+            
+            Button(action: {
+                undoManager?.redo()
+            }) {
+                Image(systemName: "arrow.uturn.right")
+                    .font(.system(size: 24))
+                    .symbolRenderingMode(.hierarchical)
+            }
+            .buttonStyle(.plain)
+            .disabled(!(undoManager?.canRedo ?? false))
+            .help("Redo last action")
+            .accessibilityLabel("Redo")
+            
+            commonActions
+            
+
             
             Button(action: {
                 dismiss()
@@ -359,7 +383,7 @@ struct HistoryView: View {
         }
         #endif
     }
-
+    
     private var commonActions: some View {
         Group {
             Button(action: {
@@ -660,7 +684,7 @@ struct HistoryView: View {
             #endif
         }
     }
-
+    
     private var isEditingBinding: Binding<Bool> {
         #if os(iOS)
         Binding(
@@ -1031,7 +1055,7 @@ struct HistoryView: View {
             }
         }
     }
-     
+    
     private func sortedEntries(_ entries: [HistoryEntry]) -> [HistoryEntry] {
         var folders: [Folder] = []
         var items: [HistoryItem] = []
