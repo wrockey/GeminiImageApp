@@ -1064,12 +1064,14 @@ struct ConfigurationSection: View {
             }
             
             do {
-                let (_, response) = try await URLSession.shared.data(for: request)
+                let (data, response) = try await URLSession.shared.data(for: request)
                 if let httpResponse = response as? HTTPURLResponse, (200...299).contains(httpResponse.statusCode) {
                     successMessage = "API test successful!"
                     showSuccessAlert = true
                 } else {
-                    errorItem = AlertError(message: "API test failed. Check your key.", fullMessage: nil)
+                    let bodyString = String(data: data, encoding: .utf8) ?? "No body"
+                    let status = (response as? HTTPURLResponse)?.statusCode ?? -1
+                    errorItem = AlertError(message: "API test failed with status \(status). Check your key.", fullMessage: bodyString)
                 }
             } catch {
                 errorItem = AlertError(message: "Test error: \(error.localizedDescription)", fullMessage: nil)
@@ -1094,12 +1096,14 @@ struct ConfigurationSection: View {
             request.addValue("Bearer \(appState.settings.grokApiKey)", forHTTPHeaderField: "Authorization")
             
             do {
-                let (_, response) = try await URLSession.shared.data(for: request)
+                let (data, response) = try await URLSession.shared.data(for: request)
                 if let httpResponse = response as? HTTPURLResponse, (200...299).contains(httpResponse.statusCode) {
                     successMessage = "Grok API test successful!"
                     showSuccessAlert = true
                 } else {
-                    errorItem = AlertError(message: "Grok API test failed. Check your key.", fullMessage: nil)
+                    let bodyString = String(data: data, encoding: .utf8) ?? "No body"
+                    let status = (response as? HTTPURLResponse)?.statusCode ?? -1
+                    errorItem = AlertError(message: "Grok API test failed with status \(status). Check your key.", fullMessage: bodyString)
                 }
             } catch {
                 errorItem = AlertError(message: "Test error: \(error.localizedDescription)", fullMessage: nil)
@@ -1236,12 +1240,14 @@ struct ConfigurationSection: View {
             request.addValue("Bearer \(appState.settings.aimlapiKey)", forHTTPHeaderField: "Authorization")
             
             do {
-                let (_, response) = try await URLSession.shared.data(for: request)
+                let (data, response) = try await URLSession.shared.data(for: request)
                 if let httpResponse = response as? HTTPURLResponse, (200...299).contains(httpResponse.statusCode) {
                     successMessage = "AI/ML API test successful!"
                     showSuccessAlert = true
                 } else {
-                    errorItem = AlertError(message: "AI/ML API test failed. Check your key.", fullMessage: nil)
+                    let bodyString = String(data: data, encoding: .utf8) ?? "No body"
+                    let status = (response as? HTTPURLResponse)?.statusCode ?? -1
+                    errorItem = AlertError(message: "AI/ML API test failed with status \(status). Check your key.", fullMessage: bodyString)
                 }
             } catch {
                 errorItem = AlertError(message: "Test error: \(error.localizedDescription)", fullMessage: nil)
@@ -1351,5 +1357,4 @@ extension View {
         .accessibilityLabel("Error Alert")
     }
 }
-
 

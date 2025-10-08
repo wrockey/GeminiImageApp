@@ -1,4 +1,5 @@
 //ContentView+Generation.swift
+import SwiftUI
 #if os(iOS)
 import UIKit
 #endif
@@ -6,38 +7,38 @@ import UIKit
 import AppKit
 #endif
 import ImageIO // Still needed if other parts use it, but can remove if not
-
+ 
 struct ErrorDict: Codable {  // New: For Grok/aimlapi error parsing
     let message: String?
     let type: String?  // Optional, if API provides (e.g., "policy_violation")
     let code: Int?     // Optional error code
 }
-
+ 
 struct GrokImageResponse: Codable {
     let created: Int?
     let data: [GrokImageData]
     let error: ErrorDict?  // Updated: Now Codable struct
 }
-
+ 
 struct GrokImageData: Codable {
     let b64_json: String?
     let url: String?
     let revised_prompt: String?
 }
-
+ 
 struct ImgBBResponse: Codable {
     let data: ImgBBData?
     let success: Bool
     let status: Int
 }
-
+ 
 struct ImgBBData: Codable {
     let id: String
     let title: String?
     let url: String?  // Public URL to use
     // Other fields if needed
 }
-
+ 
 extension ContentView {
     func submitPrompt() {
         if outputPath.isEmpty {
@@ -104,6 +105,8 @@ extension ContentView {
                         default:
                             errorItem = AlertError(message: error.localizedDescription ?? "Unknown error", fullMessage: nil)
                         }
+                    } else {
+                        errorItem = AlertError(message: error.localizedDescription ?? "Unknown error", fullMessage: nil)
                     }
                 }
             }
@@ -148,11 +151,18 @@ extension ContentView {
                 
                 request.httpBody = try JSONEncoder().encode(requestBody)
                 
-                let (data, _) = try await URLSession.shared.data(for: request)
-                print(String(data: data, encoding: .utf8) ?? "No data")
-                let response = try JSONDecoder().decode(NewGenerateContentResponse.self, from: data)
+                let (data, response) = try await URLSession.shared.data(for: request)
+                guard let httpResponse = response as? HTTPURLResponse,
+                      (200...299).contains(httpResponse.statusCode) else {
+                    let bodyString = String(data: data, encoding: .utf8) ?? "No body"
+                    let status = (response as? HTTPURLResponse)?.statusCode ?? -1
+                    throw GenerationError.apiError("Status \(status): \(bodyString)")
+                }
                 
-                if let candidate = response.candidates.first, let finishReason = candidate.finishReason, finishReason == "SAFETY" {
+                print(String(data: data, encoding: .utf8) ?? "No data")
+                let responseDecoded = try JSONDecoder().decode(NewGenerateContentResponse.self, from: data)
+                
+                if let candidate = responseDecoded.candidates.first, let finishReason = candidate.finishReason, finishReason == "SAFETY" {
                         await MainActor.run {
                             appState.ui.outputTexts = ["Generation blocked for safety reasons. Please revise your prompt."]
                             appState.ui.outputImages = []
@@ -161,7 +171,7 @@ extension ContentView {
                         throw GenerationError.apiError("Blocked due to safety violation")
                     }
                 
-                if response.candidates.isEmpty {
+                if responseDecoded.candidates.isEmpty {
                         await MainActor.run {
                             appState.ui.outputTexts = ["Prompt blocked for safety or policy reasons."]
                             appState.ui.outputImages = []
@@ -174,7 +184,7 @@ extension ContentView {
                 var texts: [String] = []
                 var paths: [String?] = []
                 
-                for part in response.candidates.first?.content.parts ?? [] {
+                for part in responseDecoded.candidates.first?.content.parts ?? [] {
                     var textOutput = ""
                     if let text = part.text {
                         textOutput += text + "\n"
@@ -211,7 +221,7 @@ extension ContentView {
                     appState.historyState.history.append(.item(newItem))
                 }
                 appState.historyState.saveHistory()
-
+ 
                 case .comfyUI:
                     guard let workflow = appState.generation.comfyWorkflow else {
                         throw GenerationError.noWorkflow
@@ -611,9 +621,16 @@ extension ContentView {
                 }
                 
                 try Task.checkCancellation()
-                let (data, _) = try await URLSession.shared.data(for: request)
-                let response = try JSONDecoder().decode(GrokImageResponse.self, from: data)
-                if let error = response.error {
+                let (data, response) = try await URLSession.shared.data(for: request)
+                guard let httpResponse = response as? HTTPURLResponse,
+                      (200...299).contains(httpResponse.statusCode) else {
+                    let bodyString = String(data: data, encoding: .utf8) ?? "No body"
+                    let status = (response as? HTTPURLResponse)?.statusCode ?? -1
+                    throw GenerationError.apiError("Status \(status): \(bodyString)")
+                }
+                
+                let responseDecoded = try JSONDecoder().decode(GrokImageResponse.self, from: data)
+                if let error = responseDecoded.error {
                         var message = error.message ?? "Unknown error"
                         if message.lowercased().contains("policy") || message.lowercased().contains("safety") || message.lowercased().contains("violation") {
                             message += " (Likely safety/content violation)"
@@ -637,8 +654,8 @@ extension ContentView {
                 var texts: [String] = []
                 var paths: [String?] = []
                 
-                let total = response.data.count  // MOVED UP: Define before loop
-                for (i, item) in response.data.enumerated() {
+                let total = responseDecoded.data.count  // MOVED UP: Define before loop
+                for (i, item) in responseDecoded.data.enumerated() {
                     var textOutput = ""
                     if let revised = item.revised_prompt {
                         textOutput += "Revised prompt: \(revised)\n"
@@ -829,11 +846,17 @@ extension ContentView {
                 }
                 
                 try Task.checkCancellation()
-                let (data, _) = try await URLSession.shared.data(for: request)
+                let (data, response) = try await URLSession.shared.data(for: request)
+                guard let httpResponse = response as? HTTPURLResponse,
+                      (200...299).contains(httpResponse.statusCode) else {
+                    let bodyString = String(data: data, encoding: .utf8) ?? "No body"
+                    let status = (response as? HTTPURLResponse)?.statusCode ?? -1
+                    throw GenerationError.apiError("Status \(status): \(bodyString)")
+                }
                 print(String(data: data, encoding: .utf8) ?? "No data")
-                let response = try JSONDecoder().decode(GrokImageResponse.self, from: data)
+                let responseDecoded = try JSONDecoder().decode(GrokImageResponse.self, from: data)
                 
-                if let error = response.error {
+                if let error = responseDecoded.error {
                     var message = error.message ?? "Unknown error"
                     if message.lowercased().contains("safety") || message.lowercased().contains("violation") || message.lowercased().contains("content policy") {
                         message += " (Likely safety/content violation)"
@@ -850,8 +873,8 @@ extension ContentView {
                 var texts: [String] = []
                 var paths: [String?] = []
                 
-                let total = response.data.count  // MOVED UP: Define before loop
-                for (i, item) in response.data.enumerated() {
+                let total = responseDecoded.data.count  // MOVED UP: Define before loop
+                for (i, item) in responseDecoded.data.enumerated() {
                     var textOutput = ""
                     if let revised = item.revised_prompt {
                         textOutput += "Revised prompt: \(revised)\n"
@@ -920,6 +943,47 @@ extension ContentView {
                 }
             }
         }.resume()
+    }
+}
+
+struct DetailedErrorView: View {
+    let message: String
+    let onDismiss: () -> Void
+    
+    var body: some View {
+        VStack(spacing: 20) {
+            Text("Error Details")
+                .font(.title2)
+                .bold()
+            
+            ScrollView {
+                Text(prettyPrintJSON(message) ?? message)
+                    .font(.system(size: 12, design: .monospaced))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding()
+                    .background(Color.gray.opacity(0.1))
+                    .cornerRadius(8)
+            }
+            .frame(maxHeight: 400)
+            
+            Button("Close") {
+                onDismiss()
+            }
+            .buttonStyle(.borderedProminent)
+        }
+        .padding()
+        .frame(minWidth: 400, minHeight: 300)
+    }
+    
+    private func prettyPrintJSON(_ string: String) -> String? {
+        guard let data = string.data(using: .utf8) else { return nil }
+        do {
+            let json = try JSONSerialization.jsonObject(with: data, options: [])
+            let prettyData = try JSONSerialization.data(withJSONObject: json, options: [.prettyPrinted, .sortedKeys])
+            return String(data: prettyData, encoding: .utf8)
+        } catch {
+            return nil
+        }
     }
 }
 
