@@ -788,6 +788,7 @@ struct HistoryView: View {
     }
     
     private func itemRow(for item: HistoryItem) -> some View {
+        let exists = fileExists(for: item)
         var creator: String? = nil
         if let mode = item.mode {
             creator = mode == .gemini ? "Gemini" : mode == .grok ? item.modelUsed ?? appState.settings.selectedGrokModel : mode == .aimlapi ? item.modelUsed ?? appState.settings.selectedAIMLModel : (item.workflowName ?? "ComfyUI")
@@ -809,6 +810,8 @@ struct HistoryView: View {
                 Text(item.prompt.prefix(50) + (item.prompt.count > 50 ? "..." : ""))
                     .font(.subheadline)
                     .lineLimit(1)
+                    .foregroundColor(exists ? .primary : .secondary)
+                    .strikethrough(!exists)
                     .help("Prompt: \(item.prompt)")
                     .accessibilityLabel("Prompt: \(item.prompt)")
                 Text(dateFormatter.string(from: item.date))
@@ -1011,6 +1014,21 @@ struct HistoryView: View {
         } else {
             return PlatformImage(contentsOfFile: fileURL.path)
         }
+    }
+    
+    private func fileExists(for item: HistoryItem) -> Bool {
+        guard let path = item.imagePath else { return false }
+        let url = URL(fileURLWithPath: path)
+        var exists = false
+        if let dir = appState.settings.outputDirectory {
+            if dir.startAccessingSecurityScopedResource() {
+                exists = FileManager.default.fileExists(atPath: url.path)
+                dir.stopAccessingSecurityScopedResource()
+            }
+        } else {
+            exists = FileManager.default.fileExists(atPath: url.path)
+        }
+        return exists
     }
     
     private func addToInputImages(item: HistoryItem) {
