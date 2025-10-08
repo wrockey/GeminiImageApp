@@ -9,7 +9,7 @@ struct FullHistoryItemView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.undoManager) private var undoManager
     @Environment(\.colorScheme) private var colorScheme
-    @State private var selectedId: UUID? = nil
+    @State private var selectedId: UUID?
     @State private var showDeleteAlert: Bool = false
     @State private var previousSelectedId: UUID? = nil
     @State private var showCopiedMessage: Bool = false
@@ -17,6 +17,11 @@ struct FullHistoryItemView: View {
     @State private var previousHistory: [HistoryItem] = []
     @State private var isFullScreen: Bool = false
     @State private var recentlyDeletedId: UUID? = nil
+   
+    init(initialId: UUID) {
+        self.initialId = initialId
+        _selectedId = State(initialValue: initialId)
+    }
    
     private var dateFormatter: DateFormatter {
         let formatter = DateFormatter()
@@ -104,11 +109,12 @@ struct FullHistoryItemView: View {
             }
         }
         .onAppear {
-            selectedId = initialId
             previousHistory = history
             previousSelectedId = nil
             #if os(macOS)
-            updateWindowSize()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                updateWindowSize()
+            }
             if let window = NSApp.windows.last {
                 isFullScreen = window.styleMask.contains(.fullScreen)
             }
@@ -155,37 +161,47 @@ struct FullHistoryItemView: View {
     // NEW: Modern horizontal scroll for iOS 17+/macOS 14+
     @available(iOS 17.0, macOS 14.0, *)
     private func horizontalScrollView(for geometry: GeometryProxy) -> some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            LazyHStack(spacing: 0) {
-                ForEach(history) { item in
-                    HistoryImageDisplay(item: item)
-                        .frame(width: geometry.size.width, height: geometry.size.height)
-                        .id(item.id)
-                }
-            }
-        }
-        .scrollTargetBehavior(.paging)
-        .scrollTargetLayout()
-        .scrollPosition(id: $selectedId)
-        #if os(macOS)
-        .focusable()
-        .onKeyPress { press in
-            if press.phase == .down {
-                if press.key == .leftArrow {
-                    if let idx = currentIndex, idx > 0 {
-                        selectedId = history[idx - 1].id
-                        return .handled
-                    }
-                } else if press.key == .rightArrow {
-                    if let idx = currentIndex, idx < history.count - 1 {
-                        selectedId = history[idx + 1].id
-                        return .handled
+        ScrollViewReader { proxy in
+            ScrollView(.horizontal, showsIndicators: false) {
+                LazyHStack(spacing: 0) {
+                    ForEach(history) { item in
+                        HistoryImageDisplay(item: item)
+                            .frame(width: geometry.size.width, height: geometry.size.height)
+                            .id(item.id)
                     }
                 }
             }
-            return .ignored
+            .scrollTargetBehavior(.paging)
+            .scrollTargetLayout()
+            .scrollPosition(id: $selectedId)
+            .onAppear {
+                proxy.scrollTo(selectedId, anchor: .leading)
+            }
+            .onChange(of: selectedId) { newId in
+                withAnimation {
+                    proxy.scrollTo(newId, anchor: .leading)
+                }
+            }
+            #if os(macOS)
+            .focusable()
+            .onKeyPress { press in
+                if press.phase == .down {
+                    if press.key == .leftArrow {
+                        if let idx = currentIndex, idx > 0 {
+                            selectedId = history[idx - 1].id
+                            return .handled
+                        }
+                    } else if press.key == .rightArrow {
+                        if let idx = currentIndex, idx < history.count - 1 {
+                            selectedId = history[idx + 1].id
+                            return .handled
+                        }
+                    }
+                }
+                return .ignored
+            }
+            #endif
         }
-        #endif
     }
    
     // NEW: Fallback for older versions
