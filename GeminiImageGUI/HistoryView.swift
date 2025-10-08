@@ -1,9 +1,8 @@
-//HistoryView.swift
 import SwiftUI
 #if os(macOS)
 import AppKit
 #endif
-
+ 
 struct HistoryView: View {
     @Binding var imageSlots: [ImageSlot]
     @EnvironmentObject var appState: AppState
@@ -30,17 +29,16 @@ struct HistoryView: View {
     @State private var activeEntry: HistoryEntry? = nil
     @State private var selectedIDs: Set<UUID> = []
     @Environment(\.dismiss) private var dismiss
-    
+   
     // New state for delete options
-    @State private var deleteFiles: Bool = false
-    
+   
     private var dateFormatter: DateFormatter {
         let formatter = DateFormatter()
         formatter.dateStyle = .short
         formatter.timeStyle = .short
         return formatter
     }
-    
+   
     private var filteredHistory: [HistoryEntry] {
         let base = searchText.isEmpty ? appState.historyState.history : filterEntries(appState.historyState.history, with: searchText)
         #if os(macOS)
@@ -49,27 +47,27 @@ struct HistoryView: View {
         return base
         #endif
     }
-    
+   
     private var fileCount: Int {
         let items = entriesToDelete.flatMap { $0.allItems }
         print("fileCount: items = \(items.map { "\($0.id): \($0.imagePath ?? "nil")" })")
         return items.filter { $0.imagePath != nil }.count
     }
-    
+   
     private var existingFileCount: Int {
         let items = entriesToDelete.flatMap { $0.allItems }
         return items.filter { $0.fileExists(appState: appState) }.count
     }
-    
+   
     private var hasExistingFiles: Bool {
         existingFileCount > 0
     }
-    
+   
     private var deleteTitle: String {
         let itemCount = entriesToDelete.flatMap { $0.allItems }.count
         return itemCount == 1 ? "Delete Item" : "Delete \(itemCount) Items"
     }
-    
+   
     private var deleteMessage: String {
         var msg = "Are you sure you want to delete from history?"
         if fileCount > 0 {
@@ -80,7 +78,7 @@ struct HistoryView: View {
         }
         return msg
     }
-    
+   
     var body: some View {
         content
             #if os(iOS)
@@ -113,45 +111,17 @@ struct HistoryView: View {
                 #endif
                 print("History changed: \(appState.historyState.history.map { $0.id })")
             }
-            .onChange(of: showDeleteAlert) { newValue in
-                if newValue {
-                    print("Showing dialog - fileCount: \(fileCount), hasExistingFiles: \(hasExistingFiles)")
-                    deleteFiles = false
-                }
+            .sheet(isPresented: $showDeleteAlert) {
+                DeleteConfirmationView(
+                    title: deleteTitle,
+                    message: deleteMessage,
+                    hasDeletableFiles: hasExistingFiles,
+                    deleteAction: { deleteFiles in
+                        appState.historyState.deleteEntries(entriesToDelete, deleteFiles: deleteFiles, undoManager: undoManager)
+                    },
+                    cancelAction: {}
+                )
             }
-            .confirmationDialog(deleteTitle, isPresented: $showDeleteAlert, titleVisibility: .visible) {
-                Button("Delete", role: deleteFiles ? .destructive : nil) {
-                    print("Deleting entries: \(entriesToDelete.map { $0.id })")
-                    print("fileCount: \(fileCount), hasExistingFiles: \(hasExistingFiles)")
-                    appState.historyState.deleteEntries(entriesToDelete, deleteFiles: deleteFiles, undoManager: undoManager)
-                    entriesToDelete = []
-                    selectedIDs.removeAll()
-                }
-                Button("Cancel", role: .cancel) {}
-            } message: {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(deleteMessage)
-                   if fileCount > 0 {
-                        Toggle("Also permanently delete \(existingFileCount) file\(existingFileCount == 1 ? "" : "s")", isOn: $deleteFiles)
-                         .disabled(!hasExistingFiles)
-                        Text("File deletion cannot be undone.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                  }
-                }
-            }
-            #if os(macOS)
-            .overlay(
-                Group {
-                    if #available(macOS 14.0, *) {
-                        if hasExistingFiles {
-                            Color.clear.dialogSeverity(.critical)
-                        }
-                    }
-                }
-                .dialogIcon(Image(systemName: "trash"))
-            )
-            #endif
     }
     private var content: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -164,7 +134,7 @@ struct HistoryView: View {
             overlayContent
         }
     }
-    
+   
     private var overlayContent: some View {
         Group {
             #if os(iOS)
@@ -213,7 +183,7 @@ struct HistoryView: View {
             #endif
         }
     }
-    
+   
     private func hideToastAfterDelay() {
             DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
                 withAnimation(.easeOut(duration: 0.3)) {
@@ -222,7 +192,7 @@ struct HistoryView: View {
                 }
             }
         }
-        
+       
         private var header: some View {
             #if os(macOS)
             HStack {
@@ -237,7 +207,7 @@ struct HistoryView: View {
                 .buttonStyle(.plain)
                 .help("Collapse history sidebar")
                 .accessibilityLabel("Collapse history sidebar")
-                
+               
                 Text("History")
                     .font(.system(.headline, design: .default, weight: .semibold))
                     .kerning(0.2)
@@ -253,9 +223,9 @@ struct HistoryView: View {
                 .disabled(filteredHistory.isEmpty)
                 .help("Clear all history entries")
                 .accessibilityLabel("Clear history")
-                
+               
                 Spacer()
-                
+               
                 Button(action: {
                     undoManager?.undo()
                 }) {
@@ -266,7 +236,7 @@ struct HistoryView: View {
                 .disabled(!(undoManager?.canUndo ?? false))
                 .help("Undo last action")
                 .accessibilityLabel("Undo")
-                
+               
                 Button(action: {
                     undoManager?.redo()
                 }) {
@@ -277,7 +247,7 @@ struct HistoryView: View {
                 .disabled(!(undoManager?.canRedo ?? false))
                 .help("Redo last action")
                 .accessibilityLabel("Redo")
-                
+               
                 commonActions
             }
             .padding(.horizontal)
@@ -299,9 +269,9 @@ struct HistoryView: View {
                 .disabled(filteredHistory.isEmpty)
                 .help("Clear all history entries")
                 .accessibilityLabel("Clear history")
-                
+               
                 Spacer()
-                
+               
                 Button(action: {
                     undoManager?.undo()
                 }) {
@@ -313,7 +283,7 @@ struct HistoryView: View {
                 .disabled(!(undoManager?.canUndo ?? false))
                 .help("Undo last action")
                 .accessibilityLabel("Undo")
-                
+               
                 Button(action: {
                     undoManager?.redo()
                 }) {
@@ -325,9 +295,9 @@ struct HistoryView: View {
                 .disabled(!(undoManager?.canRedo ?? false))
                 .help("Redo last action")
                 .accessibilityLabel("Redo")
-                
+               
                 commonActions
-                
+               
                 Button(action: {
                     dismiss()
                 }) {
@@ -412,7 +382,7 @@ struct HistoryView: View {
             }
             #endif
         }
-    
+   
     private var commonActions: some View {
             Group {
                 Button(action: {
@@ -425,7 +395,7 @@ struct HistoryView: View {
                 .buttonStyle(.borderless)
                 .help("Add new folder")
                 .accessibilityLabel("Add folder")
-                
+               
                 if isEditingBinding.wrappedValue {
                     Button(action: {
                         if !selectedIDs.isEmpty {
@@ -442,7 +412,7 @@ struct HistoryView: View {
                     .disabled(selectedIDs.isEmpty)
                     .help("Delete selected items")
                     .accessibilityLabel("Delete selected items")
-                    
+                   
                     #if os(iOS)
                     Button(action: {
                         if !selectedIDs.isEmpty {
@@ -461,7 +431,7 @@ struct HistoryView: View {
                     .disabled(selectedIDs.isEmpty)
                     .help("Move selected items to top")
                     .accessibilityLabel("Move selected items to top")
-                    
+                   
                     Button(action: {
                         if !selectedIDs.isEmpty {
                             appState.historyState.moveToBottom(entriesWithIds: Array(selectedIDs), inFolderId: nil, undoManager: undoManager)
@@ -480,7 +450,7 @@ struct HistoryView: View {
                     .help("Move selected items to bottom")
                     .accessibilityLabel("Move selected items to bottom")
                     #endif
-                    
+                   
                     Button(action: {
                         if !selectedIDs.isEmpty {
                             var addedCount = 0
@@ -513,7 +483,7 @@ struct HistoryView: View {
                     .help("Add selected images to input")
                     .accessibilityLabel("Add selected images to input")
                 }
-                
+               
                 Button(action: {
                     isEditingBinding.wrappedValue.toggle()
                     if !isEditingBinding.wrappedValue {
@@ -527,7 +497,7 @@ struct HistoryView: View {
                 .accessibilityLabel("Select multiple items")
             }
         }
-        
+       
         private var searchField: some View {
             TextField("Search prompts or dates...", text: $searchText)
                 .textFieldStyle(.roundedBorder)
@@ -535,7 +505,7 @@ struct HistoryView: View {
                 .help("Search history by prompt text or date")
                 .accessibilityLabel("Search prompts or dates")
         }
-    
+   
     private var historyList: some View {
             ScrollView {
                 LazyVStack(alignment: .leading) {
@@ -714,7 +684,7 @@ struct HistoryView: View {
                 #endif
             }
         }
-        
+       
         private var isEditingBinding: Binding<Bool> {
             #if os(iOS)
             Binding(
@@ -731,7 +701,7 @@ struct HistoryView: View {
             $isEditing
             #endif
         }
-    
+   
     // Helper to find the parent folder ID of an item
     private func findParentFolderId(for itemId: UUID, in entries: [HistoryEntry]) -> UUID? {
         for entry in entries {
@@ -746,7 +716,7 @@ struct HistoryView: View {
         }
         return nil // Item is in root if no parent folder is found
     }
-    
+   
     @ViewBuilder
     private func entryRow(for entry: HistoryEntry) -> some View {
         switch entry {
@@ -809,18 +779,18 @@ struct HistoryView: View {
             #endif
         }
     }
-    
+   
     private func itemRow(for item: HistoryItem) -> some View {
         let exists = item.fileExists(appState: appState)
         var creator: String? = nil
         if let mode = item.mode {
             creator = mode == .gemini ? "Gemini" : mode == .grok ? item.modelUsed ?? appState.settings.selectedGrokModel : mode == .aimlapi ? item.modelUsed ?? appState.settings.selectedAIMLModel : (item.workflowName ?? "ComfyUI")
-            
+           
             if let idx = item.indexInBatch, let tot = item.totalInBatch {
                 creator! += " #\(idx + 1) of \(tot)"
             }
         }
-        
+       
         return HStack(spacing: 12) {
             if isEditingBinding.wrappedValue {
                 Image(systemName: selectedIDs.contains(item.id) ? "checkmark.circle.fill" : "circle")
@@ -828,7 +798,7 @@ struct HistoryView: View {
                     .font(.system(size: 20))
             }
             LazyThumbnailView(item: item)
-            
+           
             VStack(alignment: .leading, spacing: 4) {
                 Text(item.prompt.prefix(50) + (item.prompt.count > 50 ? "..." : ""))
                     .font(.subheadline)
@@ -1015,7 +985,7 @@ struct HistoryView: View {
             }
         }
     }
-    
+   
     private func copyPromptToClipboard(_ prompt: String) {
         #if os(macOS)
         NSPasteboard.general.clearContents()
@@ -1024,7 +994,7 @@ struct HistoryView: View {
         UIPasteboard.general.string = prompt
         #endif
     }
-    
+   
     private func loadHistoryImage(for item: HistoryItem) -> PlatformImage? {
         guard let path = item.imagePath else { return nil }
         let fileURL = URL(fileURLWithPath: path)
@@ -1039,16 +1009,16 @@ struct HistoryView: View {
             return PlatformImage(contentsOfFile: fileURL.path)
         }
     }
-    
+   
     private func fileExists(for item: HistoryItem) -> Bool {
         item.fileExists(appState: appState)
     }
-    
+   
     private func addToInputImages(item: HistoryItem) {
         guard let img = loadHistoryImage(for: item), let path = item.imagePath else { return }
         let url = URL(fileURLWithPath: path)
         var promptNodes: [NodeInfo] = []
-        
+       
         if url.pathExtension.lowercased() == "png" {
             if let dir = appState.settings.outputDirectory {
                 do {
@@ -1062,7 +1032,7 @@ struct HistoryView: View {
                 promptNodes = parsePromptNodes(from: url)
             }
         }
-        
+       
         var newSlot = ImageSlot(path: path, image: img)
         if !promptNodes.isEmpty {
             newSlot.promptNodes = promptNodes.sorted { $0.id < $1.id }
@@ -1070,7 +1040,7 @@ struct HistoryView: View {
         }
         appState.ui.imageSlots.append(newSlot)
     }
-    
+   
     private func filterEntries(_ entries: [HistoryEntry], with search: String) -> [HistoryEntry] {
         entries.compactMap { entry in
             switch entry {
@@ -1093,7 +1063,7 @@ struct HistoryView: View {
             }
         }
     }
-    
+   
     private func sortedEntries(_ entries: [HistoryEntry]) -> [HistoryEntry] {
         var folders: [Folder] = []
         var items: [HistoryItem] = []
@@ -1109,5 +1079,48 @@ struct HistoryView: View {
         folders.sort { $0.name.lowercased() < $1.name.lowercased() }
         items.sort { $0.date > $1.date }
         return folders.map { .folder($0) } + items.map { .item($0) }
+    }
+}
+
+struct DeleteConfirmationView: View {
+    let title: String
+    let message: String
+    let hasDeletableFiles: Bool
+    let deleteAction: (Bool) -> Void
+    let cancelAction: () -> Void
+    
+    @State private var deleteFiles: Bool = false
+    @Environment(\.dismiss) private var dismiss
+    
+    var body: some View {
+        VStack(spacing: 20) {
+            Text(title)
+                .font(.headline)
+            
+            VStack(alignment: .leading, spacing: 8) {
+                Text(message)
+                
+                if hasDeletableFiles {
+                    Toggle("Also permanently delete the file(s)", isOn: $deleteFiles)
+                    Text("File deletion cannot be undone.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            
+            HStack {
+                Button("Cancel", role: .cancel) {
+                    cancelAction()
+                    dismiss()
+                }
+                
+                Button("Delete", role: deleteFiles ? .destructive : nil) {
+                    deleteAction(deleteFiles)
+                    dismiss()
+                }
+            }
+        }
+        .padding()
+        .frame(minWidth: 300)
     }
 }
