@@ -1,4 +1,3 @@
-// HistoryFullView.swift
 import SwiftUI
 #if os(macOS)
 import AppKit
@@ -9,6 +8,7 @@ struct FullHistoryItemView: View {
     @EnvironmentObject var appState: AppState
     @Environment(\.dismiss) private var dismiss
     @Environment(\.undoManager) private var undoManager
+    @Environment(\.colorScheme) private var colorScheme
     @State private var selectedId: UUID? = nil
     @State private var showDeleteAlert: Bool = false
     @State private var previousSelectedId: UUID? = nil
@@ -251,6 +251,11 @@ struct FullHistoryItemView: View {
    
     // NEW: Extracted bottom overlay
     private func bottomOverlay(for item: HistoryItem) -> some View {
+        let textColor: Color = colorScheme == .dark ? .white : .black
+        let secondaryColor: Color = .gray
+        let iconColor: Color = textColor
+        let backgroundColor: Color = colorScheme == .dark ? Color(white: 0.15) : Color.white
+        
         var creator: String? = nil
         if let mode = item.mode {
             creator = mode == .gemini ? "Gemini" : mode == .grok ? item.modelUsed ?? appState.settings.selectedGrokModel : mode == .aimlapi ? item.modelUsed ?? appState.settings.selectedAIMLModel : item.workflowName ?? "ComfyUI"
@@ -267,7 +272,7 @@ struct FullHistoryItemView: View {
                         .font(.system(size: 12))
                         .multilineTextAlignment(.leading)
                         .lineLimit(nil)
-                        .foregroundColor(.black)
+                        .foregroundColor(textColor)
                         .help("The prompt used for this image")
                         .accessibilityLabel("Prompt: \(item.prompt)")
                     Button(action: {
@@ -289,12 +294,12 @@ struct FullHistoryItemView: View {
                 }
                 Text("Date: \(dateFormatter.string(from: item.date))")
                     .font(.system(size: 10))
-                    .foregroundColor(.gray)
+                    .foregroundColor(secondaryColor)
                     .help("Date the image was generated")
                 if let creator = creator {
                     Text("Created with: \(creator)")
                         .font(.system(size: 10))
-                        .foregroundColor(.gray)
+                        .foregroundColor(secondaryColor)
                         .help("Generation mode or workflow used")
                 }
             }
@@ -309,7 +314,7 @@ struct FullHistoryItemView: View {
                     Image(systemName: "arrow.left.circle.fill")
                         .font(.system(size: 24))
                         .symbolRenderingMode(.hierarchical)
-                        .foregroundColor(.black)
+                        .foregroundColor(iconColor)
                 }
                 .disabled(currentIndex == 0)
                 .buttonStyle(.plain)
@@ -318,8 +323,6 @@ struct FullHistoryItemView: View {
                
                 Spacer()
                
-
-                
                 Button(action: {
                     showDeleteAlert = true
                 }) {
@@ -331,25 +334,27 @@ struct FullHistoryItemView: View {
                 .buttonStyle(.plain)
                 .help("Delete this history item")
                 .accessibilityLabel("Delete item")
-                
+               
                 Button(action: {
                     undoManager?.undo()
                 }) {
                     Image(systemName: "arrow.uturn.left")
                         .font(.system(size: 24))
                         .symbolRenderingMode(.hierarchical)
+                        .foregroundColor(iconColor)
                 }
                 .buttonStyle(.plain)
                 .disabled(!(undoManager?.canUndo ?? false))
                 .help("Undo last action")
                 .accessibilityLabel("Undo")
-                
+               
                 Button(action: {
                     undoManager?.redo()
                 }) {
                     Image(systemName: "arrow.uturn.right")
                         .font(.system(size: 24))
                         .symbolRenderingMode(.hierarchical)
+                        .foregroundColor(iconColor)
                 }
                 .buttonStyle(.plain)
                 .disabled(!(undoManager?.canRedo ?? false))
@@ -387,7 +392,7 @@ struct FullHistoryItemView: View {
                     Image(systemName: "arrow.right.circle.fill")
                         .font(.system(size: 24))
                         .symbolRenderingMode(.hierarchical)
-                        .foregroundColor(.black)
+                        .foregroundColor(iconColor)
                 }
                 .disabled(currentIndex == history.count - 1)
                 .buttonStyle(.plain)
@@ -396,7 +401,7 @@ struct FullHistoryItemView: View {
             }
         }
         .padding(8)
-        .background(Color.white)
+        .background(backgroundColor)
         .frame(maxWidth: .infinity)
     }
    
