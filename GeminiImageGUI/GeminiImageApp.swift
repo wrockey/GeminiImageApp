@@ -1,31 +1,32 @@
 // GeminiImageApp.swift
 import SwiftUI
 import Combine
+import Foundation
 #if os(macOS)
 import AppKit
 #elseif os(iOS)
 import UIKit
 import PencilKit
 #endif
-
+ 
 enum GenerationMode: String, Codable, CaseIterable {
     case gemini
     case comfyUI
     case grok
     case aimlapi
 }
-
+ 
 struct NodeInfo: Identifiable, Equatable {
     let id: String
     let label: String
     let promptText: String?
 }
-
+ 
 enum ImageSubmissionMethod: String, Codable, CaseIterable, Hashable {  // Added CaseIterable, Hashable
     case imgBB = "ImgBB Links (Public URLs)"
     case base64 = "Base64 Payload (Private)"
 }
-
+ 
 class SettingsState: ObservableObject {
     @Published var apiKey: String = KeychainHelper.loadAPIKey() ?? ""
     @Published var outputDirectory: URL? = nil
@@ -57,7 +58,7 @@ class SettingsState: ObservableObject {
         return supportingModels.contains(selectedAIMLModel)
     }
 }
-
+ 
 class GenerationState: ObservableObject {
     @Published var comfyWorkflow: [String: Any]? = nil
     @Published var comfyPromptNodeID: String = ""
@@ -184,7 +185,7 @@ class GenerationState: ObservableObject {
                 let textRange = textStart ..< (textStart + Int(length))
                 let textData = data.subdata(in: textRange)
                 if let textStr = String(data: textData, encoding: .utf8),
-                  let nullIndex = textStr.firstIndex(of: "\0") {
+                   let nullIndex = textStr.firstIndex(of: "\0") {
                     let keyword = String(textStr[..<nullIndex]).trimmingCharacters(in: .whitespaces)
                     if ["workflow", "prompt", "Workflow", "Prompt"].contains(keyword) {
                         let valueStart = textStr.index(after: nullIndex)
@@ -212,12 +213,12 @@ private func processJSON(json: [String: Any]) {
         var promptNodes: [NodeInfo] = []
         var outputNodes: [NodeInfo] = []
         var imageNodes: [NodeInfo] = []
-
+ 
         if let nodesArray = json["nodes"] as? [[String: Any]] {
             for node in nodesArray {
                 guard let nodeID = node["id"] as? Int, let classType = node["type"] as? String else { continue }
                 let nodeIDStr = String(nodeID)
-
+ 
                 if classType.lowercased().contains("text") {
                     var collectedTexts: [String] = []
                     if let widgetsValues = node["widgets_values"] as? [Any] {
@@ -243,7 +244,7 @@ private func processJSON(json: [String: Any]) {
         } else {
             for (nodeID, node) in json {
                 guard let nodeDict = node as? [String: Any], let classType = nodeDict["class_type"] as? String else { continue }
-
+ 
                 if classType.lowercased().contains("text") {
                     let inputs = nodeDict["inputs"] as? [String: Any] ?? [:]
                     var collectedTexts: [String] = []
@@ -271,7 +272,7 @@ private func processJSON(json: [String: Any]) {
                 }
             }
         }
-
+ 
         if promptNodes.isEmpty && outputNodes.isEmpty && imageNodes.isEmpty {
             workflowError = "Invalid workflow format or no relevant nodes found. Please load a valid ComfyUI JSON (API or standard format)."
             self.promptNodes = []
@@ -280,11 +281,11 @@ private func processJSON(json: [String: Any]) {
             selectedImageNodeIDs = []
             return
         }
-
+ 
         self.promptNodes = promptNodes.sorted { $0.id < $1.id }
         self.outputNodes = outputNodes.sorted { $0.id < $1.id }
         self.imageNodes = imageNodes.sorted { $0.id < $1.id }
-
+ 
         comfyPromptNodeID = promptNodes.first?.id ?? ""
         comfyOutputNodeID = outputNodes.first?.id ?? ""
         comfyImageNodeID = imageNodes.first?.id ?? ""
@@ -298,7 +299,7 @@ private func processJSON(json: [String: Any]) {
         workflowError = error
     }
 }
-
+ 
 class HistoryState: ObservableObject {
     weak var appState: AppState?
     @Published var history: [HistoryEntry] = []
@@ -946,7 +947,7 @@ class HistoryState: ObservableObject {
         }
     }
 }
-
+ 
 class UIState: ObservableObject {
     @Published var imageSlots: [ImageSlot] = []
     @Published var outputImages: [PlatformImage?] = []
@@ -954,7 +955,7 @@ class UIState: ObservableObject {
     @Published var outputPaths: [String?] = []
     @Published var currentOutputIndex: Int = 0
 }
-
+ 
 class AppState: ObservableObject {
     @Published var settings = SettingsState()
     @Published var generation = GenerationState()
@@ -990,7 +991,7 @@ class AppState: ObservableObject {
             return 0
         }
     }
-
+ 
 var preferImgBBForImages: Bool {
         !settings.imgbbApiKey.isEmpty && (currentAIMLModel?.acceptsPublicURL ?? true)
     }
@@ -1030,7 +1031,7 @@ var preferImgBBForImages: Bool {
         historyState.appState = self
     }
 }
-
+ 
 struct ImageSlot: Identifiable {
     let id = UUID()
     var path: String = ""
@@ -1039,7 +1040,7 @@ struct ImageSlot: Identifiable {
     var selectedPromptIndex: Int = 0
     var originalData: Data? = nil
 }
-
+ 
 struct HistoryItem: Identifiable, Codable, Equatable {
     let id = UUID()
     let prompt: String
@@ -1058,7 +1059,7 @@ struct HistoryItem: Identifiable, Codable, Equatable {
         case batchId, indexInBatch, totalInBatch
     }
 }
-
+ 
 enum HistoryEntry: Identifiable, Codable, Equatable {
     case item(HistoryItem)
     case folder(Folder)
@@ -1139,7 +1140,7 @@ enum HistoryEntry: Identifiable, Codable, Equatable {
         }
     }
 }
-
+ 
 struct Folder: Identifiable, Codable, Equatable {
     let id: UUID = UUID()
     var name: String = "New Folder"
@@ -1149,7 +1150,7 @@ struct Folder: Identifiable, Codable, Equatable {
         lhs.id == rhs.id && lhs.name == rhs.name && lhs.children == rhs.children
     }
 }
-
+ 
 struct Part: Codable {
     let text: String?
     let inlineData: InlineData?
@@ -1164,7 +1165,7 @@ struct Part: Codable {
         self.inlineData = inlineData
     }
 }
-
+ 
 struct InlineData: Codable {
     let mimeType: String
     let data: String
@@ -1174,28 +1175,28 @@ struct InlineData: Codable {
         case data
     }
 }
-
+ 
 struct Content: Codable {
     let parts: [Part]
 }
-
+ 
 struct GenerateContentRequest: Codable {
     let contents: [Content]
 }
-
+ 
 struct GenerateContentResponse: Codable {
     let candidates: [Candidate]
 }
-
+ 
 struct Candidate: Codable {
     let content: ResponseContent
     let finishReason: String?
 }
-
+ 
 struct ResponseContent: Codable {
     let parts: [ResponsePart]
 }
-
+ 
 struct ResponsePart: Codable {
     let text: String?
     let inlineData: InlineData?
@@ -1205,7 +1206,7 @@ struct ResponsePart: Codable {
         case inlineData = "inline_data"
     }
 }
-
+ 
 struct ResponseInlineData: Codable {
     let mimeType: String
     let data: String
@@ -1215,7 +1216,7 @@ struct ResponseInlineData: Codable {
         case data
     }
 }
-
+ 
 struct NewResponsePart: Codable {
     let text: String?
     let inlineData: ResponseInlineData?
@@ -1225,21 +1226,21 @@ struct NewResponsePart: Codable {
         case inlineData
     }
 }
-
+ 
 struct NewResponseContent: Codable {
     let parts: [NewResponsePart]
 }
-
+ 
 struct NewCandidate: Codable {
     let content: NewResponseContent
     let finishReason: String?
 }
-
+ 
 struct NewGenerateContentResponse: Codable {
     let candidates: [NewCandidate]
     let finishReason: String?
 }
-
+ 
 @main
 struct GeminiImageApp: App {
     @StateObject private var appState = AppState()
@@ -1337,7 +1338,7 @@ struct GeminiImageApp: App {
         #endif
     }
 }
-
+ 
 struct MarkupWindowView: View {
     let slotId: UUID
     @EnvironmentObject var appState: AppState

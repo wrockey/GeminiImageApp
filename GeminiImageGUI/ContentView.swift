@@ -4,45 +4,45 @@ import AppKit
 #elseif os(iOS)
 import UIKit
 #endif
-
+ 
 let openGeneralSettingsNotification = Notification.Name("OpenGeneralSettings")
-
+ 
 struct IdentifiableData: Identifiable, Codable, Hashable {
     var id: UUID
     let data: Data
-
+ 
     enum CodingKeys: String, CodingKey {
         case id
         case data
     }
-
+ 
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(id, forKey: .id)
         try container.encode(data, forKey: .data)
     }
-
+ 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(UUID.self, forKey: .id)
         data = try container.decode(Data.self, forKey: .data)
     }
-
+ 
     func hash(into hasher: inout Hasher) {
         hasher.combine(id)
         hasher.combine(data)
     }
-
+ 
     static func == (lhs: IdentifiableData, rhs: IdentifiableData) -> Bool {
         return lhs.id == rhs.id && lhs.data == rhs.data
     }
-
+ 
     init(data: Data) {
         self.id = UUID()
         self.data = data
     }
 }
-
+ 
 enum PresentedModal: Identifiable {
     case history
     case responseSheet
@@ -50,7 +50,7 @@ enum PresentedModal: Identifiable {
     case markupSlot(UUID)
     case textEditor(IdentifiableData)
     case advancedSettings
-
+ 
     var id: String {
         switch self {
         case .history: return "history"
@@ -62,7 +62,7 @@ enum PresentedModal: Identifiable {
         }
     }
 }
-
+ 
 enum GenerationError: LocalizedError {
     case invalidURL
     case encodingFailed(String)
@@ -79,7 +79,7 @@ enum GenerationError: LocalizedError {
     case noSamplerNode
     case uploadFailed(String)
     case queueFailed(String)
-
+ 
     var errorDescription: String? {
         switch self {
         case .invalidURL:
@@ -115,7 +115,7 @@ enum GenerationError: LocalizedError {
         }
     }
 }
-
+ 
 extension View {
     func workflowErrorAlert(appState: AppState) -> some View {
         alert("Workflow Error", isPresented: Binding<Bool>(
@@ -128,7 +128,7 @@ extension View {
         }
         .accessibilityLabel("Workflow Error Alert")
     }
-
+ 
  
     func successAlert(showSuccessAlert: Binding<Bool>, successMessage: String) -> some View {
         alert("Success", isPresented: showSuccessAlert) {
@@ -138,21 +138,21 @@ extension View {
         }
         .accessibilityLabel("Success Alert")
     }
-
+ 
     func onboardingSheet(showOnboarding: Binding<Bool>) -> some View {
         sheet(isPresented: showOnboarding) {
             OnboardingView()
         }
         .accessibilityLabel("Onboarding Sheet")
     }
-
+ 
     func helpSheet(showHelp: Binding<Bool>, mode: GenerationMode) -> some View {
         sheet(isPresented: showHelp) {
             HelpView(mode: mode)
         }
         .accessibilityLabel("Help Sheet")
     }
-
+ 
     func selectFolderAlert(isPresented: Binding<Bool>, selectHandler: @escaping () -> Void) -> some View {
         alert("Select Output Folder", isPresented: isPresented) {
             Button("Select Folder") {
@@ -165,18 +165,18 @@ extension View {
         .accessibilityLabel("Select Output Folder Alert")
     }
 }
-
+ 
 struct AlertError: Identifiable {
     let id = UUID()
     let message: String
     let fullMessage: String?
 }
-
+ 
 struct DetailedError: Identifiable {
     let id = UUID()
     let message: String
 }
-
+ 
 struct ContentView: View {
     @EnvironmentObject var appState: AppState
     @Environment(\.colorScheme) var colorScheme
@@ -205,14 +205,14 @@ struct ContentView: View {
     @State var promptTextView: (any PlatformTextView)? = nil
     @State private var showGeneralOptions = false
     @State private var detailedError: DetailedError? = nil
-
+ 
     @AppStorage("hasLaunchedBefore") var hasLaunchedBefore: Bool = false
     @AppStorage("configExpanded") private var configExpanded: Bool = true
     @AppStorage("promptExpanded") private var promptExpanded: Bool = true
     @AppStorage("inputImagesExpanded") private var inputImagesExpanded: Bool = true
     @AppStorage("responseExpanded") private var responseExpanded: Bool = true
     @State private var showTextEditorBookmark: IdentifiableData? = nil
-
+ 
     #if os(macOS)
     @Environment(\.openWindow) private var openWindow
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
@@ -220,15 +220,15 @@ struct ContentView: View {
     @State private var showHistory: Bool = false
     @State private var columnVisibility: NavigationSplitViewVisibility = .detailOnly
     #endif
-
+ 
     private var topColor: Color {
         colorScheme == .light ? Color(white: 0.98) : Color(white: 0.1)
     }
-
+ 
     private var bottomColor: Color {
         colorScheme == .light ? Color(white: 0.95) : Color(white: 0.15)
     }
-
+ 
     #if os(iOS)
     @ViewBuilder
     private var iOSLayout: some View {
@@ -318,7 +318,7 @@ struct ContentView: View {
                         .environmentObject(appState)
                 case .markupSlot(let slotId):
                     if let index = appState.ui.imageSlots.firstIndex(where: { $0.id == slotId }),
-                       let image = appState.ui.imageSlots[index].image {
+                      let image = appState.ui.imageSlots[index].image {
                         let path = appState.ui.imageSlots[index].path
                         let fileURL = URL(fileURLWithPath: path)
                         let lastComponent = fileURL.lastPathComponent
@@ -344,7 +344,7 @@ struct ContentView: View {
         }
     }
     #endif
-
+ 
     var body: some View {
         #if os(iOS)
         iOSLayout
@@ -388,6 +388,11 @@ struct ContentView: View {
                     .presentationDragIndicator(.visible)
                     .environmentObject(appState)
             }
+            .sheet(item: $detailedError) { detail in
+                DetailedErrorView(message: detail.message) {
+                    detailedError = nil
+                }
+            }
         #else
         macOSLayout
             .workflowErrorAlert(appState: appState)
@@ -421,9 +426,22 @@ struct ContentView: View {
                     appState.ui.imageSlots.removeLast(appState.ui.imageSlots.count - maxSlots)
                 }
             }
+            .onReceive(NotificationCenter.default.publisher(for: openGeneralSettingsNotification)) { _ in
+                showGeneralOptions = true
+            }
+            .sheet(isPresented: $showGeneralOptions) {
+                GeneralOptionsView(isPresented: $showGeneralOptions)
+                    .frame(minWidth: 450, maxWidth: .infinity, minHeight: 200, idealHeight: .infinity, maxHeight: .infinity)
+                    .environmentObject(appState)
+            }
+            .sheet(item: $detailedError) { detail in
+                DetailedErrorView(message: detail.message) {
+                    detailedError = nil
+                }
+            }
         #endif
     }
-
+ 
     #if os(macOS)
     @ViewBuilder
     private var macOSLayout: some View {
@@ -504,24 +522,9 @@ struct ContentView: View {
                 toolbarContent
             }
         }
-        .onReceive(NotificationCenter.default.publisher(for: openGeneralSettingsNotification)) { _ in
-            showGeneralOptions = true
-        }
-        .sheet(isPresented: $showGeneralOptions) {
-            GeneralOptionsView(isPresented: $showGeneralOptions)
-                .frame(minWidth: 450, maxWidth: .infinity, minHeight: 200, idealHeight: .infinity, maxHeight: .infinity)
-                .environmentObject(appState)
-        }
-        .alert(item: $detailedError) { detail in
-            Alert(
-                title: Text("Error Details"),
-                message: Text(detail.message),
-                dismissButton: .default(Text("OK"))
-            )
-        }
     }
     #endif
-
+ 
     #if os(iOS)
     @ToolbarContentBuilder
     private var toolbar: some ToolbarContent {
@@ -530,18 +533,18 @@ struct ContentView: View {
         }
     }
     #endif
-
+ 
     private var toolbarContent: some View {
         Group {
-
-
+ 
+ 
             Button(action: { showGeneralOptions = true }) {
                 Image(systemName: "gear")
             }
             .help("General Settings")
             .accessibilityLabel("General Settings")
             .accessibilityHint("Opens the general settings page.")
-
+ 
             Button(action: {
                 #if os(iOS)
                 appState.presentedModal = .history
@@ -557,7 +560,7 @@ struct ContentView: View {
             .help("Toggle History Sidebar")
             .accessibilityLabel("Toggle History")
             .accessibilityHint("Shows or hides the history sidebar.")
-
+ 
             Button(action: {
                 showHelp = true
             }) {
@@ -567,12 +570,12 @@ struct ContentView: View {
             .help("Help & Guide")
             .accessibilityLabel("Help")
             .accessibilityHint("Opens the help and guide sheet.")
-
+ 
             onboardingButton
             billingButton
         }
     }
-
+ 
     @ViewBuilder
     private var onboardingButton: some View {
         Button(action: {
@@ -585,7 +588,7 @@ struct ContentView: View {
         .accessibilityLabel("Onboarding")
         .accessibilityHint("Opens the onboarding guide.")
     }
-
+ 
     @ViewBuilder
     private var billingButton: some View {
         if appState.settings.mode == .gemini {
@@ -614,25 +617,25 @@ struct ContentView: View {
             .accessibilityHint("Opens the AI/ML API billing console in a browser.")
         }
     }
-
+ 
     private func openBillingConsole() {
         if let url = URL(string: "https://console.cloud.google.com/billing") {
             PlatformBrowser.open(url: url)
         }
     }
-
+ 
     private func openGrokBillingConsole() {
         if let url = URL(string: "https://console.x.ai") {
             PlatformBrowser.open(url: url)
         }
     }
-
+ 
     private func openAIMLBillingConsole() {
         if let url = URL(string: "https://aimlapi.com/app/billing") {
             PlatformBrowser.open(url: url)
         }
     }
-
+ 
     private func validateBatchFileBookmark() {
         if let bookmarkData = UserDefaults.standard.data(forKey: "batchFileBookmark") {
             do {
@@ -658,10 +661,63 @@ struct ContentView: View {
             }
         }
     }
-
+ 
     private func clearBatchFile() {
         batchFilePath = ""
         appState.batchPrompts = []
         UserDefaults.standard.removeObject(forKey: "batchFileBookmark")
     }
+    
+    private func prettyPrintJSON(_ string: String) -> String? {
+        guard let data = string.data(using: .utf8) else { return nil }
+        do {
+            let json = try JSONSerialization.jsonObject(with: data, options: [])
+            let prettyData = try JSONSerialization.data(withJSONObject: json, options: [.prettyPrinted, .sortedKeys])
+            return String(data: prettyData, encoding: .utf8)
+        } catch {
+            return nil
+        }
+    }
 }
+
+struct DetailedErrorView: View {
+    let message: String
+    let onDismiss: () -> Void
+    
+    var body: some View {
+        VStack(spacing: 20) {
+            Text("Error Details")
+                .font(.title2)
+                .bold()
+            
+            ScrollView {
+                Text(prettyPrintJSON(message) ?? message)
+                    .font(.system(size: 12, design: .monospaced))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding()
+                    .background(Color.gray.opacity(0.1))
+                    .cornerRadius(8)
+            }
+            .frame(maxHeight: 400)
+            
+            Button("Close") {
+                onDismiss()
+            }
+            .buttonStyle(.borderedProminent)
+        }
+        .padding()
+        .frame(minWidth: 400, minHeight: 300)
+    }
+    
+    private func prettyPrintJSON(_ string: String) -> String? {
+        guard let data = string.data(using: .utf8) else { return nil }
+        do {
+            let json = try JSONSerialization.jsonObject(with: data, options: [])
+            let prettyData = try JSONSerialization.data(withJSONObject: json, options: [.prettyPrinted, .sortedKeys])
+            return String(data: prettyData, encoding: .utf8)
+        } catch {
+            return nil
+        }
+    }
+}
+

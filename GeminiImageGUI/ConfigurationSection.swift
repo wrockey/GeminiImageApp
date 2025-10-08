@@ -1,21 +1,22 @@
+//ConfigurationSection.swift
 import SwiftUI
 #if os(macOS)
 import AppKit
 #elseif os(iOS)
 import UIKit
 #endif
-
+ 
 // New struct for response parsing (add at top or in separate file)
 struct AIMLModelsResponse: Codable {
     let object: String
     let data: [AIMLModelEntry]
 }
-
+ 
 struct AIMLModelEntry: Codable {
     let id: String
     // Add other fields if needed: type, info, features
 }
-
+ 
 struct ConfigurationSection: View {
     @Binding var showApiKey: Bool
     @Binding var apiKeyPath: String
@@ -138,12 +139,10 @@ struct ConfigurationSection: View {
                     Text(serverErrorMessage)
                 }
                 .errorAlert(errorItem: $errorItem, detailedError: $detailedError)
-                .alert(item: $detailedError) { detail in
-                    Alert(
-                        title: Text("Error Details"),
-                        message: Text(detail.message),
-                        dismissButton: .default(Text("OK"))
-                    )
+                .sheet(item: $detailedError) { detail in
+                    DetailedErrorView(message: detail.message) {
+                        detailedError = nil
+                    }
                 }
                 .sheet(isPresented: $showAdvanced) {
                     if let model = appState.currentAIMLModel {
@@ -672,7 +671,7 @@ struct ConfigurationSection: View {
             }
         }
     }
-
+ 
     private var filteredResolutions: [(label: String, value: String)] {
         let allResolutions: [(label: String, value: String)] = [
             ("512 x 512", "512x512"),
@@ -1328,7 +1327,7 @@ struct ConfigurationSection: View {
         }
     }
 }
-
+ 
 extension View {
     func errorAlert(errorItem: Binding<AlertError?>, detailedError: Binding<DetailedError?>) -> some View {
         alert(item: errorItem) { error in
@@ -1352,3 +1351,5 @@ extension View {
         .accessibilityLabel("Error Alert")
     }
 }
+
+
