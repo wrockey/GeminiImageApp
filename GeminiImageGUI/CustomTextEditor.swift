@@ -46,6 +46,13 @@ class CustomNSTextView: NSTextView {
     override var undoManager: UndoManager? {
         customUndoManager ?? super.undoManager
     }
+    
+    override func paste(_ sender: Any?) {
+        let pasteboard = NSPasteboard.general
+        if let string = pasteboard.string(forType: .string) {
+            self.insertText(string, replacementRange: self.selectedRange())
+        }
+    }
 }
 
 struct MacCustomTextEditor: NSViewRepresentable {
@@ -76,6 +83,8 @@ struct MacCustomTextEditor: NSViewRepresentable {
         scrollView.autohidesScrollers = true
         textView.delegate = context.coordinator
         textView.string = text
+        textView.typingAttributes[.font] = NSFont.systemFont(ofSize: 16, weight: .regular)
+        textView.typingAttributes[.foregroundColor] = NSColor.textColor
         platformTextView = textView
         return scrollView
     }
@@ -90,6 +99,9 @@ struct MacCustomTextEditor: NSViewRepresentable {
             textView.string = text
             textView.setSelectedRange(selectedRange)  // Preserve cursor position
         }
+        
+        textView.typingAttributes[.font] = NSFont.systemFont(ofSize: 16, weight: .regular)
+        textView.typingAttributes[.foregroundColor] = NSColor.textColor
         
         // Handle window delegate and title only once or when needed
         if let window = nsView.window {
