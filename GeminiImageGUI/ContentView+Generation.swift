@@ -98,12 +98,12 @@ extension ContentView {
                 DispatchQueue.main.async {
                     if let genError = error as? GenerationError {
                         switch genError {
-                        case .queueFailed(let details), .uploadFailed(let details), .fetchFailed(let details):
-                            print("Detailed Error Message: \(details)")
-                            let summary = details.contains("missing") ? "ComfyUI error: Workflow issue (e.g., missing nodes)." : "ComfyUI request failed."
-                            errorItem = AlertError(message: summary, fullMessage: details)
+                        case .queueFailed, .uploadFailed, .fetchFailed:
+                            print("Detailed Error Message: \(genError.details ?? "")")
+                            let summary = (genError.details ?? "").contains("missing") ? "ComfyUI error: Workflow issue (e.g., missing nodes)." : "ComfyUI request failed."
+                            errorItem = AlertError(message: summary, fullMessage: genError.details)
                         default:
-                            errorItem = AlertError(message: error.localizedDescription ?? "Unknown error", fullMessage: nil)
+                            errorItem = AlertError(message: genError.errorDescription ?? "Unknown error", fullMessage: genError.details)
                         }
                     } else {
                         errorItem = AlertError(message: error.localizedDescription ?? "Unknown error", fullMessage: nil)
@@ -368,7 +368,7 @@ extension ContentView {
                                         let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
                                         let bodyString = String(data: data, encoding: .utf8) ?? "No body"
                                         print("Upload failed with status \(statusCode): \(bodyString)")
-                                        throw GenerationError.uploadFailed("Status \(statusCode): \(bodyString)")
+                                        throw GenerationError.uploadFailed(bodyString)
                                     }
                                 } catch {
                                     print("Upload error: \(error.localizedDescription)")
@@ -471,11 +471,11 @@ extension ContentView {
                                 if statusCode == 400, let json = try? JSONSerialization.jsonObject(with: promptData) as? [String: Any],
                                    let errorMsg = json["error"] as? String {
                                     print("Queue prompt failed with status 400: \(errorMsg)")
-                                    throw GenerationError.queueFailed("Status 400: \(errorMsg)")
+                                    throw GenerationError.queueFailed(errorMsg)
                                 } else {
                                     let bodyString = String(data: promptData, encoding: .utf8) ?? "No body"
                                     print("Queue prompt failed with status \(statusCode): \(bodyString)")
-                                    throw GenerationError.queueFailed("Status \(statusCode): \(bodyString)")
+                                    throw GenerationError.queueFailed(bodyString)
                                 }
                             }
                         } catch {
@@ -565,7 +565,7 @@ extension ContentView {
                                 let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
                                 let bodyString = String(data: viewData, encoding: .utf8) ?? "No body"
                                 print("Image view failed with status \(statusCode): \(bodyString)")
-                                throw GenerationError.fetchFailed("Status \(statusCode): \(bodyString)")
+                                throw GenerationError.fetchFailed(bodyString)
                             }
                         } catch {
                             print("Image view error: \(error.localizedDescription)")

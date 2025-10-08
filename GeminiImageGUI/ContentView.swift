@@ -79,15 +79,15 @@ enum GenerationError: LocalizedError {
     case noSamplerNode
     case uploadFailed(String)
     case queueFailed(String)
- 
+
     var errorDescription: String? {
         switch self {
         case .invalidURL:
             return "Invalid API URL. Please check your configuration and ensure the endpoint is correct."
-        case .encodingFailed(let details):
-            return "Failed to encode request data: \(details). Verify your input (e.g., prompt or images) and try again."
-        case .apiError(let message):
-            return "API request failed: \(message). Check your API key, network connection, or quota limits."
+        case .encodingFailed:
+            return "Failed to encode request data. Verify your input (e.g., prompt or images) and try again."
+        case .apiError:
+            return "API request failed. Check your API key, network connection, or quota limits."
         case .noWorkflow:
             return "No ComfyUI workflow loaded. Please select a valid JSON or PNG workflow file in the configuration section."
         case .invalidServerURL:
@@ -100,18 +100,31 @@ enum GenerationError: LocalizedError {
             return "No output image generated. Verify your workflow has a valid output node (e.g., SaveImage) and try again."
         case .decodeFailed:
             return "Failed to decode generated image. The output may be corrupted—check your workflow or server logs."
-        case .fetchFailed(let details):
-            return "Failed to fetch image from server: \(details). Ensure the server is responsive and the output node is configured correctly."
+        case .fetchFailed:
+            return "Failed to fetch image from server. Ensure the server is responsive and the output node is configured correctly."
         case .invalidViewURL:
             return "Invalid URL for viewing generated image. Check your server configuration."
         case .invalidImageNode:
             return "Invalid image input node in workflow. Select a different image node or ensure your workflow supports image inputs."
         case .noSamplerNode:
             return "No sampler node (e.g., KSampler) found in workflow. Please use a workflow that includes a sampler for generation."
-        case .uploadFailed(let message):
-            return "Image upload failed: \(message)"
-        case .queueFailed(let message):
-            return "Prompt queue failed: \(message)"
+        case .uploadFailed:
+            return "Image upload failed."
+        case .queueFailed:
+            return "Prompt queue failed."
+        }
+    }
+
+    var details: String? {
+        switch self {
+        case .encodingFailed(let d),
+             .apiError(let d),
+             .fetchFailed(let d),
+             .uploadFailed(let d),
+             .queueFailed(let d):
+            return d
+        default:
+            return nil
         }
     }
 }
