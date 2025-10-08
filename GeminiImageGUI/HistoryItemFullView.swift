@@ -2,14 +2,13 @@ import SwiftUI
 #if os(macOS)
 import AppKit
 #endif
- 
+
 struct FullHistoryItemView: View {
     let initialId: UUID
     @EnvironmentObject var appState: AppState
     @Environment(\.dismiss) private var dismiss
     @Environment(\.undoManager) private var undoManager
-    @Environment(\.colorScheme) private var colorScheme
-    @State private var selectedId: UUID?
+    @State private var selectedId: UUID? = nil
     @State private var showDeleteAlert: Bool = false
     @State private var previousSelectedId: UUID? = nil
     @State private var showCopiedMessage: Bool = false
@@ -17,32 +16,92 @@ struct FullHistoryItemView: View {
     @State private var previousHistory: [HistoryItem] = []
     @State private var isFullScreen: Bool = false
     @State private var recentlyDeletedId: UUID? = nil
-   
-    init(initialId: UUID) {
-        self.initialId = initialId
-        _selectedId = State(initialValue: initialId)
-    }
-   
+    
+    // New state for delete options
+    @State private var deleteFiles: Bool = false
+    
     private var dateFormatter: DateFormatter {
         let formatter = DateFormatter()
         formatter.dateStyle = .short
         formatter.timeStyle = .short
         return formatter
     }
-   
+    
     private var history: [HistoryItem] {
         flattenHistory(appState.historyState.history)
     }
-   
+    
     private var currentItem: HistoryItem? {
         history.first { $0.id == selectedId }
     }
-   
+    
     private var currentIndex: Int? {
         history.firstIndex { $0.id == selectedId }
     }
-   
+    
+    private var hasFile: Bool {
+        currentItem?.imagePath != nil
+    }
+    
+    private var fileExists: Bool {
+        guard let item = currentItem else { return false }
+        return item.fileExists(appState: appState)
+    }
+    
+    private var deleteMessage: String {
+        var msg = "Are you sure you want to delete this item from history?"
+        if hasFile && !fileExists {
+            msg += "\nNote: File is missing or inaccessible."
+        }
+        return msg
+    }
+    
     var body: some View {
+        mainContent
+            .ignoresSafeArea()
+            .overlay(bottomOverlay, alignment: .bottom)
+            .overlay(closeButton, alignment: .topTrailing)
+            .overlay(copiedMessageOverlay, alignment: .top)
+            .overlay(addedMessageOverlay, alignment: .top)
+            .onAppear(perform: onAppear)
+            .onChange(of: history, perform: onHistoryChange)
+            .onChange(of: selectedId, perform: onSelectedIdChange)
+            .onChange(of: showDeleteAlert, perform: onDeleteAlertChange)
+            .confirmationDialog("Delete Item", isPresented: $showDeleteAlert, titleVisibility: .visible) {
+                Button("Delete", role: deleteFiles ? .destructive : nil) {
+                    if let item = currentItem {
+                        recentlyDeletedId = item.id
+                        deleteHistoryItem(item: item, deleteFile: deleteFiles)
+                    }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(deleteMessage)
+                    if hasFile {
+                        Toggle("Also permanently delete the file", isOn: $deleteFiles)
+                            .disabled(!fileExists)
+                        Text("File deletion cannot be undone.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            #if os(macOS)
+            .overlay(
+                Group {
+                    if #available(macOS 14.0, *) {
+                        if fileExists {
+                            Color.clear.dialogSeverity(.critical)
+                        }
+                    }
+                }
+                .dialogIcon(Image(systemName: "trash"))
+            )
+            #endif
+    }
+    
+    private var mainContent: some View {
         GeometryReader { geometry in
             ZStack {
                 #if os(iOS) || os(macOS)
@@ -53,111 +112,150 @@ struct FullHistoryItemView: View {
                 }
                 #endif
             }
-            .overlay(alignment: .bottom) {
-                if let item = currentItem {
-                    bottomOverlay(for: item)
-                }
-            }
-            .overlay(alignment: .topTrailing) {
-                closeButton
-            }
-        }
-        .ignoresSafeArea()
-        .alert("Delete History Item", isPresented: $showDeleteAlert) {
-            Button("Delete from History Only") {
-                if let item = currentItem {
-                    recentlyDeletedId = item.id
-                    deleteHistoryItem(item: item, deleteFile: false)
-                }
-            }
-            Button("Delete History and File", role: .destructive) {
-                if let item = currentItem {
-                    recentlyDeletedId = item.id
-                    deleteHistoryItem(item: item, deleteFile: true)
-                }
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Do you want to delete from history only or also delete the file?")
-        }
-        .overlay {
-            if showCopiedMessage {
-                Text("Copied to Clipboard")
-                    .font(.headline)
-                    .padding()
-                    .background(Color.black.opacity(0.7))
-                    .foregroundColor(.white)
-                    .cornerRadius(10)
-                    .transition(.opacity)
-                    .frame(maxHeight: .infinity, alignment: .top)
-                    .padding(.top, 50)
-                    .help("Confirmation: Prompt copied to clipboard")
-            }
-        }
-        .overlay {
-            if showAddedMessage {
-                Text("Image added to input slot")
-                    .font(.headline)
-                    .padding()
-                    .background(Color.black.opacity(0.7))
-                    .foregroundColor(.white)
-                    .cornerRadius(10)
-                    .transition(.opacity)
-                    .frame(maxHeight: .infinity, alignment: .top)
-                    .padding(.top, 50)
-                    .help("Confirmation: Image added to input slot")
-            }
-        }
-        .onAppear {
-            previousHistory = history
-            previousSelectedId = nil
-            #if os(macOS)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                updateWindowSize()
-            }
-            if let window = NSApp.windows.last {
-                isFullScreen = window.styleMask.contains(.fullScreen)
-            }
-            NotificationCenter.default.addObserver(forName: NSWindow.didEnterFullScreenNotification, object: nil, queue: .main) { _ in
-                isFullScreen = true
-            }
-            NotificationCenter.default.addObserver(forName: NSWindow.didExitFullScreenNotification, object: nil, queue: .main) { _ in
-                isFullScreen = false
-            }
-            #endif
-        }
-        .onChange(of: history) { newHistory in
-            if let sid = selectedId, !newHistory.contains(where: { $0.id == sid }) {
-                if newHistory.isEmpty {
-                    selectedId = nil
-                    dismiss()
-                } else {
-                    let oldSorted = previousHistory
-                    if let oldIdx = oldSorted.firstIndex(where: { $0.id == sid }) {
-                        let newIdx = min(oldIdx, newHistory.count - 1)
-                        selectedId = newHistory[newIdx].id
-                    } else {
-                        selectedId = newHistory.first?.id
-                    }
-                }
-            } else if let deletedId = recentlyDeletedId, newHistory.contains(where: { $0.id == deletedId }) {
-                selectedId = deletedId
-                recentlyDeletedId = nil
-            }
-            previousHistory = newHistory
-        }
-        .onChange(of: selectedId) { newValue in
-            let oldValue = previousSelectedId
-            if let item = history.first(where: { $0.id == newValue }) {
-                if let mode = item.mode {
-                    let creator: String = mode == .gemini ? "Gemini" : mode == .grok ? item.modelUsed ?? appState.settings.selectedGrokModel : mode == .aimlapi ? item.modelUsed ?? appState.settings.selectedAIMLModel : item.workflowName ?? "ComfyUI"
-                }
-            } else {
-            }
-            previousSelectedId = newValue
         }
     }
-   
+    
+    @ViewBuilder private var bottomOverlay: some View {
+        if let item = currentItem {
+            bottomOverlay(for: item)
+        } else {
+            Color.clear.frame(height: 0) // Consistent empty view
+        }
+    }
+    
+    @ViewBuilder private var closeButton: some View {
+        #if os(iOS)
+        Button(action: { dismiss() }) {
+            Image(systemName: "xmark.circle.fill")
+                .font(.system(size: 30))
+                .symbolRenderingMode(.hierarchical)
+                .foregroundColor(.gray)
+        }
+        .buttonStyle(.plain)
+        .padding()
+        .help("Close full image view")
+        .accessibilityLabel("Close")
+        #elseif os(macOS)
+        if isFullScreen {
+            Button(action: { dismiss() }) {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: 24))
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundColor(.gray)
+            }
+            .buttonStyle(.plain)
+            .padding()
+            .help("Close full image view")
+            .accessibilityLabel("Close")
+        } else {
+            Color.clear.frame(width: 0, height: 0) // Consistent empty view
+        }
+        #endif
+    }
+    
+    @ViewBuilder private var copiedMessageOverlay: some View {
+        if showCopiedMessage {
+            Text("Copied to Clipboard")
+                .font(.headline)
+                .padding()
+                .background(Color.black.opacity(0.7))
+                .foregroundColor(.white)
+                .cornerRadius(10)
+                .transition(.opacity)
+                .frame(maxHeight: .infinity, alignment: .top)
+                .padding(.top, 50)
+                .help("Confirmation: Prompt copied to clipboard")
+                .onAppear {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                        withAnimation(.easeOut(duration: 0.3)) {
+                            showCopiedMessage = false
+                        }
+                    }
+                }
+        } else {
+            Color.clear.frame(height: 0) // Consistent empty view
+        }
+    }
+    
+    @ViewBuilder private var addedMessageOverlay: some View {
+        if showAddedMessage {
+            Text("Image added to input slot")
+                .font(.headline)
+                .padding()
+                .background(Color.black.opacity(0.7))
+                .foregroundColor(.white)
+                .cornerRadius(10)
+                .transition(.opacity)
+                .frame(maxHeight: .infinity, alignment: .top)
+                .padding(.top, 50)
+                .help("Confirmation: Image added to input slot")
+                .onAppear {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                        withAnimation(.easeOut(duration: 0.3)) {
+                            showAddedMessage = false
+                        }
+                    }
+                }
+        } else {
+            Color.clear.frame(height: 0) // Consistent empty view
+        }
+    }
+    
+    private func onAppear() {
+        selectedId = initialId
+        previousHistory = history
+        previousSelectedId = nil
+        #if os(macOS)
+        updateWindowSize()
+        if let window = NSApp.windows.last {
+            isFullScreen = window.styleMask.contains(.fullScreen)
+        }
+        NotificationCenter.default.addObserver(forName: NSWindow.didEnterFullScreenNotification, object: nil, queue: .main) { _ in
+            isFullScreen = true
+        }
+        NotificationCenter.default.addObserver(forName: NSWindow.didExitFullScreenNotification, object: nil, queue: .main) { _ in
+            isFullScreen = false
+        }
+        #endif
+    }
+    
+    private func onHistoryChange(newHistory: [HistoryItem]) {
+        if let sid = selectedId, !newHistory.contains(where: { $0.id == sid }) {
+            if newHistory.isEmpty {
+                selectedId = nil
+                dismiss()
+            } else {
+                let oldSorted = previousHistory
+                if let oldIdx = oldSorted.firstIndex(where: { $0.id == sid }) {
+                    let newIdx = min(oldIdx, newHistory.count - 1)
+                    selectedId = newHistory[newIdx].id
+                } else {
+                    selectedId = newHistory.first?.id
+                }
+            }
+        } else if let deletedId = recentlyDeletedId, newHistory.contains(where: { $0.id == deletedId }) {
+            selectedId = deletedId
+            recentlyDeletedId = nil
+        }
+        previousHistory = newHistory
+    }
+    
+    private func onSelectedIdChange(newValue: UUID?) {
+        let oldValue = previousSelectedId
+        if let item = history.first(where: { $0.id == newValue }) {
+            if let mode = item.mode {
+                let creator: String = mode == .gemini ? "Gemini" : mode == .grok ? item.modelUsed ?? appState.settings.selectedGrokModel : mode == .aimlapi ? item.modelUsed ?? appState.settings.selectedAIMLModel : item.workflowName ?? "ComfyUI"
+            }
+        }
+        previousSelectedId = newValue
+    }
+    
+    private func onDeleteAlertChange(newValue: Bool) {
+        if newValue {
+            deleteFiles = false
+        }
+    }
+    
     // NEW: Modern horizontal scroll for iOS 17+/macOS 14+
     @available(iOS 17.0, macOS 14.0, *)
     private func horizontalScrollView(for geometry: GeometryProxy) -> some View {
@@ -203,7 +301,7 @@ struct FullHistoryItemView: View {
             #endif
         }
     }
-   
+    
     // NEW: Fallback for older versions
     private func fallbackHorizontalView(for geometry: GeometryProxy) -> some View {
         #if os(iOS)
@@ -227,12 +325,12 @@ struct FullHistoryItemView: View {
         }
         #endif
     }
-   
+    
     // NEW: Subview for image/no-image display
     private struct HistoryImageDisplay: View {
         let item: HistoryItem
         @EnvironmentObject var appState: AppState
-   
+    
         var body: some View {
             if let img = loadHistoryImage(for: item) {
                 Image(platformImage: img)
@@ -248,7 +346,7 @@ struct FullHistoryItemView: View {
                     .help("No image available for this history item")
             }
         }
-   
+    
         private func loadHistoryImage(for item: HistoryItem) -> PlatformImage? {
             guard let path = item.imagePath else { return nil }
             let fileURL = URL(fileURLWithPath: path)
@@ -264,23 +362,17 @@ struct FullHistoryItemView: View {
             }
         }
     }
-   
-    // NEW: Extracted bottom overlay
+    
     private func bottomOverlay(for item: HistoryItem) -> some View {
-        let textColor: Color = colorScheme == .dark ? .white : .black
-        let secondaryColor: Color = .gray
-        let iconColor: Color = textColor
-        let backgroundColor: Color = colorScheme == .dark ? Color(white: 0.15) : Color.white
-        
         var creator: String? = nil
         if let mode = item.mode {
             creator = mode == .gemini ? "Gemini" : mode == .grok ? item.modelUsed ?? appState.settings.selectedGrokModel : mode == .aimlapi ? item.modelUsed ?? appState.settings.selectedAIMLModel : item.workflowName ?? "ComfyUI"
-   
+    
             if let idx = item.indexInBatch, let tot = item.totalInBatch {
                 creator! += " #\(idx + 1) of \(tot)"
             }
         }
-   
+    
         return VStack(spacing: 4) {
             VStack(alignment: .center, spacing: 2) {
                 HStack(alignment: .center) {
@@ -288,7 +380,7 @@ struct FullHistoryItemView: View {
                         .font(.system(size: 12))
                         .multilineTextAlignment(.leading)
                         .lineLimit(nil)
-                        .foregroundColor(textColor)
+                        .foregroundColor(.black)
                         .help("The prompt used for this image")
                         .accessibilityLabel("Prompt: \(item.prompt)")
                     Button(action: {
@@ -310,16 +402,16 @@ struct FullHistoryItemView: View {
                 }
                 Text("Date: \(dateFormatter.string(from: item.date))")
                     .font(.system(size: 10))
-                    .foregroundColor(secondaryColor)
+                    .foregroundColor(.gray)
                     .help("Date the image was generated")
                 if let creator = creator {
                     Text("Created with: \(creator)")
                         .font(.system(size: 10))
-                        .foregroundColor(secondaryColor)
+                        .foregroundColor(.gray)
                         .help("Generation mode or workflow used")
                 }
             }
-   
+    
             HStack {
                 Button(action: {
                     if let idx = currentIndex {
@@ -330,15 +422,15 @@ struct FullHistoryItemView: View {
                     Image(systemName: "arrow.left.circle.fill")
                         .font(.system(size: 24))
                         .symbolRenderingMode(.hierarchical)
-                        .foregroundColor(iconColor)
+                        .foregroundColor(.black)
                 }
                 .disabled(currentIndex == 0)
                 .buttonStyle(.plain)
                 .help("Previous image in history")
                 .accessibilityLabel("Previous image")
-               
+                
                 Spacer()
-               
+                
                 Button(action: {
                     showDeleteAlert = true
                 }) {
@@ -350,35 +442,33 @@ struct FullHistoryItemView: View {
                 .buttonStyle(.plain)
                 .help("Delete this history item")
                 .accessibilityLabel("Delete item")
-               
+                
                 Button(action: {
                     undoManager?.undo()
                 }) {
                     Image(systemName: "arrow.uturn.left")
                         .font(.system(size: 24))
                         .symbolRenderingMode(.hierarchical)
-                        .foregroundColor(iconColor)
                 }
                 .buttonStyle(.plain)
                 .disabled(!(undoManager?.canUndo ?? false))
                 .help("Undo last action")
                 .accessibilityLabel("Undo")
-               
+                
                 Button(action: {
                     undoManager?.redo()
                 }) {
                     Image(systemName: "arrow.uturn.right")
                         .font(.system(size: 24))
                         .symbolRenderingMode(.hierarchical)
-                        .foregroundColor(iconColor)
                 }
                 .buttonStyle(.plain)
                 .disabled(!(undoManager?.canRedo ?? false))
                 .help("Redo last action")
                 .accessibilityLabel("Redo")
-               
+                
                 Spacer()
-               
+                
                 Button(action: {
                     addToInputImages(item: item)
                     showAddedMessage = true
@@ -396,9 +486,9 @@ struct FullHistoryItemView: View {
                 .buttonStyle(.plain)
                 .help("Add to input images")
                 .accessibilityLabel("Add to input slot")
-               
+                
                 Spacer()
-               
+                
                 Button(action: {
                     if let idx = currentIndex {
                         let newIdx = min(history.count - 1, idx + 1)
@@ -408,7 +498,7 @@ struct FullHistoryItemView: View {
                     Image(systemName: "arrow.right.circle.fill")
                         .font(.system(size: 24))
                         .symbolRenderingMode(.hierarchical)
-                        .foregroundColor(iconColor)
+                        .foregroundColor(.black)
                 }
                 .disabled(currentIndex == history.count - 1)
                 .buttonStyle(.plain)
@@ -417,52 +507,15 @@ struct FullHistoryItemView: View {
             }
         }
         .padding(8)
-        .background(backgroundColor)
+        .background(Color.white)
         .frame(maxWidth: .infinity)
     }
-   
-    // NEW: Extracted close button
-    private var closeButton: some View {
-        #if os(iOS)
-        Button(action: {
-            dismiss()
-        }) {
-            Image(systemName: "xmark.circle.fill")
-                .font(.system(size: 30))
-                .symbolRenderingMode(.hierarchical)
-                .foregroundColor(.gray)
-        }
-        .buttonStyle(.plain)
-        .padding()
-        .help("Close full image view")
-        .accessibilityLabel("Close")
-        #elseif os(macOS)
-        Group {
-            if isFullScreen {
-                Button(action: {
-                    dismiss()
-                }) {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 24))
-                        .symbolRenderingMode(.hierarchical)
-                        .foregroundColor(.gray)
-                }
-                .buttonStyle(.plain)
-                .padding()
-                .help("Close full image view")
-                .accessibilityLabel("Close")
-            } else {
-                EmptyView()
-            }
-        }
-        #endif
-    }
-   
+    
     private func deleteHistoryItem(item: HistoryItem, deleteFile: Bool) {
         let oldHistory = appState.historyState.history
         let currentHistory = flattenHistory(appState.historyState.history)
         guard let oldIdx = currentHistory.firstIndex(where: { $0.id == item.id }) else { return }
-   
+    
         if deleteFile, let path = item.imagePath {
             let fileURL = URL(fileURLWithPath: path)
             let fileManager = FileManager.default
@@ -482,12 +535,12 @@ struct FullHistoryItemView: View {
                 }
             }
         }
-   
+    
         var snapshot = appState.historyState.history
         _ = appState.historyState.findAndRemoveEntry(id: item.id, in: &snapshot)
         appState.historyState.history = snapshot
         appState.historyState.saveHistory()
-   
+    
         if let undoManager = undoManager {
             let newHistory = appState.historyState.history
             undoManager.registerUndo(withTarget: appState.historyState) { target in
@@ -503,7 +556,7 @@ struct FullHistoryItemView: View {
             }
             undoManager.setActionName("Delete Item")
         }
-   
+    
         let newHistory = flattenHistory(appState.historyState.history)
         if newHistory.isEmpty {
             selectedId = nil
@@ -513,7 +566,7 @@ struct FullHistoryItemView: View {
             selectedId = newHistory[newIdx].id
         }
     }
-   
+    
     private func loadHistoryImage(for item: HistoryItem) -> PlatformImage? {
         guard let path = item.imagePath else { return nil }
         let fileURL = URL(fileURLWithPath: path)
@@ -528,7 +581,7 @@ struct FullHistoryItemView: View {
             return PlatformImage(contentsOfFile: fileURL.path)
         }
     }
-   
+    
     private func copyPromptToClipboard(_ prompt: String) {
         #if os(macOS)
         NSPasteboard.general.clearContents()
@@ -537,12 +590,12 @@ struct FullHistoryItemView: View {
         UIPasteboard.general.string = prompt
         #endif
     }
-   
+    
     private func addToInputImages(item: HistoryItem) {
         guard let img = loadHistoryImage(for: item), let path = item.imagePath else { return }
         let url = URL(fileURLWithPath: path)
         var promptNodes: [NodeInfo] = []
-   
+    
         if url.pathExtension.lowercased() == "png" {
             if let dir = appState.settings.outputDirectory {
                 do {
@@ -556,7 +609,7 @@ struct FullHistoryItemView: View {
                 promptNodes = parsePromptNodes(from: url)
             }
         }
-   
+    
         var newSlot = ImageSlot(path: path, image: img)
         if !promptNodes.isEmpty {
             newSlot.promptNodes = promptNodes.sorted { $0.id < $1.id }
@@ -564,7 +617,7 @@ struct FullHistoryItemView: View {
         }
         appState.ui.imageSlots.append(newSlot)
     }
-   
+    
     private func updateWindowSize() {
         #if os(macOS)
         guard let item = currentItem,
@@ -573,28 +626,28 @@ struct FullHistoryItemView: View {
               let screen = NSScreen.main else {
             return
         }
-   
+    
         let bottomHeight: CGFloat = 100 // Approximate height for bottom overlay
         let minWidth: CGFloat = 400
         let imageSize = platformImage.size
         var desiredSize = CGSize(width: max(imageSize.width, minWidth), height: imageSize.height + bottomHeight)
-   
+    
         let screenSize = screen.visibleFrame.size
         let marginHorizontal: CGFloat = 40
         let marginVertical: CGFloat = 100
-   
+    
         let maxSize = CGSize(width: screenSize.width - marginHorizontal,
                             height: screenSize.height - marginVertical)
-   
+    
         let scale = min(1.0, min(maxSize.width / desiredSize.width, maxSize.height / desiredSize.height))
-   
+    
         let windowSize = CGSize(width: desiredSize.width * scale, height: desiredSize.height * scale)
-   
+    
         window.setContentSize(windowSize)
         window.center()
         #endif
     }
-   
+    
     private func flattenHistory(_ entries: [HistoryEntry]) -> [HistoryItem] {
         var items: [HistoryItem] = []
         for entry in entries {

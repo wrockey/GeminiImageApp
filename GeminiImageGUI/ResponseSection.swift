@@ -1,4 +1,3 @@
-//ResponseSection.swift
 import SwiftUI
 #if os(macOS)
 import AppKit
@@ -11,13 +10,17 @@ struct ResponseSection: View {
     @Environment(\.colorScheme) var colorScheme
     @Environment(\.undoManager) private var undoManager
     
-    @Binding var showUndoButton: Bool // Changed to Binding
+    @Binding var showUndoButton: Bool
     
     @State private var finalScale: CGFloat = 1.0
     @State private var showCopiedOverlay: Bool = false
     @State private var showDeleteAlert: Bool = false
     
+    // New state for delete options
+    @State private var deleteFiles: Bool = false
+    
     var body: some View {
+
         VStack(spacing: 16) {
             imageContent
             textContent
@@ -25,21 +28,50 @@ struct ResponseSection: View {
         .frame(minHeight: 250)
         .padding(16)
         .cornerRadius(16)
+        .onAppear() {
+            print("ResponseSection: outputPaths = \(appState.ui.outputPaths), currentOutputIndex = \(appState.ui.currentOutputIndex)")
+        }
         .onChange(of: appState.ui.outputImages) { _ in
             finalScale = 1.0
             imageScale = 1.0
         }
-        .alert("Delete Response", isPresented: $showDeleteAlert) {
-            Button("Delete from History Only") {
-                deleteCurrentImage(deleteFile: false)
+        .onChange(of: showDeleteAlert) { newValue in
+            if newValue {
+                deleteFiles = false
             }
-            Button("Delete from History and File", role: .destructive) {
-                deleteCurrentImage(deleteFile: true)
+            print("Showing dialog - hasFile: \(hasFile), fileExists: \(fileExists)")
+        }
+        .confirmationDialog("Delete Response", isPresented: $showDeleteAlert, titleVisibility: .visible) {
+            Button("Delete", role: deleteFiles ? .destructive : nil) {
+                print("Deleting response at index: \(appState.ui.currentOutputIndex), hasFile: \(hasFile), fileExists: \(fileExists)")
+                deleteCurrentImage(deleteFile: deleteFiles)
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Do you want to delete the image from history only or also delete the file?")
+           
+            VStack(alignment: .leading, spacing: 8) {
+                Text(deleteMessage)
+                if hasFile {
+                    Toggle("Also permanently delete the file", isOn: $deleteFiles)
+                        .disabled(!fileExists)
+                    Text("File deletion cannot be undone.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+               }
+            }
         }
+        #if os(macOS)
+        .overlay(
+            Group {
+                if #available(macOS 14.0, *) {
+                    if fileExists {
+                        Color.clear.dialogSeverity(.critical)
+                    }
+                }
+            }
+            .dialogIcon(Image(systemName: "trash"))
+        )
+        #endif
     }
     
     private var backgroundColor: Color {
@@ -228,6 +260,48 @@ struct ResponseSection: View {
                 .help("Generated text response")
                 .accessibilityLabel("Response text: \(text)")
         }
+    }
+    
+    private var hasFile: Bool {
+        let index = appState.ui.currentOutputIndex
+        return appState.ui.outputPaths[safe: index] != nil
+    }
+    
+    private var fileExists: Bool {
+        let index = appState.ui.currentOutputIndex
+        if let path = appState.ui.outputPaths[safe: index] {
+            if path?.isEmpty == false {
+                let url = URL(fileURLWithPath: path!)
+                var exists = false
+                if let dir = appState.settings.outputDirectory {
+                    print("ResponseSection fileExists: Using security-scoped access for \(url.path)")
+                    if dir.startAccessingSecurityScopedResource() {
+                        exists = FileManager.default.fileExists(atPath: url.path)
+                        dir.stopAccessingSecurityScopedResource()
+                        print("ResponseSection fileExists: File at \(url.path) exists: \(exists)")
+                    } else {
+                        print("ResponseSection fileExists: Failed to start security-scoped access")
+                    }
+                } else {
+                    exists = FileManager.default.fileExists(atPath: url.path)
+                    print("ResponseSection fileExists: File at \(url.path) exists: \(exists) (no security scope)")
+                }
+                return exists
+            } else {
+                print("ResponseSection fileExists: Path is empty")
+            }
+        } else {
+            print("ResponseSection fileExists: No path at index \(index)")
+        }
+        return false
+    }
+    
+    private var deleteMessage: String {
+        var msg = "Are you sure you want to delete this response from history?"
+        if hasFile && !fileExists {
+            msg += "\nNote: File is missing or inaccessible."
+        }
+        return msg
     }
     
     private func saveImageAs(image: PlatformImage) {

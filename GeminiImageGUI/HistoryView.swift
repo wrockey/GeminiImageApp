@@ -1,3 +1,4 @@
+//HistoryView.swift
 import SwiftUI
 #if os(macOS)
 import AppKit
@@ -9,7 +10,6 @@ struct HistoryView: View {
     @Environment(\.undoManager) private var undoManager
     @State private var showDeleteAlert: Bool = false
     @State private var entriesToDelete: [HistoryEntry] = []
-    @State private var showConfirmFileDelete: Bool = false
     @State private var searchText: String = ""
     @Binding var columnVisibility: NavigationSplitViewVisibility
     @State private var fullHistoryItemId: UUID? = nil
@@ -31,6 +31,9 @@ struct HistoryView: View {
     @State private var selectedIDs: Set<UUID> = []
     @Environment(\.dismiss) private var dismiss
     
+    // New state for delete options
+    @State private var deleteFiles: Bool = false
+    
     private var dateFormatter: DateFormatter {
         let formatter = DateFormatter()
         formatter.dateStyle = .short
@@ -48,35 +51,34 @@ struct HistoryView: View {
     }
     
     private var fileCount: Int {
-        var uniqueItemIDs = Set<UUID>()
-        
-        func collectUniqueItems(from entries: [HistoryEntry]) {
-            for entry in entries {
-                switch entry {
-                case .item(let item):
-                    uniqueItemIDs.insert(item.id)
-                case .folder(let folder):
-                    collectUniqueItems(from: folder.children)
-                }
-            }
-        }
-        
-        collectUniqueItems(from: entriesToDelete)
-        return uniqueItemIDs.count
+        let items = entriesToDelete.flatMap { $0.allItems }
+        print("fileCount: items = \(items.map { "\($0.id): \($0.imagePath ?? "nil")" })")
+        return items.filter { $0.imagePath != nil }.count
+    }
+    
+    private var existingFileCount: Int {
+        let items = entriesToDelete.flatMap { $0.allItems }
+        return items.filter { $0.fileExists(appState: appState) }.count
+    }
+    
+    private var hasExistingFiles: Bool {
+        existingFileCount > 0
+    }
+    
+    private var deleteTitle: String {
+        let itemCount = entriesToDelete.flatMap { $0.allItems }.count
+        return itemCount == 1 ? "Delete Item" : "Delete \(itemCount) Items"
     }
     
     private var deleteMessage: String {
-        if fileCount == 0 {
-            return "Delete from history?"
-        } else {
-            let imageWord = fileCount == 1 ? "image" : "images"
-            return "Delete from history only, or also permanently delete \(fileCount) \(imageWord)?"
+        var msg = "Are you sure you want to delete from history?"
+        if fileCount > 0 {
+            let missing = fileCount - existingFileCount
+            if missing > 0 {
+                msg += "\nNote: \(missing) file\(missing == 1 ? "" : "s") missing or inaccessible."
+            }
         }
-    }
-    
-    private var confirmDeleteMessage: String {
-        let totalItems = entriesToDelete.reduce(into: 0) { $0 += $1.imageCount }
-        return "Are you sure? \(totalItems) image\(totalItems == 1 ? "" : "s") will be deleted!"
+        return msg
     }
     
     var body: some View {
@@ -102,7 +104,6 @@ struct HistoryView: View {
             }
             #endif
             .onChange(of: appState.historyState.history) { _ in
-                // Reset local state to ensure consistency with restored history
                 selectedIDs.removeAll()
                 activeEntry = nil
                 #if os(iOS)
@@ -112,8 +113,46 @@ struct HistoryView: View {
                 #endif
                 print("History changed: \(appState.historyState.history.map { $0.id })")
             }
+            .onChange(of: showDeleteAlert) { newValue in
+                if newValue {
+                    print("Showing dialog - fileCount: \(fileCount), hasExistingFiles: \(hasExistingFiles)")
+                    deleteFiles = false
+                }
+            }
+            .confirmationDialog(deleteTitle, isPresented: $showDeleteAlert, titleVisibility: .visible) {
+                Button("Delete", role: deleteFiles ? .destructive : nil) {
+                    print("Deleting entries: \(entriesToDelete.map { $0.id })")
+                    print("fileCount: \(fileCount), hasExistingFiles: \(hasExistingFiles)")
+                    appState.historyState.deleteEntries(entriesToDelete, deleteFiles: deleteFiles, undoManager: undoManager)
+                    entriesToDelete = []
+                    selectedIDs.removeAll()
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(deleteMessage)
+                   if fileCount > 0 {
+                        Toggle("Also permanently delete \(existingFileCount) file\(existingFileCount == 1 ? "" : "s")", isOn: $deleteFiles)
+                         .disabled(!hasExistingFiles)
+                        Text("File deletion cannot be undone.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                  }
+                }
+            }
+            #if os(macOS)
+            .overlay(
+                Group {
+                    if #available(macOS 14.0, *) {
+                        if hasExistingFiles {
+                            Color.clear.dialogSeverity(.critical)
+                        }
+                    }
+                }
+                .dialogIcon(Image(systemName: "trash"))
+            )
+            #endif
     }
-    
     private var content: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
@@ -121,23 +160,6 @@ struct HistoryView: View {
             historyList
         }
         .frame(minWidth: 300, maxWidth: .infinity, maxHeight: .infinity)
-        .alert("Delete History Entries", isPresented: $showDeleteAlert) {
-            Button("Delete from History Only") {
-                appState.historyState.deleteEntries(entriesToDelete, deleteFiles: false, undoManager: undoManager)
-                entriesToDelete = []
-                selectedIDs.removeAll()
-            }
-            if fileCount > 0 {
-                Button("Delete History and Files", role: .destructive) {
-                    appState.historyState.deleteEntries(entriesToDelete, deleteFiles: true, undoManager: undoManager)
-                    entriesToDelete = []
-                    selectedIDs.removeAll()
-                }
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text(deleteMessage)
-        }
         .overlay {
             overlayContent
         }
@@ -193,433 +215,133 @@ struct HistoryView: View {
     }
     
     private func hideToastAfterDelay() {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-            withAnimation(.easeOut(duration: 0.3)) {
-                showToast = false
-                showAddedMessage = false
-            }
-        }
-    }
-    
-    private var header: some View {
-        #if os(macOS)
-        HStack {
-            Button(action: {
-                withAnimation(.easeInOut(duration: 0.3)) {
-                    columnVisibility = columnVisibility == .all ? .detailOnly : .all
-                }
-            }) {
-                Image(systemName: "chevron.left")
-                    .symbolRenderingMode(.hierarchical)
-            }
-            .buttonStyle(.plain)
-            .help("Collapse history sidebar")
-            .accessibilityLabel("Collapse history sidebar")
-            
-            Text("History")
-                .font(.system(.headline, design: .default, weight: .semibold))
-                .kerning(0.2)
-                .help("View past generated images and prompts")
-            Button(action: {
-                showClearHistoryConfirmation = true
-            }) {
-                Image(systemName: "trash.circle.fill")
-                    .symbolRenderingMode(.hierarchical)
-                    .foregroundColor(.red.opacity(0.8))
-            }
-            .buttonStyle(.borderless)
-            .disabled(filteredHistory.isEmpty)
-            .help("Clear all history entries")
-            .accessibilityLabel("Clear history")
-            
-            Spacer()
-            
-            Button(action: {
-                undoManager?.undo()
-            }) {
-                Image(systemName: "arrow.uturn.left")
-                    .symbolRenderingMode(.hierarchical)
-            }
-            .buttonStyle(.borderless)
-            .disabled(!(undoManager?.canUndo ?? false))
-            .help("Undo last action")
-            .accessibilityLabel("Undo")
-            
-            Button(action: {
-                undoManager?.redo()
-            }) {
-                Image(systemName: "arrow.uturn.right")
-                    .symbolRenderingMode(.hierarchical)
-            }
-            .buttonStyle(.borderless)
-            .disabled(!(undoManager?.canRedo ?? false))
-            .help("Redo last action")
-            .accessibilityLabel("Redo")
-            
-            commonActions
-        }
-        .padding(.horizontal)
-        #else
-        HStack(spacing: 8) {
-            Text("History")
-                .font(.system(size: 24, weight: .semibold, design: .default))
-                .kerning(0.2)
-                .help("View past generated images and prompts")
-            Button(action: {
-                showClearHistoryConfirmation = true
-            }) {
-                Image(systemName: "trash.circle.fill")
-                    .font(.system(size: 24))
-                    .symbolRenderingMode(.hierarchical)
-                    .foregroundColor(.red.opacity(0.8))
-            }
-            .buttonStyle(.plain)
-            .disabled(filteredHistory.isEmpty)
-            .help("Clear all history entries")
-            .accessibilityLabel("Clear history")
-            
-            Spacer()
-            
-            Button(action: {
-                undoManager?.undo()
-            }) {
-                Image(systemName: "arrow.uturn.left")
-                    .font(.system(size: 24))
-                    .symbolRenderingMode(.hierarchical)
-            }
-            .buttonStyle(.plain)
-            .disabled(!(undoManager?.canUndo ?? false))
-            .help("Undo last action")
-            .accessibilityLabel("Undo")
-            
-            Button(action: {
-                undoManager?.redo()
-            }) {
-                Image(systemName: "arrow.uturn.right")
-                    .font(.system(size: 24))
-                    .symbolRenderingMode(.hierarchical)
-            }
-            .buttonStyle(.plain)
-            .disabled(!(undoManager?.canRedo ?? false))
-            .help("Redo last action")
-            .accessibilityLabel("Redo")
-            
-            commonActions
-            
-            Button(action: {
-                dismiss()
-            }) {
-                Image(systemName: "xmark.circle.fill")
-                    .font(.system(size: 24))
-                    .symbolRenderingMode(.hierarchical)
-                    .foregroundColor(.gray)
-            }
-            .buttonStyle(.plain)
-            .help("Close history view")
-            .accessibilityLabel("Close history view")
-        }
-        .padding(.horizontal)
-        .padding(.vertical, 8)
-        .onDrop(of: [.text], isTargeted: nil) { providers in
-            let oldHistory = appState.historyState.history
-            guard let provider = providers.first else {
-                activeEntry = nil
-                return false
-            }
-            provider.loadObject(ofClass: NSString.self) { reading, _ in
-                guard let str = reading as? String else {
-                    DispatchQueue.main.async {
-                        self.toastMessage = "Drop failed: Invalid data"
-                        self.showToast = true
-                        self.hideToastAfterDelay()
-                    }
-                    return
-                }
-                let idStrings = str.split(separator: ",").map(String.init)
-                let ids = idStrings.compactMap(UUID.init(uuidString:))
-                guard !ids.isEmpty else {
-                    DispatchQueue.main.async {
-                        self.toastMessage = "Drop failed: No valid items"
-                        self.showToast = true
-                        self.hideToastAfterDelay()
-                    }
-                    return
-                }
-                DispatchQueue.main.async {
-                    var movedEntries: [HistoryEntry] = []
-                    var snapshot = appState.historyState.history
-                    for id in ids {
-                        if let entry = appState.historyState.findAndRemoveEntry(id: id, in: &snapshot) {
-                            movedEntries.append(entry)
-                        } else {
-                            print("Drag-and-drop failed to find entry with ID: \(id)")
-                        }
-                    }
-                    if movedEntries.isEmpty {
-                        self.toastMessage = "Drop failed: Items not found"
-                        self.showToast = true
-                        self.hideToastAfterDelay()
-                        return
-                    }
-                    let insertIndex = appState.historyState.history.count
-                    appState.historyState.insert(entries: movedEntries, inFolderId: nil, at: insertIndex, into: &snapshot)
-                    appState.historyState.history = snapshot
-                    appState.historyState.saveHistory()
-                    self.selectedIDs.removeAll()
-                    self.toastMessage = "Moved \(movedEntries.count) item(s)"
-                    self.showToast = true
-                    self.hideToastAfterDelay()
-                    if let undoManager {
-                        let newHistory = appState.historyState.history
-                        undoManager.registerUndo(withTarget: appState.historyState) { target in
-                            let historyBeforeUndo = target.history
-                            target.history = oldHistory
-                            target.objectWillChange.send()
-                            target.saveHistory()
-                            undoManager.registerUndo(withTarget: target) { redoTarget in
-                                redoTarget.history = historyBeforeUndo
-                                redoTarget.objectWillChange.send()
-                                redoTarget.saveHistory()
-                            }
-                        }
-                        undoManager.setActionName("Move Items")
-                    }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                withAnimation(.easeOut(duration: 0.3)) {
+                    showToast = false
+                    showAddedMessage = false
                 }
             }
-            return true
         }
-        #endif
-    }
-    
-    private var commonActions: some View {
-        Group {
-            Button(action: {
-                appState.historyState.addFolder(undoManager: undoManager)
-            }) {
-                Image(systemName: "folder.badge.plus")
-                    .symbolRenderingMode(.hierarchical)
-                    .foregroundColor(.blue.opacity(0.8))
-            }
-            .buttonStyle(.borderless)
-            .help("Add new folder")
-            .accessibilityLabel("Add folder")
-            
-            if isEditingBinding.wrappedValue {
+        
+        private var header: some View {
+            #if os(macOS)
+            HStack {
                 Button(action: {
-                    if !selectedIDs.isEmpty {
-                        entriesToDelete = appState.historyState.findEntries(with: selectedIDs)
-                        showDeleteAlert = true
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        columnVisibility = columnVisibility == .all ? .detailOnly : .all
                     }
                 }) {
-                    Image(systemName: "trash")
+                    Image(systemName: "chevron.left")
                         .symbolRenderingMode(.hierarchical)
-                        .foregroundColor(selectedIDs.isEmpty ? .gray : .red.opacity(0.8))
                 }
-                .buttonStyle(.borderless)
-                .disabled(selectedIDs.isEmpty)
-                .help("Delete selected items")
-                .accessibilityLabel("Delete selected items")
+                .buttonStyle(.plain)
+                .help("Collapse history sidebar")
+                .accessibilityLabel("Collapse history sidebar")
                 
-                #if os(iOS)
+                Text("History")
+                    .font(.system(.headline, design: .default, weight: .semibold))
+                    .kerning(0.2)
+                    .help("View past generated images and prompts")
                 Button(action: {
-                    if !selectedIDs.isEmpty {
-                        appState.historyState.moveToTop(entriesWithIds: Array(selectedIDs), inFolderId: nil, undoManager: undoManager)
-                        selectedIDs.removeAll()
-                        toastMessage = "Moved to top"
-                        showToast = true
-                        hideToastAfterDelay()
-                    }
+                    showClearHistoryConfirmation = true
                 }) {
-                    Image(systemName: "arrow.up.to.line")
+                    Image(systemName: "trash.circle.fill")
                         .symbolRenderingMode(.hierarchical)
-                        .foregroundColor(selectedIDs.isEmpty ? .gray : .blue.opacity(0.8))
+                        .foregroundColor(.red.opacity(0.8))
                 }
                 .buttonStyle(.borderless)
-                .disabled(selectedIDs.isEmpty)
-                .help("Move selected items to top")
-                .accessibilityLabel("Move selected items to top")
+                .disabled(filteredHistory.isEmpty)
+                .help("Clear all history entries")
+                .accessibilityLabel("Clear history")
+                
+                Spacer()
                 
                 Button(action: {
-                    if !selectedIDs.isEmpty {
-                        appState.historyState.moveToBottom(entriesWithIds: Array(selectedIDs), inFolderId: nil, undoManager: undoManager)
-                        selectedIDs.removeAll()
-                        toastMessage = "Moved to bottom"
-                        showToast = true
-                        hideToastAfterDelay()
-                    }
+                    undoManager?.undo()
                 }) {
-                    Image(systemName: "arrow.down.to.line")
+                    Image(systemName: "arrow.uturn.left")
                         .symbolRenderingMode(.hierarchical)
-                        .foregroundColor(selectedIDs.isEmpty ? .gray : .blue.opacity(0.8))
                 }
                 .buttonStyle(.borderless)
-                .disabled(selectedIDs.isEmpty)
-                .help("Move selected items to bottom")
-                .accessibilityLabel("Move selected items to bottom")
-                #endif
+                .disabled(!(undoManager?.canUndo ?? false))
+                .help("Undo last action")
+                .accessibilityLabel("Undo")
                 
                 Button(action: {
-                    if !selectedIDs.isEmpty {
-                        var addedCount = 0
-                        func addRecursively(entry: HistoryEntry) {
-                            switch entry {
-                            case .item(let item):
-                                addToInputImages(item: item)
-                                addedCount += 1
-                            case .folder(let folder):
-                                for child in folder.children {
-                                    addRecursively(entry: child)
-                                }
-                            }
-                        }
-                        for entry in appState.historyState.findEntries(with: selectedIDs) {
-                            addRecursively(entry: entry)
-                        }
-                        selectedIDs.removeAll()
-                        toastMessage = "Added \(addedCount) image\(addedCount == 1 ? "" : "s") to input"
-                        showToast = true
-                        hideToastAfterDelay()
-                    }
+                    undoManager?.redo()
                 }) {
-                    Image(systemName: "plus")
+                    Image(systemName: "arrow.uturn.right")
                         .symbolRenderingMode(.hierarchical)
-                        .foregroundColor(selectedIDs.isEmpty ? .gray : .blue.opacity(0.8))
                 }
                 .buttonStyle(.borderless)
-                .disabled(selectedIDs.isEmpty)
-                .help("Add selected images to input")
-                .accessibilityLabel("Add selected images to input")
-            }
-            
-            Button(action: {
-                isEditingBinding.wrappedValue.toggle()
-                if !isEditingBinding.wrappedValue {
-                    selectedIDs.removeAll()
-                }
-            }) {
-                Text(isEditingBinding.wrappedValue ? "Done" : "Select")
-            }
-            .buttonStyle(.borderless)
-            .help("Select multiple items")
-            .accessibilityLabel("Select multiple items")
-        }
-    }
-    
-    private var searchField: some View {
-        TextField("Search prompts or dates...", text: $searchText)
-            .textFieldStyle(.roundedBorder)
-            .padding(.horizontal)
-            .help("Search history by prompt text or date")
-            .accessibilityLabel("Search prompts or dates")
-    }
-    
-    private var historyList: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading) {
-                if filteredHistory.isEmpty {
-                    Text("No history yet.")
-                        .foregroundColor(.secondary)
-                        .help("No generation history available yet")
-                        .padding()
-                } else {
-                    if searchText.isEmpty {
-                        #if os(macOS)
-                        ForEach(filteredHistory) { entry in
-                            TreeNodeView(
-                                entry: entry,
-                                showDeleteAlert: $showDeleteAlert,
-                                entriesToDelete: $entriesToDelete,
-                                appState: appState,
-                                selectedIDs: $selectedIDs,
-                                searchText: $searchText,
-                                activeEntry: $activeEntry,
-                                entryRowProvider: { AnyView(self.entryRow(for: $0)) },
-                                copyPromptProvider: self.copyPromptToClipboard,
-                                folderId: nil,
-                                isEditing: isEditingBinding,
-                                toastMessage: $toastMessage,
-                                showToast: $showToast,
-                                addToInputProvider: { item in
-                                    self.addToInputImages(item: item)
-                                    #if os(iOS)
-                                    self.showAddedMessage = true
-                                    self.hideToastAfterDelay()
-                                    #endif
-                                },
-                                undoManager: undoManager
-                            )
-                        }
-                        #else
-                        AnyView(ReorderableForEach(
-                            filteredHistory,
-                            active: $activeEntry,
-                            appState: appState,
-                            folderId: nil,
-                            selectedIDs: $selectedIDs,
-                            toastMessage: $toastMessage,
-                            showToast: $showToast,
-                            undoManager: undoManager
-                        ) { entry in
-                            AnyView(
-                                TreeNodeView(
-                                    entry: entry,
-                                    showDeleteAlert: $showDeleteAlert,
-                                    entriesToDelete: $entriesToDelete,
-                                    appState: appState,
-                                    selectedIDs: $selectedIDs,
-                                    searchText: $searchText,
-                                    activeEntry: $activeEntry,
-                                    entryRowProvider: { AnyView(self.entryRow(for: $0)) },
-                                    copyPromptProvider: self.copyPromptToClipboard,
-                                    folderId: nil,
-                                    isEditing: isEditingBinding,
-                                    toastMessage: $toastMessage,
-                                    showToast: $showToast,
-                                    addToInputProvider: { item in
-                                        self.addToInputImages(item: item)
-                                        #if os(iOS)
-                                        self.showAddedMessage = true
-                                        self.hideToastAfterDelay()
-                                        #endif
-                                    },
-                                    undoManager: undoManager
-                                )
-                            )
-                        } moveAction: { from, to in
-                            appState.historyState.move(inFolderId: nil, from: from, to: to, undoManager: undoManager)
-                        })
-                        #endif
-                    } else {
-                        ForEach(filteredHistory) { entry in
-                            TreeNodeView(
-                                entry: entry,
-                                showDeleteAlert: $showDeleteAlert,
-                                entriesToDelete: $entriesToDelete,
-                                appState: appState,
-                                selectedIDs: $selectedIDs,
-                                searchText: $searchText,
-                                activeEntry: $activeEntry,
-                                entryRowProvider: { AnyView(self.entryRow(for: $0)) },
-                                copyPromptProvider: self.copyPromptToClipboard,
-                                folderId: nil,
-                                isEditing: isEditingBinding,
-                                toastMessage: $toastMessage,
-                                showToast: $showToast,
-                                addToInputProvider: { item in
-                                    self.addToInputImages(item: item)
-                                    #if os(iOS)
-                                    self.showAddedMessage = true
-                                    self.hideToastAfterDelay()
-                                    #endif
-                                },
-                                undoManager: undoManager
-                            )
-                        }
-                    }
-                }
+                .disabled(!(undoManager?.canRedo ?? false))
+                .help("Redo last action")
+                .accessibilityLabel("Redo")
+                
+                commonActions
             }
             .padding(.horizontal)
-            #if os(iOS)
+            #else
+            HStack(spacing: 8) {
+                Text("History")
+                    .font(.system(size: 24, weight: .semibold, design: .default))
+                    .kerning(0.2)
+                    .help("View past generated images and prompts")
+                Button(action: {
+                    showClearHistoryConfirmation = true
+                }) {
+                    Image(systemName: "trash.circle.fill")
+                        .font(.system(size: 24))
+                        .symbolRenderingMode(.hierarchical)
+                        .foregroundColor(.red.opacity(0.8))
+                }
+                .buttonStyle(.plain)
+                .disabled(filteredHistory.isEmpty)
+                .help("Clear all history entries")
+                .accessibilityLabel("Clear history")
+                
+                Spacer()
+                
+                Button(action: {
+                    undoManager?.undo()
+                }) {
+                    Image(systemName: "arrow.uturn.left")
+                        .font(.system(size: 24))
+                        .symbolRenderingMode(.hierarchical)
+                }
+                .buttonStyle(.plain)
+                .disabled(!(undoManager?.canUndo ?? false))
+                .help("Undo last action")
+                .accessibilityLabel("Undo")
+                
+                Button(action: {
+                    undoManager?.redo()
+                }) {
+                    Image(systemName: "arrow.uturn.right")
+                        .font(.system(size: 24))
+                        .symbolRenderingMode(.hierarchical)
+                }
+                .buttonStyle(.plain)
+                .disabled(!(undoManager?.canRedo ?? false))
+                .help("Redo last action")
+                .accessibilityLabel("Redo")
+                
+                commonActions
+                
+                Button(action: {
+                    dismiss()
+                }) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 24))
+                        .symbolRenderingMode(.hierarchical)
+                        .foregroundColor(.gray)
+                }
+                .buttonStyle(.plain)
+                .help("Close history view")
+                .accessibilityLabel("Close history view")
+            }
+            .padding(.horizontal)
+            .padding(.vertical, 8)
             .onDrop(of: [.text], isTargeted: nil) { providers in
                 let oldHistory = appState.historyState.history
                 guard let provider = providers.first else {
@@ -690,24 +412,325 @@ struct HistoryView: View {
             }
             #endif
         }
-    }
     
-    private var isEditingBinding: Binding<Bool> {
-        #if os(iOS)
-        Binding(
-            get: { (editMode?.wrappedValue == .active) ?? false },
-            set: { newValue in
-                withAnimation {
-                    if let editMode = editMode {
-                        editMode.wrappedValue = newValue ? .active : .inactive
+    private var commonActions: some View {
+            Group {
+                Button(action: {
+                    appState.historyState.addFolder(undoManager: undoManager)
+                }) {
+                    Image(systemName: "folder.badge.plus")
+                        .symbolRenderingMode(.hierarchical)
+                        .foregroundColor(.blue.opacity(0.8))
+                }
+                .buttonStyle(.borderless)
+                .help("Add new folder")
+                .accessibilityLabel("Add folder")
+                
+                if isEditingBinding.wrappedValue {
+                    Button(action: {
+                        if !selectedIDs.isEmpty {
+                            entriesToDelete = appState.historyState.findEntries(with: selectedIDs)
+                            print("Setting entriesToDelete: \(entriesToDelete.map { $0.id })")
+                            showDeleteAlert = true
+                        }
+                    }) {
+                        Image(systemName: "trash")
+                            .symbolRenderingMode(.hierarchical)
+                            .foregroundColor(selectedIDs.isEmpty ? .gray : .red.opacity(0.8))
+                    }
+                    .buttonStyle(.borderless)
+                    .disabled(selectedIDs.isEmpty)
+                    .help("Delete selected items")
+                    .accessibilityLabel("Delete selected items")
+                    
+                    #if os(iOS)
+                    Button(action: {
+                        if !selectedIDs.isEmpty {
+                            appState.historyState.moveToTop(entriesWithIds: Array(selectedIDs), inFolderId: nil, undoManager: undoManager)
+                            selectedIDs.removeAll()
+                            toastMessage = "Moved to top"
+                            showToast = true
+                            hideToastAfterDelay()
+                        }
+                    }) {
+                        Image(systemName: "arrow.up.to.line")
+                            .symbolRenderingMode(.hierarchical)
+                            .foregroundColor(selectedIDs.isEmpty ? .gray : .blue.opacity(0.8))
+                    }
+                    .buttonStyle(.borderless)
+                    .disabled(selectedIDs.isEmpty)
+                    .help("Move selected items to top")
+                    .accessibilityLabel("Move selected items to top")
+                    
+                    Button(action: {
+                        if !selectedIDs.isEmpty {
+                            appState.historyState.moveToBottom(entriesWithIds: Array(selectedIDs), inFolderId: nil, undoManager: undoManager)
+                            selectedIDs.removeAll()
+                            toastMessage = "Moved to bottom"
+                            showToast = true
+                            hideToastAfterDelay()
+                        }
+                    }) {
+                        Image(systemName: "arrow.down.to.line")
+                            .symbolRenderingMode(.hierarchical)
+                            .foregroundColor(selectedIDs.isEmpty ? .gray : .blue.opacity(0.8))
+                    }
+                    .buttonStyle(.borderless)
+                    .disabled(selectedIDs.isEmpty)
+                    .help("Move selected items to bottom")
+                    .accessibilityLabel("Move selected items to bottom")
+                    #endif
+                    
+                    Button(action: {
+                        if !selectedIDs.isEmpty {
+                            var addedCount = 0
+                            func addRecursively(entry: HistoryEntry) {
+                                switch entry {
+                                case .item(let item):
+                                    addToInputImages(item: item)
+                                    addedCount += 1
+                                case .folder(let folder):
+                                    for child in folder.children {
+                                        addRecursively(entry: child)
+                                    }
+                                }
+                            }
+                            for entry in appState.historyState.findEntries(with: selectedIDs) {
+                                addRecursively(entry: entry)
+                            }
+                            selectedIDs.removeAll()
+                            toastMessage = "Added \(addedCount) image\(addedCount == 1 ? "" : "s") to input"
+                            showToast = true
+                            hideToastAfterDelay()
+                        }
+                    }) {
+                        Image(systemName: "plus")
+                            .symbolRenderingMode(.hierarchical)
+                            .foregroundColor(selectedIDs.isEmpty ? .gray : .blue.opacity(0.8))
+                    }
+                    .buttonStyle(.borderless)
+                    .disabled(selectedIDs.isEmpty)
+                    .help("Add selected images to input")
+                    .accessibilityLabel("Add selected images to input")
+                }
+                
+                Button(action: {
+                    isEditingBinding.wrappedValue.toggle()
+                    if !isEditingBinding.wrappedValue {
+                        selectedIDs.removeAll()
+                    }
+                }) {
+                    Text(isEditingBinding.wrappedValue ? "Done" : "Select")
+                }
+                .buttonStyle(.borderless)
+                .help("Select multiple items")
+                .accessibilityLabel("Select multiple items")
+            }
+        }
+        
+        private var searchField: some View {
+            TextField("Search prompts or dates...", text: $searchText)
+                .textFieldStyle(.roundedBorder)
+                .padding(.horizontal)
+                .help("Search history by prompt text or date")
+                .accessibilityLabel("Search prompts or dates")
+        }
+    
+    private var historyList: some View {
+            ScrollView {
+                LazyVStack(alignment: .leading) {
+                    if filteredHistory.isEmpty {
+                        Text("No history yet.")
+                            .foregroundColor(.secondary)
+                            .help("No generation history available yet")
+                            .padding()
+                    } else {
+                        if searchText.isEmpty {
+                            #if os(macOS)
+                            ForEach(filteredHistory) { entry in
+                                TreeNodeView(
+                                    entry: entry,
+                                    showDeleteAlert: $showDeleteAlert,
+                                    entriesToDelete: $entriesToDelete,
+                                    appState: appState,
+                                    selectedIDs: $selectedIDs,
+                                    searchText: $searchText,
+                                    activeEntry: $activeEntry,
+                                    entryRowProvider: { AnyView(self.entryRow(for: $0)) },
+                                    copyPromptProvider: self.copyPromptToClipboard,
+                                    folderId: nil,
+                                    isEditing: isEditingBinding,
+                                    toastMessage: $toastMessage,
+                                    showToast: $showToast,
+                                    addToInputProvider: { item in
+                                        self.addToInputImages(item: item)
+                                        #if os(iOS)
+                                        self.showAddedMessage = true
+                                        self.hideToastAfterDelay()
+                                        #endif
+                                    },
+                                    undoManager: undoManager
+                                )
+                            }
+                            #else
+                            AnyView(ReorderableForEach(
+                                filteredHistory,
+                                active: $activeEntry,
+                                appState: appState,
+                                folderId: nil,
+                                selectedIDs: $selectedIDs,
+                                toastMessage: $toastMessage,
+                                showToast: $showToast,
+                                undoManager: undoManager
+                            ) { entry in
+                                AnyView(
+                                    TreeNodeView(
+                                        entry: entry,
+                                        showDeleteAlert: $showDeleteAlert,
+                                        entriesToDelete: $entriesToDelete,
+                                        appState: appState,
+                                        selectedIDs: $selectedIDs,
+                                        searchText: $searchText,
+                                        activeEntry: $activeEntry,
+                                        entryRowProvider: { AnyView(self.entryRow(for: $0)) },
+                                        copyPromptProvider: self.copyPromptToClipboard,
+                                        folderId: nil,
+                                        isEditing: isEditingBinding,
+                                        toastMessage: $toastMessage,
+                                        showToast: $showToast,
+                                        addToInputProvider: { item in
+                                            self.addToInputImages(item: item)
+                                            #if os(iOS)
+                                            self.showAddedMessage = true
+                                            self.hideToastAfterDelay()
+                                            #endif
+                                        },
+                                        undoManager: undoManager
+                                    )
+                                )
+                            } moveAction: { from, to in
+                                appState.historyState.move(inFolderId: nil, from: from, to: to, undoManager: undoManager)
+                            })
+                            #endif
+                        } else {
+                            ForEach(filteredHistory) { entry in
+                                TreeNodeView(
+                                    entry: entry,
+                                    showDeleteAlert: $showDeleteAlert,
+                                    entriesToDelete: $entriesToDelete,
+                                    appState: appState,
+                                    selectedIDs: $selectedIDs,
+                                    searchText: $searchText,
+                                    activeEntry: $activeEntry,
+                                    entryRowProvider: { AnyView(self.entryRow(for: $0)) },
+                                    copyPromptProvider: self.copyPromptToClipboard,
+                                    folderId: nil,
+                                    isEditing: isEditingBinding,
+                                    toastMessage: $toastMessage,
+                                    showToast: $showToast,
+                                    addToInputProvider: { item in
+                                        self.addToInputImages(item: item)
+                                        #if os(iOS)
+                                        self.showAddedMessage = true
+                                        self.hideToastAfterDelay()
+                                        #endif
+                                    },
+                                    undoManager: undoManager
+                                )
+                            }
+                        }
                     }
                 }
+                .padding(.horizontal)
+                #if os(iOS)
+                .onDrop(of: [.text], isTargeted: nil) { providers in
+                    let oldHistory = appState.historyState.history
+                    guard let provider = providers.first else {
+                        activeEntry = nil
+                        return false
+                    }
+                    provider.loadObject(ofClass: NSString.self) { reading, _ in
+                        guard let str = reading as? String else {
+                            DispatchQueue.main.async {
+                                self.toastMessage = "Drop failed: Invalid data"
+                                self.showToast = true
+                                self.hideToastAfterDelay()
+                            }
+                            return
+                        }
+                        let idStrings = str.split(separator: ",").map(String.init)
+                        let ids = idStrings.compactMap(UUID.init(uuidString:))
+                        guard !ids.isEmpty else {
+                            DispatchQueue.main.async {
+                                self.toastMessage = "Drop failed: No valid items"
+                                self.showToast = true
+                                self.hideToastAfterDelay()
+                            }
+                            return
+                        }
+                        DispatchQueue.main.async {
+                            var movedEntries: [HistoryEntry] = []
+                            var snapshot = appState.historyState.history
+                            for id in ids {
+                                if let entry = appState.historyState.findAndRemoveEntry(id: id, in: &snapshot) {
+                                    movedEntries.append(entry)
+                                } else {
+                                    print("Drag-and-drop failed to find entry with ID: \(id)")
+                                }
+                            }
+                            if movedEntries.isEmpty {
+                                self.toastMessage = "Drop failed: Items not found"
+                                self.showToast = true
+                                self.hideToastAfterDelay()
+                                return
+                            }
+                            let insertIndex = appState.historyState.history.count
+                            appState.historyState.insert(entries: movedEntries, inFolderId: nil, at: insertIndex, into: &snapshot)
+                            appState.historyState.history = snapshot
+                            appState.historyState.saveHistory()
+                            self.selectedIDs.removeAll()
+                            self.toastMessage = "Moved \(movedEntries.count) item(s)"
+                            self.showToast = true
+                            self.hideToastAfterDelay()
+                            if let undoManager {
+                                let newHistory = appState.historyState.history
+                                undoManager.registerUndo(withTarget: appState.historyState) { target in
+                                    let historyBeforeUndo = target.history
+                                    target.history = oldHistory
+                                    target.objectWillChange.send()
+                                    target.saveHistory()
+                                    undoManager.registerUndo(withTarget: target) { redoTarget in
+                                        redoTarget.history = historyBeforeUndo
+                                        redoTarget.objectWillChange.send()
+                                        redoTarget.saveHistory()
+                                    }
+                                }
+                                undoManager.setActionName("Move Items")
+                            }
+                        }
+                    }
+                    return true
+                }
+                #endif
             }
-        )
-        #else
-        $isEditing
-        #endif
-    }
+        }
+        
+        private var isEditingBinding: Binding<Bool> {
+            #if os(iOS)
+            Binding(
+                get: { (editMode?.wrappedValue == .active) ?? false },
+                set: { newValue in
+                    withAnimation {
+                        if let editMode = editMode {
+                            editMode.wrappedValue = newValue ? .active : .inactive
+                        }
+                    }
+                }
+            )
+            #else
+            $isEditing
+            #endif
+        }
     
     // Helper to find the parent folder ID of an item
     private func findParentFolderId(for itemId: UUID, in entries: [HistoryEntry]) -> UUID? {
@@ -788,7 +811,7 @@ struct HistoryView: View {
     }
     
     private func itemRow(for item: HistoryItem) -> some View {
-        let exists = fileExists(for: item)
+        let exists = item.fileExists(appState: appState)
         var creator: String? = nil
         if let mode = item.mode {
             creator = mode == .gemini ? "Gemini" : mode == .grok ? item.modelUsed ?? appState.settings.selectedGrokModel : mode == .aimlapi ? item.modelUsed ?? appState.settings.selectedAIMLModel : (item.workflowName ?? "ComfyUI")
@@ -878,6 +901,7 @@ struct HistoryView: View {
                     .accessibilityLabel("Copy prompt")
                     Button("Delete", role: .destructive) {
                         entriesToDelete = [.item(item)]
+                        print("Setting entriesToDelete for single item: \(item.id), imagePath: \(item.imagePath ?? "nil")")
                         showDeleteAlert = true
                     }
                     .accessibilityLabel("Delete item")
@@ -1017,18 +1041,7 @@ struct HistoryView: View {
     }
     
     private func fileExists(for item: HistoryItem) -> Bool {
-        guard let path = item.imagePath else { return false }
-        let url = URL(fileURLWithPath: path)
-        var exists = false
-        if let dir = appState.settings.outputDirectory {
-            if dir.startAccessingSecurityScopedResource() {
-                exists = FileManager.default.fileExists(atPath: url.path)
-                dir.stopAccessingSecurityScopedResource()
-            }
-        } else {
-            exists = FileManager.default.fileExists(atPath: url.path)
-        }
-        return exists
+        item.fileExists(appState: appState)
     }
     
     private func addToInputImages(item: HistoryItem) {
