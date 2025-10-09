@@ -1,22 +1,21 @@
-//ConfigurationSection.swift
 import SwiftUI
 #if os(macOS)
 import AppKit
 #elseif os(iOS)
 import UIKit
 #endif
- 
+
 // New struct for response parsing (add at top or in separate file)
 struct AIMLModelsResponse: Codable {
     let object: String
     let data: [AIMLModelEntry]
 }
- 
+
 struct AIMLModelEntry: Codable {
     let id: String
     // Add other fields if needed: type, info, features
 }
- 
+
 struct ConfigurationSection: View {
     @Binding var showApiKey: Bool
     @Binding var apiKeyPath: String
@@ -28,23 +27,23 @@ struct ConfigurationSection: View {
     let onComfyJSONSelected: (Result<[URL], Error>) -> Void
     
     @EnvironmentObject var appState: AppState
-        @Environment(\.horizontalSizeClass) private var sizeClass
-        
-        @State private var showSuccessAlert: Bool = false
-        @State private var successMessage: String = ""
-        @State private var showCopiedMessage: Bool = false
-        @State private var showServerSuccessAlert: Bool = false
-        @State private var showServerErrorAlert: Bool = false
-        @State private var serverErrorMessage: String = ""
-        @State private var isTestingServer: Bool = false
-        @State private var showGrokApiKey: Bool = false
-        @State private var showAIMLApiKey: Bool = false
-        @State private var showImgBBApiKey: Bool = false
-        @State private var availableModels: [String] = []
-        @State private var isFetchingModels: Bool = false
-        @State private var showAdvanced: Bool = false
-        @State private var showHelp: Bool = false
-        @State private var detailedError: DetailedError? = nil
+    @Environment(\.horizontalSizeClass) private var sizeClass
+    
+    @State private var showSuccessAlert: Bool = false
+    @State private var successMessage: String = ""
+    @State private var showCopiedMessage: Bool = false
+    @State private var showServerSuccessAlert: Bool = false
+    @State private var showServerErrorAlert: Bool = false
+    @State private var serverErrorMessage: String = ""
+    @State private var isTestingServer: Bool = false
+    @State private var showGrokApiKey: Bool = false
+    @State private var showAIMLApiKey: Bool = false
+    @State private var showImgBBApiKey: Bool = false
+    @State private var availableModels: [String] = []
+    @State private var isFetchingModels: Bool = false
+    @State private var showAdvanced: Bool = false
+    @State private var showHelp: Bool = false
+    @State private var detailedError: DetailedError? = nil
     
     private var isCompact: Bool {
         sizeClass == .compact
@@ -55,11 +54,11 @@ struct ConfigurationSection: View {
     }
     
     private var textFont: Font {
-        .system(size: isCompact ? 13 : 15, weight: .medium, design: .monospaced)
+        .system(size: isCompact ? 12 : 15, weight: .medium, design: .monospaced)
     }
     
     private var pickerFont: Font {
-        .system(size: isCompact ? 12 : 14)
+        .system(size: isCompact ? 11 : 14)
     }
     
     init(
@@ -83,7 +82,7 @@ struct ConfigurationSection: View {
     }
     
     private var mainContent: some View {
-        VStack(spacing: isCompact ? 12 : 16) {
+        VStack(spacing: isCompact ? 4 : 10) {
             Picker("Mode", selection: $appState.settings.mode) {
                 ForEach(GenerationMode.allCases, id: \.self) { mode in
                     Text(mode.rawValue.capitalized).tag(mode)
@@ -110,49 +109,49 @@ struct ConfigurationSection: View {
     }
     
     var body: some View {
-            mainContent
-                .onChange(of: appState.settings.mode) { newMode in
-                    if newMode == .aimlapi && !appState.settings.aimlapiKey.isEmpty {
-                        fetchAvailableModels()
-                    }
+        mainContent
+            .onChange(of: appState.settings.mode) { newMode in
+                if newMode == .aimlapi && !appState.settings.aimlapiKey.isEmpty {
+                    fetchAvailableModels()
                 }
-                .onChange(of: appState.settings.selectedAIMLModel) { _ in
-                    if !appState.canAddImages {
-                        appState.ui.imageSlots.removeAll()
-                    }
-                    // Reset advanced params to defaults
-                    appState.settings.aimlAdvancedParams = ModelParameters()
+            }
+            .onChange(of: appState.settings.selectedAIMLModel) { _ in
+                if !appState.canAddImages {
+                    appState.ui.imageSlots.removeAll()
                 }
-                .alert("Success", isPresented: $showSuccessAlert) {
-                    Button("OK") {}
-                } message: {
-                    Text(successMessage)
+                // Reset advanced params to defaults
+                appState.settings.aimlAdvancedParams = ModelParameters()
+            }
+            .alert("Success", isPresented: $showSuccessAlert) {
+                Button("OK") {}
+            } message: {
+                Text(successMessage)
+            }
+            .alert("Server Available", isPresented: $showServerSuccessAlert) {
+                Button("OK") {}
+            } message: {
+                Text("The ComfyUI server is reachable and responding.")
+            }
+            .alert("Server Error", isPresented: $showServerErrorAlert) {
+                Button("OK") {}
+            } message: {
+                Text(serverErrorMessage)
+            }
+            .errorAlert(errorItem: $errorItem, detailedError: $detailedError)
+            .sheet(item: $detailedError) { detail in
+                DetailedErrorView(message: detail.message) {
+                    detailedError = nil
                 }
-                .alert("Server Available", isPresented: $showServerSuccessAlert) {
-                    Button("OK") {}
-                } message: {
-                    Text("The ComfyUI server is reachable and responding.")
+            }
+            .sheet(isPresented: $showAdvanced) {
+                if let model = appState.currentAIMLModel {
+                    AdvancedAIMLSettingsView(model: model, params: $appState.settings.aimlAdvancedParams)
                 }
-                .alert("Server Error", isPresented: $showServerErrorAlert) {
-                    Button("OK") {}
-                } message: {
-                    Text(serverErrorMessage)
-                }
-                .errorAlert(errorItem: $errorItem, detailedError: $detailedError)
-                .sheet(item: $detailedError) { detail in
-                    DetailedErrorView(message: detail.message) {
-                        detailedError = nil
-                    }
-                }
-                .sheet(isPresented: $showAdvanced) {
-                    if let model = appState.currentAIMLModel {
-                        AdvancedAIMLSettingsView(model: model, params: $appState.settings.aimlAdvancedParams)
-                    }
-                }
-                .sheet(isPresented: $showHelp) {
-                    HelpView(mode: appState.settings.mode)
-                }
-        }
+            }
+            .sheet(isPresented: $showHelp) {
+                HelpView(mode: appState.settings.mode)
+            }
+    }
     
     @ViewBuilder
     private var outputFolderSection: some View {
@@ -163,18 +162,20 @@ struct ConfigurationSection: View {
                         .font(labelFont)
                         .foregroundColor(.secondary)
                         .help("Select the folder where generated images will be saved")
-                    HStack(spacing: isCompact ? 8 : 16) {
+                    HStack(spacing: isCompact ? 2 : 8) {
 #if os(iOS)
                         Text(outputPath.isEmpty ? "No folder selected" : URL(fileURLWithPath: outputPath).lastPathComponent)
                             .font(textFont)
                             .lineLimit(1)
                             .truncationMode(.middle)
+                            .minimumScaleFactor(0.8)
                             .help("Currently selected output folder")
 #else
                         Text(outputPath.isEmpty ? "No folder selected" : outputPath)
                             .font(textFont)
                             .lineLimit(1)
                             .truncationMode(.middle)
+                            .minimumScaleFactor(0.8)
                             .help("Currently selected output folder")
 #endif
                         Button(action: {
@@ -184,7 +185,7 @@ struct ConfigurationSection: View {
                             }
                         }) {
                             Image(systemName: "folder")
-                                .font(.system(size: isCompact ? 14 : 16))
+                                .font(.system(size: isCompact ? 12 : 16))
                                 .foregroundColor(.blue)
                         }
                         .buttonStyle(.borderless)
@@ -193,22 +194,25 @@ struct ConfigurationSection: View {
                     }
                 }
             } else {
-                HStack(spacing: isCompact ? 8 : 16) {
+                HStack(spacing: isCompact ? 2 : 8) {
                     Text("Output Folder:")
                         .font(labelFont)
                         .foregroundColor(.secondary)
                         .help("Select the folder where generated images will be saved")
+                        .fixedSize()
 #if os(iOS)
                     Text(outputPath.isEmpty ? "No folder selected" : URL(fileURLWithPath: outputPath).lastPathComponent)
                         .font(textFont)
                         .lineLimit(1)
                         .truncationMode(.middle)
+                        .minimumScaleFactor(0.8)
                         .help("Currently selected output folder")
 #else
                     Text(outputPath.isEmpty ? "No folder selected" : outputPath)
                         .font(textFont)
                         .lineLimit(1)
                         .truncationMode(.middle)
+                        .minimumScaleFactor(0.8)
                         .help("Currently selected output folder")
 #endif
                     Button(action: {
@@ -218,7 +222,7 @@ struct ConfigurationSection: View {
                         }
                     }) {
                         Image(systemName: "folder")
-                            .font(.system(size: isCompact ? 14 : 16))
+                            .font(.system(size: isCompact ? 12 : 16))
                             .foregroundColor(.blue)
                     }
                     .buttonStyle(.borderless)
@@ -228,26 +232,29 @@ struct ConfigurationSection: View {
             }
         }
         .padding(.top, isCompact ? 4 : 8)
-        .frame(maxWidth: .infinity, alignment: .leading)  // Left-align output folder row
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
     
     @ViewBuilder
     private var geminiConfiguration: some View {
-        VStack(alignment: .leading, spacing: isCompact ? 12 : 16) {  // Align to left
+        VStack(alignment: .leading, spacing: isCompact ? 4 : 10) {
             geminiApiKeyRow
             Text("Using base64 for inline image data.")
                 .font(.caption)
                 .foregroundColor(.secondary)
+                .minimumScaleFactor(0.8)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
     
     @ViewBuilder
     private var geminiApiKeyRow: some View {
-        HStack(spacing: isCompact ? 8 : 16) {
+        HStack(spacing: 0) {
             Text("API Key:")
                 .font(labelFont)
                 .foregroundColor(.secondary)
                 .help("Enter your API key here")
+                .fixedSize()
             Group {
                 if showApiKey {
                     TextField("Enter or paste API key", text: $appState.settings.apiKey)
@@ -269,6 +276,8 @@ struct ConfigurationSection: View {
             .cornerRadius(8)
             .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.4), lineWidth: 1))
             .autocorrectionDisabled()
+            .frame(width: isCompact ? 100 : 220)
+            .minimumScaleFactor(0.8)
             .accessibilityLabel("API key input")
             
             Toggle(isOn: $showApiKey) {
@@ -283,7 +292,7 @@ struct ConfigurationSection: View {
                 pasteToApiKey()
             }) {
                 Image(systemName: "doc.on.clipboard")
-                    .font(.system(size: isCompact ? 14 : 16))
+                    .font(.system(size: isCompact ? 12 : 16))
                     .foregroundColor(.blue)
             }
             .buttonStyle(.borderless)
@@ -294,7 +303,7 @@ struct ConfigurationSection: View {
                 testApiKey()
             }) {
                 Image(systemName: "checkmark.circle")
-                    .font(.system(size: isCompact ? 14 : 16))
+                    .font(.system(size: isCompact ? 12 : 16))
                     .foregroundColor(.blue)
             }
             .buttonStyle(.borderless)
@@ -302,32 +311,35 @@ struct ConfigurationSection: View {
             .help("Test the entered API key")
             .accessibilityLabel("Test API key")
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
     
     @ViewBuilder
     private var grokConfiguration: some View {
-        VStack(alignment: .leading, spacing: isCompact ? 12 : 16) {  // Align to left
+        VStack(alignment: .leading, spacing: isCompact ? 4 : 10) {
             grokApiKeyRow
             grokModelRow
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
     
     @ViewBuilder
     private var grokApiKeyRow: some View {
-        HStack(spacing: isCompact ? 8 : 16) {
+        HStack(spacing: 0) {
             Text("Grok API Key:")
                 .font(labelFont)
                 .foregroundColor(.secondary)
                 .help("Enter your Grok API key here")
+                .fixedSize()
             Group {
                 if showGrokApiKey {
-                    TextField("Enter or paste Grok API key", text: $appState.settings.grokApiKey)
+                    TextField("Enter or paste API key", text: $appState.settings.grokApiKey)
                         .onChange(of: appState.settings.grokApiKey) { newValue in
                             handleGrokAPIKeyChange(newValue)
                         }
                         .help("Visible Grok API key input")
                 } else {
-                    SecureField("Enter or paste Grok API key", text: $appState.settings.grokApiKey)
+                    SecureField("Enter or paste API key", text: $appState.settings.grokApiKey)
                         .onChange(of: appState.settings.grokApiKey) { newValue in
                             handleGrokAPIKeyChange(newValue)
                         }
@@ -340,6 +352,8 @@ struct ConfigurationSection: View {
             .cornerRadius(8)
             .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.4), lineWidth: 1))
             .autocorrectionDisabled()
+            .frame(width: isCompact ? 100 : 220)
+            .minimumScaleFactor(0.8)
             .accessibilityLabel("Grok API key input")
             
             Toggle(isOn: $showGrokApiKey) {
@@ -354,7 +368,7 @@ struct ConfigurationSection: View {
                 pasteToGrokApiKey()
             }) {
                 Image(systemName: "doc.on.clipboard")
-                    .font(.system(size: isCompact ? 14 : 16))
+                    .font(.system(size: isCompact ? 12 : 16))
                     .foregroundColor(.blue)
             }
             .buttonStyle(.borderless)
@@ -365,7 +379,7 @@ struct ConfigurationSection: View {
                 testGrokApiKey()
             }) {
                 Image(systemName: "checkmark.circle")
-                    .font(.system(size: isCompact ? 14 : 16))
+                    .font(.system(size: isCompact ? 12 : 16))
                     .foregroundColor(.blue)
             }
             .buttonStyle(.borderless)
@@ -373,16 +387,17 @@ struct ConfigurationSection: View {
             .help("Test the entered Grok API key")
             .accessibilityLabel("Test Grok API key")
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
     
     @ViewBuilder
     private var grokModelRow: some View {
-        HStack(spacing: isCompact ? 8 : 16) {
+        HStack(spacing: 0) {
             Text("Model:")
                 .font(labelFont)
                 .foregroundColor(.secondary)
                 .help("Select the Grok model")
-                .fixedSize() // Prevents label wrapping
+                .fixedSize()
             Picker("", selection: $appState.settings.selectedGrokModel) {
                 Text("grok-2-image-1212")
                     .font(textFont)
@@ -392,15 +407,17 @@ struct ConfigurationSection: View {
                     .tag("grok-2-image-1212")
             }
             .pickerStyle(.menu)
-            .frame(width: 200) // Maintains wider picker
+            .frame(width: isCompact ? 200 : 250)
+            .minimumScaleFactor(0.8)
             .help("Choose the Grok model for generation")
             .accessibilityLabel("Grok model selector")
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
     
     @ViewBuilder
     private var aimlConfiguration: some View {
-        VStack(alignment: .leading, spacing: isCompact ? 12 : 16) {
+        VStack(alignment: .leading, spacing: isCompact ? 4 : 10) {
             aimlApiKeyRow
             if allowsImgBB {
                 aimlImgBBApiKeyRow
@@ -416,17 +433,21 @@ struct ConfigurationSection: View {
             }
             .disabled(appState.currentAIMLModel == nil)
             .help("Configure model-specific parameters")
+            .font(.system(size: isCompact ? 12 : 14))
             
             if appState.preferImgBBForImages {
                 Text("Using ImgBB for image uploads (public URLs).")
                     .font(.caption)
                     .foregroundColor(.secondary)
+                    .minimumScaleFactor(0.8)
             } else if let model = appState.currentAIMLModel, model.isI2I {
                 Text("Using base64 for images; add ImgBB key for public URLs (recommended for large images).")
                     .font(.caption)
                     .foregroundColor(.orange)
+                    .minimumScaleFactor(0.8)
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
     
     private var allowsImgBB: Bool {
@@ -459,99 +480,108 @@ struct ConfigurationSection: View {
     
     @ViewBuilder
     private var aimlApiKeyRow: some View {
-        HStack(spacing: isCompact ? 8 : 16) {
-            Text("AI/ML API Key:")
-                .font(labelFont)
-                .foregroundColor(.secondary)
-                .help("Enter your aimlapi.com API key")
-            Group {
-                if showAIMLApiKey {
-                    TextField("Enter or paste AI/ML API key", text: $appState.settings.aimlapiKey)
-                        .onChange(of: appState.settings.aimlapiKey) { newValue in
-                            handleAIMLAPIKeyChange(newValue)
-                            if !newValue.isEmpty {
-                                fetchAvailableModels()
+        VStack(alignment: .leading, spacing: isCompact ? 2 : 4) {
+            HStack(spacing: 0) {
+                Text("AI/ML API Key:")
+                    .font(labelFont)
+                    .foregroundColor(.secondary)
+                    .help("Enter your aimlapi.com API key")
+                    .fixedSize()
+                Group {
+                    if showAIMLApiKey {
+                        TextField("Enter or paste API key", text: $appState.settings.aimlapiKey)
+                            .onChange(of: appState.settings.aimlapiKey) { newValue in
+                                handleAIMLAPIKeyChange(newValue)
+                                if !newValue.isEmpty {
+                                    fetchAvailableModels()
+                                }
                             }
-                        }
-                        .help("Visible AI/ML API key input")
-                } else {
-                    SecureField("Enter or paste AI/ML API key", text: $appState.settings.aimlapiKey)
-                        .onChange(of: appState.settings.aimlapiKey) { newValue in
-                            handleAIMLAPIKeyChange(newValue)
-                            if !newValue.isEmpty {
-                                fetchAvailableModels()
+                            .help("Visible AI/ML API key input")
+                    } else {
+                        SecureField("Enter or paste API key", text: $appState.settings.aimlapiKey)
+                            .onChange(of: appState.settings.aimlapiKey) { newValue in
+                                handleAIMLAPIKeyChange(newValue)
+                                if !newValue.isEmpty {
+                                    fetchAvailableModels()
+                                }
                             }
-                        }
-                        .help("Hidden AI/ML API key input")
+                            .help("Hidden AI/ML API key input")
+                    }
                 }
+                .textFieldStyle(.roundedBorder)
+                .font(textFont)
+                .background(Color.black.opacity(0.1))
+                .cornerRadius(8)
+                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.4), lineWidth: 1))
+                .autocorrectionDisabled()
+                .frame(width: isCompact ? 100 : 220)
+                .minimumScaleFactor(0.8)
+                .accessibilityLabel("AI/ML API key input")
+                
+                Toggle(isOn: $showAIMLApiKey) {
+                    Image(systemName: showAIMLApiKey ? "eye.slash" : "eye")
+                        .symbolRenderingMode(.hierarchical)
+                }
+                .toggleStyle(.button)
+                .help("Toggle AI/ML API Key Visibility")
+                .accessibilityLabel("Toggle AI/ML API key visibility")
+                
+                Button(action: {
+                    pasteToAIMLApiKey()
+                }) {
+                    Image(systemName: "doc.on.clipboard")
+                        .font(.system(size: isCompact ? 12 : 16))
+                        .foregroundColor(.blue)
+                }
+                .buttonStyle(.borderless)
+                .help("Paste AI/ML API key from clipboard")
+                .accessibilityLabel("Paste AI/ML API key")
+                
+                Button(action: {
+                    testAIMLApiKey()
+                }) {
+                    Image(systemName: "checkmark.circle")
+                        .font(.system(size: isCompact ? 12 : 16))
+                        .foregroundColor(.blue)
+                }
+                .buttonStyle(.borderless)
+                .disabled(appState.settings.aimlapiKey.isEmpty || isTestingApi)
+                .help("Test the entered AI/ML API key")
+                .accessibilityLabel("Test AI/ML API key")
             }
-            .textFieldStyle(.roundedBorder)
-            .font(textFont)
-            .background(Color.black.opacity(0.1))
-            .cornerRadius(8)
-            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.4), lineWidth: 1))
-            .autocorrectionDisabled()
-            .accessibilityLabel("AI/ML API key input")
-            
-            Toggle(isOn: $showAIMLApiKey) {
-                Image(systemName: showAIMLApiKey ? "eye.slash" : "eye")
-                    .symbolRenderingMode(.hierarchical)
+            HStack(spacing: 0) {
+                Button(action: {
+                    fetchAvailableModels()
+                }) {
+                    Text(isFetchingModels ? "Fetching..." : "Fetch")
+                        .font(.system(size: isCompact ? 10 : 14))
+                }
+                .buttonStyle(.bordered)
+                .disabled(appState.settings.aimlapiKey.isEmpty || isFetchingModels)
+                .help("Fetch available image models from AI/ML API")
+                .accessibilityLabel("Fetch models")
             }
-            .toggleStyle(.button)
-            .help("Toggle AI/ML API Key Visibility")
-            .accessibilityLabel("Toggle AI/ML API key visibility")
-            
-            Button(action: {
-                pasteToAIMLApiKey()
-            }) {
-                Image(systemName: "doc.on.clipboard")
-                    .font(.system(size: isCompact ? 14 : 16))
-                    .foregroundColor(.blue)
-            }
-            .buttonStyle(.borderless)
-            .help("Paste AI/ML API key from clipboard")
-            .accessibilityLabel("Paste AI/ML API key")
-            
-            Button(action: {
-                testAIMLApiKey()
-            }) {
-                Image(systemName: "checkmark.circle")
-                    .font(.system(size: isCompact ? 14 : 16))
-                    .foregroundColor(.blue)
-            }
-            .buttonStyle(.borderless)
-            .disabled(appState.settings.aimlapiKey.isEmpty || isTestingApi)
-            .help("Test the entered AI/ML API key")
-            .accessibilityLabel("Test AI/ML API key")
-            
-            Button(action: {
-                fetchAvailableModels()
-            }) {
-                Text(isFetchingModels ? "Fetching..." : "Fetch Models")
-                    .font(.system(size: isCompact ? 12 : 14))
-            }
-            .buttonStyle(.bordered)
-            .disabled(appState.settings.aimlapiKey.isEmpty || isFetchingModels)
-            .help("Fetch available image models from AI/ML API")
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
     
     @ViewBuilder
     private var aimlImgBBApiKeyRow: some View {
-        HStack(spacing: isCompact ? 8 : 16) {
+        HStack(spacing: isCompact ? 2 : 8) {
             Text("ImgBB API Key:")
                 .font(labelFont)
                 .foregroundColor(.secondary)
                 .help("Enter your ImgBB API key for image uploads (required for some models, enables public URLs for all i2i)")
+                .fixedSize()
             Group {
                 if showImgBBApiKey {
-                    TextField("Enter or paste ImgBB API key", text: $appState.settings.imgbbApiKey)
+                    TextField("Enter or paste API key", text: $appState.settings.imgbbApiKey)
                         .onChange(of: appState.settings.imgbbApiKey) { newValue in
                             handleImgBBAPIKeyChange(newValue)
                         }
                         .help("Visible ImgBB API key input")
                 } else {
-                    SecureField("Enter or paste ImgBB API key", text: $appState.settings.imgbbApiKey)
+                    SecureField("Enter or paste API key", text: $appState.settings.imgbbApiKey)
                         .onChange(of: appState.settings.imgbbApiKey) { newValue in
                             handleImgBBAPIKeyChange(newValue)
                         }
@@ -564,6 +594,8 @@ struct ConfigurationSection: View {
             .cornerRadius(8)
             .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.4), lineWidth: 1))
             .autocorrectionDisabled()
+            .frame(width: isCompact ? 100 : 220)
+            .minimumScaleFactor(0.8)
             .accessibilityLabel("ImgBB API key input")
             
             Toggle(isOn: $showImgBBApiKey) {
@@ -578,7 +610,7 @@ struct ConfigurationSection: View {
                 pasteToImgBBApiKey()
             }) {
                 Image(systemName: "doc.on.clipboard")
-                    .font(.system(size: isCompact ? 14 : 16))
+                    .font(.system(size: isCompact ? 12 : 16))
                     .foregroundColor(.blue)
             }
             .buttonStyle(.borderless)
@@ -589,7 +621,7 @@ struct ConfigurationSection: View {
     
     @ViewBuilder
     private var aimlModelRow: some View {
-        HStack(spacing: isCompact ? 8 : 16) {
+        HStack(spacing: isCompact ? 2 : 8) {
             Text("Model:")
                 .font(labelFont)
                 .foregroundColor(.secondary)
@@ -597,17 +629,22 @@ struct ConfigurationSection: View {
                 .fixedSize()
             if availableModels.isEmpty {
                 Text("No models fetched")
+                    .font(textFont)
                     .foregroundColor(.gray)
+                    .minimumScaleFactor(0.8)
             } else {
                 Picker("", selection: $appState.settings.selectedAIMLModel) {
                     ForEach(availableModels, id: \.self) { model in
                         Text(model)
                             .font(textFont)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
                             .tag(model)
                     }
                 }
                 .pickerStyle(.menu)
-                .frame(width: 300)  // Wider for long IDs
+                .frame(width: isCompact ? 120 : 300)
+                .minimumScaleFactor(0.8)
                 .help("Available t2i/i2i models from AI/ML API")
                 .accessibilityLabel("AI/ML model selector")
             }
@@ -616,7 +653,7 @@ struct ConfigurationSection: View {
     
     @ViewBuilder
     private var aimlImageSizeRow: some View {
-        HStack(spacing: isCompact ? 8 : 16) {
+        HStack(spacing: isCompact ? 2 : 8) {
             Text("Image Size:")
                 .font(labelFont)
                 .foregroundColor(.secondary)
@@ -631,7 +668,9 @@ struct ConfigurationSection: View {
                 Text("Landscape 16:9").tag("landscape_16_9")
             }
             .pickerStyle(.menu)
-            .frame(width: 200)
+            .font(pickerFont)
+            .frame(width: isCompact ? 120 : 200)
+            .minimumScaleFactor(0.8)
             .help("Choose the size; model-dependent")
             .accessibilityLabel("Image size selector")
         }
@@ -639,7 +678,7 @@ struct ConfigurationSection: View {
     
     @ViewBuilder
     private var aimlResolutionRow: some View {
-        HStack(spacing: isCompact ? 8 : 16) {
+        HStack(spacing: isCompact ? 2 : 8) {
             Text("Resolution:")
                 .font(labelFont)
                 .foregroundColor(.secondary)
@@ -647,11 +686,17 @@ struct ConfigurationSection: View {
                 .fixedSize()
             Picker("", selection: $appState.settings.selectedResolutionString) {
                 ForEach(filteredResolutions, id: \.value) { res in
-                    Text(res.label).tag(res.value)
+                    Text(res.label)
+                        .font(pickerFont)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .minimumScaleFactor(0.7)
+                        .tag(res.value)
                 }
             }
             .pickerStyle(.menu)
-            .frame(width: 300)  // Increased width to accommodate longer labels
+            .frame(width: isCompact ? 150 : 300)
+            .minimumScaleFactor(0.7)
             .help("Choose resolution; model-dependent, multiples of 32")
             .accessibilityLabel("Resolution selector")
             .onChange(of: appState.settings.selectedResolutionString) { newValue in
@@ -671,28 +716,28 @@ struct ConfigurationSection: View {
             }
         }
     }
- 
+    
     private var filteredResolutions: [(label: String, value: String)] {
-        let allResolutions: [(label: String, value: String)] = [
-            ("512 x 512", "512x512"),
-            ("1024 x 1024", "1024x1024"),
-            ("2048 x 2048", "2048x2048"),
-            ("1024 x 768 (Landscape 4:3)", "1024x768"),
-            ("768 x 1024 (Portrait 4:3)", "768x1024"),
-            ("1024 x 576 (Landscape 16:9)", "1024x576"),
-            ("576 x 1024 (Portrait 16:9)", "576x1024"),
-            ("1536 x 864 (Landscape 16:9 HD)", "1536x864"),
-            ("1920 x 1088 (Full HD Landscape 16:9)", "1920x1088"),
-            ("1088 x 1920 (Full HD Portrait 16:9)", "1088x1920"),
-            ("3840 x 2176 (4K UHD Landscape 16:9)", "3840x2176"),
-            ("2176 x 3840 (4K UHD Portrait 16:9)", "2176x3840"),
-            ("4096 x 4096 (4K Square)", "4096x4096")
+        let allResolutions: [(label: String, compactLabel: String, value: String)] = [
+            ("512 x 512", "512x512", "512x512"),
+            ("1024 x 1024", "1024x1024", "1024x1024"),
+            ("2048 x 2048", "2048x2048", "2048x2048"),
+            ("1024 x 768 (Landscape 4:3)", "1024x768", "1024x768"),
+            ("768 x 1024 (Portrait 4:3)", "768x1024", "768x1024"),
+            ("1024 x 576 (Landscape 16:9)", "1024x576", "1024x576"),
+            ("576 x 1024 (Portrait 16:9)", "576x1024", "576x1024"),
+            ("1536 x 864 (Landscape 16:9 HD)", "1536x864", "1536x864"),
+            ("1920 x 1088 (Full HD Landscape 16:9)", "1920x1088", "1920x1088"),
+            ("1088 x 1920 (Full HD Portrait 16:9)", "1088x1920", "1088x1920"),
+            ("3840 x 2176 (4K UHD Landscape 16:9)", "3840x2176", "3840x2176"),
+            ("2176 x 3840 (4K UHD Portrait 16:9)", "2176x3840", "2176x3840"),
+            ("4096 x 4096 (4K Square)", "4096x4096", "4096x4096")
         ]
         
         guard let model = appState.currentAIMLModel,
               let maxW = model.maxWidth,
               let maxH = model.maxHeight else {
-            return allResolutions  // Show all if no limits
+            return allResolutions.map { (label: isCompact ? $0.compactLabel : $0.label, value: $0.value) }
         }
         
         return allResolutions.filter { res in
@@ -703,19 +748,19 @@ struct ConfigurationSection: View {
                 return w <= maxW && h <= maxH
             }
             return false
-        }
+        }.map { (label: isCompact ? $0.compactLabel : $0.label, value: $0.value) }
     }
+    
     @ViewBuilder
     private var comfyUIConfiguration: some View {
         ZStack {
-            VStack(alignment: .leading, spacing: isCompact ? 12 : 16) {  // Align to left
+            VStack(alignment: .leading, spacing: isCompact ? 4 : 10) {
                 comfyServerURLRow
                 comfyWorkflowRow
                 if !appState.generation.promptNodes.isEmpty {
                     comfyPromptNodeRow
                 }
                 if !appState.generation.imageNodes.isEmpty {
-                    // New: Checkbox list for multiple image nodes
                     Section(header: Text("Input Image Nodes")
                         .font(labelFont)
                         .foregroundColor(.secondary)
@@ -732,12 +777,16 @@ struct ConfigurationSection: View {
                                 }
                             ))
                             .font(textFont)
+                            .minimumScaleFactor(0.8)
                             .help("Toggle to enable this node for image input")
                         }
                     }
                 }
                 if !appState.generation.outputNodes.isEmpty {
                     comfyOutputNodeRow
+                }
+                if !appState.generation.outputNodes.isEmpty {
+                    comfyBatchSizeRow
                 }
             }
             
@@ -758,90 +807,56 @@ struct ConfigurationSection: View {
             }
         }
     }
+    
     @ViewBuilder
     private var comfyServerURLRow: some View {
-        if isCompact {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Server URL:")
-                    .font(labelFont)
-                    .foregroundColor(.secondary)
-                    .help("Enter the URL of your ComfyUI server")
-                TextField("e.g., http://localhost:8188", text: $appState.settings.comfyServerURL)
-                    .textFieldStyle(.roundedBorder)
-                    .font(textFont)
-                    .background(Color.black.opacity(0.1))
-                    .cornerRadius(8)
-                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.4), lineWidth: 1))
-                    .autocorrectionDisabled()
-                    .frame(maxWidth: .infinity)
-                    .help("Server URL, e.g., http://localhost:8188")
-                    .accessibilityLabel("ComfyUI server URL")
+        HStack(spacing: isCompact ? 2 : 8) {
+            Text("Server URL:")
+                .font(labelFont)
+                .foregroundColor(.secondary)
+                .help("Enter the URL of your ComfyUI server")
+                .fixedSize()
+            TextField("e.g., http://localhost:8188", text: $appState.settings.comfyServerURL)
+                .textFieldStyle(.roundedBorder)
+                .font(textFont)
+                .background(Color.black.opacity(0.1))
+                .cornerRadius(8)
+                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.4), lineWidth: 1))
+                .autocorrectionDisabled()
+                .frame(width: isCompact ? 100 : 220)
+                .minimumScaleFactor(0.8)
+                .help("Server URL, e.g., http://localhost:8188")
+                .accessibilityLabel("ComfyUI server URL")
+            Button(action: {
+                testServer()
+            }) {
+                Image(systemName: isTestingServer ? "arrow.clockwise.circle" : "checkmark.circle")
+                    .font(.system(size: isCompact ? 12 : 16))
+                    .foregroundColor(.blue)
             }
-            HStack {
-                Spacer()
-                Button(action: {
-                    testServer()
-                }) {
-                    Image(systemName: isTestingServer ? "arrow.clockwise.circle" : "checkmark.circle")
-                        .font(.system(size: isCompact ? 14 : 16))
-                        .foregroundColor(.blue)
-                }
-                .buttonStyle(.borderless)
-                .disabled(isTestingServer || appState.settings.comfyServerURL.isEmpty)
-                .help("Check if the ComfyUI server is available")
-                .accessibilityLabel("Test server connection")
-            }
-        } else {
-            HStack(spacing: isCompact ? 8 : 16) {
-                Text("Server URL:")
-                    .font(labelFont)
-                    .foregroundColor(.secondary)
-                    .help("Enter the URL of your ComfyUI server")
-                TextField("e.g., http://localhost:8188", text: $appState.settings.comfyServerURL)
-                    .textFieldStyle(.roundedBorder)
-                    .font(textFont)
-                    .background(Color.black.opacity(0.1))
-                    .cornerRadius(8)
-                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.4), lineWidth: 1))
-                    .autocorrectionDisabled()
-                    .frame(width: isCompact ? 200 : 250)  // Decreased length to roughly fit http:// with IP and port
-                    .help("Server URL, e.g., http://localhost:8188")
-                    .accessibilityLabel("ComfyUI server URL")
-                Button(action: {
-                    testServer()
-                }) {
-                    Image(systemName: isTestingServer ? "arrow.clockwise.circle" : "checkmark.circle")
-                        .font(.system(size: isCompact ? 14 : 16))
-                        .foregroundColor(.blue)
-                }
-                .buttonStyle(.borderless)
-                .disabled(isTestingServer || appState.settings.comfyServerURL.isEmpty)
-                .help("Check if the ComfyUI server is available")
-                .accessibilityLabel("Test server connection")
-            }
+            .buttonStyle(.borderless)
+            .disabled(isTestingServer || appState.settings.comfyServerURL.isEmpty)
+            .help("Check if the ComfyUI server is available")
+            .accessibilityLabel("Test server connection")
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
     
     @ViewBuilder
     private var comfyWorkflowRow: some View {
-        HStack(spacing: isCompact ? 8 : 16) {
-            Text("Workflow JSON or PNG:")
+        HStack(spacing: isCompact ? 2 : 8) {
+            Text("Workflow:")
                 .font(labelFont)
                 .foregroundColor(.secondary)
                 .help("Select a JSON or PNG file for the workflow")
-#if os(iOS)
+                .fixedSize()
             Text(appState.settings.comfyJSONPath.isEmpty ? "No file selected" : URL(fileURLWithPath: appState.settings.comfyJSONPath).lastPathComponent)
                 .font(textFont)
                 .lineLimit(1)
                 .truncationMode(.middle)
+                .frame(width: isCompact ? 100 : 200)
+                .minimumScaleFactor(0.8)
                 .help("Currently selected workflow file")
-#else
-            Text(appState.settings.comfyJSONPath.isEmpty ? "No file selected" : appState.settings.comfyJSONPath)
-                .font(textFont)
-                .lineLimit(1)
-                .truncationMode(.middle)
-                .help("Currently selected workflow file")
-#endif
             Button(action: {
                 print("Showing json file picker")
                 PlatformFilePicker.presentOpenPanel(allowedTypes: [.json, .png], allowsMultiple: false, canChooseDirectories: false) { result in
@@ -849,192 +864,104 @@ struct ConfigurationSection: View {
                 }
             }) {
                 Image(systemName: "doc")
-                    .font(.system(size: isCompact ? 14 : 16))
+                    .font(.system(size: isCompact ? 12 : 16))
                     .foregroundColor(.blue)
             }
             .buttonStyle(.borderless)
             .help("Browse to select a workflow JSON or PNG file")
             .accessibilityLabel("Browse workflow file")
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
     
     @ViewBuilder
     private var comfyPromptNodeRow: some View {
-        if isCompact {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Prompt Node:")
-                    .font(labelFont)
-                    .foregroundColor(.secondary)
-                    .help("Select the prompt node from the workflow")
-                HStack(spacing: isCompact ? 4 : 8) {
-                    Picker("", selection: $appState.generation.comfyPromptNodeID) {
-                        ForEach(appState.generation.promptNodes) { node in
-                            Text(node.label)
-                                .font(pickerFont)
-                                .lineLimit(1)
-                                .truncationMode(.tail)
-                                .tag(node.id)
-                        }
-                    }
-                    .pickerStyle(.menu)
-                    .frame(maxWidth: .infinity)
-                    .help("Choose the prompt node")
-                    .accessibilityLabel("Prompt node selector")
-                    
-                    Button(action: {
-                        if let selectedNode = appState.generation.promptNodes.first(where: { $0.id == appState.generation.comfyPromptNodeID }) {
-                            copyToClipboard(selectedNode.promptText ?? "")
-                            withAnimation {
-                                showCopiedMessage = true
-                            }
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                                withAnimation {
-                                    showCopiedMessage = false
-                                }
-                            }
-                        }
-                    }) {
-                        Image(systemName: "doc.on.doc")
-                            .symbolRenderingMode(.hierarchical)
-                    }
-                    .buttonStyle(.plain)
-                    .help("Copy prompt text to clipboard")
-                    .accessibilityLabel("Copy prompt text")
+        HStack(spacing: isCompact ? 2 : 8) {
+            Text("Prompt Node:")
+                .font(labelFont)
+                .foregroundColor(.secondary)
+                .help("Select the prompt node from the workflow")
+                .fixedSize()
+            Picker("", selection: $appState.generation.comfyPromptNodeID) {
+                ForEach(appState.generation.promptNodes) { node in
+                    Text(node.label)
+                        .font(pickerFont)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .tag(node.id)
                 }
             }
-        } else {
-            HStack(alignment: .center, spacing: isCompact ? 4 : 8) {  // HStack for label + picker side-by-side
-                Text("Prompt Node:")
-                    .font(labelFont)
-                    .foregroundColor(.secondary)
-                    .help("Select the prompt node from the workflow")
-                Picker("", selection: $appState.generation.comfyPromptNodeID) {
-                    ForEach(appState.generation.promptNodes) { node in
-                        Text(node.label)
-                            .font(pickerFont)
-                            .lineLimit(1)
-                            .truncationMode(.tail)
-                            .tag(node.id)
+            .pickerStyle(.menu)
+            .frame(width: isCompact ? 100 : 200)
+            .minimumScaleFactor(0.8)
+            .help("Choose the prompt node")
+            .accessibilityLabel("Prompt node selector")
+            Button(action: {
+                if let selectedNode = appState.generation.promptNodes.first(where: { $0.id == appState.generation.comfyPromptNodeID }) {
+                    copyToClipboard(selectedNode.promptText ?? "")
+                    withAnimation {
+                        showCopiedMessage = true
                     }
-                }
-                .pickerStyle(.menu)
-                .frame(maxWidth: isCompact ? 150 : .infinity)
-                .help("Choose the prompt node")
-                .accessibilityLabel("Prompt node selector")
-                
-                Button(action: {
-                    if let selectedNode = appState.generation.promptNodes.first(where: { $0.id == appState.generation.comfyPromptNodeID }) {
-                        copyToClipboard(selectedNode.promptText ?? "")
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
                         withAnimation {
-                            showCopiedMessage = true
-                        }
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                            withAnimation {
-                                showCopiedMessage = false
-                            }
+                            showCopiedMessage = false
                         }
                     }
-                }) {
-                    Image(systemName: "doc.on.doc")
-                        .symbolRenderingMode(.hierarchical)
                 }
-                .buttonStyle(.plain)
-                .help("Copy prompt text to clipboard")
-                .accessibilityLabel("Copy prompt text")
+            }) {
+                Image(systemName: "doc.on.doc")
+                    .font(.system(size: isCompact ? 12 : 16))
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundColor(.blue)
             }
+            .buttonStyle(.plain)
+            .help("Copy prompt text to clipboard")
+            .accessibilityLabel("Copy prompt text")
         }
-    }
-    
-    @ViewBuilder
-    private var comfyImageNodeRow: some View {
-        if isCompact {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Image Node:")
-                    .font(labelFont)
-                    .foregroundColor(.secondary)
-                    .help("Select the image node from the workflow")
-                Picker("", selection: $appState.generation.comfyImageNodeID) {
-                    ForEach(appState.generation.imageNodes) { node in
-                        Text(node.label)
-                            .font(pickerFont)
-                            .lineLimit(1)
-                            .truncationMode(.tail)
-                            .tag(node.id)
-                    }
-                }
-                .pickerStyle(.menu)
-                .frame(maxWidth: .infinity)
-                .help("Choose the image node")
-                .accessibilityLabel("Image node selector")
-            }
-        } else {
-            HStack(alignment: .center, spacing: isCompact ? 4 : 8) {  // HStack for label + picker side-by-side
-                Text("Image Node:")
-                    .font(labelFont)
-                    .foregroundColor(.secondary)
-                    .help("Select the image node from the workflow")
-                Picker("", selection: $appState.generation.comfyImageNodeID) {
-                    ForEach(appState.generation.imageNodes) { node in
-                        Text(node.label)
-                            .font(pickerFont)
-                            .lineLimit(1)
-                            .truncationMode(.tail)
-                            .tag(node.id)
-                    }
-                }
-                .pickerStyle(.menu)
-                .frame(maxWidth: isCompact ? 150 : .infinity)
-                .help("Choose the image node")
-                .accessibilityLabel("Image node selector")
-            }
-        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
     
     @ViewBuilder
     private var comfyOutputNodeRow: some View {
-        if isCompact {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Output Node:")
-                    .font(labelFont)
-                    .foregroundColor(.secondary)
-                    .help("Select the output node from the workflow")
-                Picker("", selection: $appState.generation.comfyOutputNodeID) {
-                    ForEach(appState.generation.outputNodes) { node in
-                        Text(node.label)
-                            .font(pickerFont)
-                            .lineLimit(1)
-                            .truncationMode(.tail)
-                            .tag(node.id)
-                    }
+        HStack(spacing: isCompact ? 2 : 8) {
+            Text("Output Node:")
+                .font(labelFont)
+                .foregroundColor(.secondary)
+                .help("Select the output node from the workflow")
+                .fixedSize()
+            Picker("", selection: $appState.generation.comfyOutputNodeID) {
+                ForEach(appState.generation.outputNodes) { node in
+                    Text(node.label)
+                        .font(pickerFont)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .tag(node.id)
                 }
-                .pickerStyle(.menu)
-                .frame(maxWidth: .infinity)
-                .help("Choose the output node")
-                .accessibilityLabel("Output node selector")
             }
-        } else {
-            HStack(alignment: .center, spacing: isCompact ? 4 : 8) {  // HStack for label + picker side-by-side
-                Text("Output Node:")
-                    .font(labelFont)
-                    .foregroundColor(.secondary)
-                    .help("Select the output node from the workflow")
-                Picker("", selection: $appState.generation.comfyOutputNodeID) {
-                    ForEach(appState.generation.outputNodes) { node in
-                        Text(node.label)
-                            .font(pickerFont)
-                            .lineLimit(1)
-                            .truncationMode(.tail)
-                            .tag(node.id)
-                    }
-                }
-                .pickerStyle(.menu)
-                .frame(maxWidth: isCompact ? 150 : .infinity)
-                .help("Choose the output node")
-                .accessibilityLabel("Output node selector")
-            }
+            .pickerStyle(.menu)
+            .frame(width: isCompact ? 100 : 200)
+            .minimumScaleFactor(0.8)
+            .help("Choose the output node")
+            .accessibilityLabel("Output node selector")
         }
-        Stepper("Batch Size: \(appState.settings.comfyBatchSize)", value: $appState.settings.comfyBatchSize, in: 1...32)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+    
+    @ViewBuilder
+    private var comfyBatchSizeRow: some View {
+        HStack(spacing: isCompact ? 2 : 8) {
+            Text("Batch Size:")
+                .font(labelFont)
+                .foregroundColor(.secondary)
+                .help("Number of images to generate in one run")
+                .fixedSize()
+            Stepper("\(appState.settings.comfyBatchSize)", value: $appState.settings.comfyBatchSize, in: 1...32)
+                .font(textFont)
+                .minimumScaleFactor(0.8)
                 .help("Number of images to generate in one run (uses random seeds for variation)")
+                .accessibilityLabel("Batch size stepper")
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
     
     private func testApiKey() {
@@ -1230,7 +1157,7 @@ struct ConfigurationSection: View {
             defer { isTestingApi = false }
             
             let baseURL = "https://api.aimlapi.com/v1/models"
-            guard let url = URL(string: "\(baseURL)/models") else {  // Test endpoint (lists models)
+            guard let url = URL(string: "\(baseURL)/models") else {
                 errorItem = AlertError(message: "Invalid URL", fullMessage: nil)
                 return
             }
@@ -1255,7 +1182,6 @@ struct ConfigurationSection: View {
         }
     }
     
-    // New: Handle ImgBB API key change
     private func handleImgBBAPIKeyChange(_ newValue: String) {
         if newValue.isEmpty {
             KeychainHelper.deleteImgBBAPIKey()
@@ -1266,7 +1192,6 @@ struct ConfigurationSection: View {
         }
     }
     
-    // New: Paste to ImgBB API key
     private func pasteToImgBBApiKey() {
         var pastedText: String? = nil
 #if os(macOS)
@@ -1280,8 +1205,8 @@ struct ConfigurationSection: View {
             appState.settings.imgbbApiKey = text
         }
     }
+    
     private func fetchAvailableModels() {
-        // Existing... but filter with ModelRegistry if needed
         guard !appState.settings.aimlapiKey.isEmpty else {
             errorItem = AlertError(message: "Enter API key first", fullMessage: nil)
             return
@@ -1306,7 +1231,6 @@ struct ConfigurationSection: View {
                 let (data, _) = try await URLSession.shared.data(for: request)
                 let response = try JSONDecoder().decode(AIMLModelsResponse.self, from: data)
                 
-                // Filter for image models (adjust keywords)
                 let imageModels = response.data.filter { entry in
                     let lowerID = entry.id.lowercased()
                     return !lowerID.contains("video") && (
@@ -1333,7 +1257,7 @@ struct ConfigurationSection: View {
         }
     }
 }
- 
+
 extension View {
     func errorAlert(errorItem: Binding<AlertError?>, detailedError: Binding<DetailedError?>) -> some View {
         alert(item: errorItem) { error in
@@ -1357,4 +1281,3 @@ extension View {
         .accessibilityLabel("Error Alert")
     }
 }
-
