@@ -421,7 +421,7 @@ struct LoadingView: View {
     var body: some View {
         VStack(spacing: 20) {
             AbstractBloomExpansionLoading()
-                .frame(width: 200, height: 200) // Adjust size to fit your UI
+                .frame(width: 200, height: 100) // Adjust size to fit your UI
 
             if mode == .comfyUI {
                 ProgressView(value: progress)

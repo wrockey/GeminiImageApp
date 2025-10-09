@@ -464,10 +464,4 @@ extension NSImage {
         return bitmap.representation(using: .png, properties: [:])
     }
 }
-#elseif os(iOS)
-extension UIImage {
-    func pngData() -> Data? {
-        return self.pngData()
-    }
-}
 #endif

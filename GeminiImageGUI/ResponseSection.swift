@@ -25,9 +25,6 @@ struct ResponseSection: View {
         .frame(minHeight: 250)
         .padding(16)
         .cornerRadius(16)
-        .onAppear() {
-            print("ResponseSection: outputPaths = \(appState.ui.outputPaths), currentOutputIndex = \(appState.ui.currentOutputIndex)")
-        }
         .onChange(of: appState.ui.outputImages) { _ in
             finalScale = 1.0
             imageScale = 1.0
@@ -257,24 +254,15 @@ struct ResponseSection: View {
                 let url = URL(fileURLWithPath: path!)
                 var exists = false
                 if let dir = appState.settings.outputDirectory {
-                    print("ResponseSection fileExists: Using security-scoped access for \(url.path)")
                     if dir.startAccessingSecurityScopedResource() {
                         exists = FileManager.default.fileExists(atPath: url.path)
                         dir.stopAccessingSecurityScopedResource()
-                        print("ResponseSection fileExists: File at \(url.path) exists: \(exists)")
-                    } else {
-                        print("ResponseSection fileExists: Failed to start security-scoped access")
                     }
                 } else {
                     exists = FileManager.default.fileExists(atPath: url.path)
-                    print("ResponseSection fileExists: File at \(url.path) exists: \(exists) (no security scope)")
                 }
                 return exists
-            } else {
-                print("ResponseSection fileExists: Path is empty")
             }
-        } else {
-            print("ResponseSection fileExists: No path at index \(index)")
         }
         return false
     }
