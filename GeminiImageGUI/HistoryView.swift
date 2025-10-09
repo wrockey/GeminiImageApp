@@ -1,8 +1,9 @@
+//HistoryView.swift
 import SwiftUI
 #if os(macOS)
 import AppKit
 #endif
- 
+
 struct HistoryView: View {
     @Binding var imageSlots: [ImageSlot]
     @EnvironmentObject var appState: AppState
@@ -28,16 +29,16 @@ struct HistoryView: View {
     @State private var activeEntry: HistoryEntry? = nil
     @State private var selectedIDs: Set<UUID> = []
     @Environment(\.dismiss) private var dismiss
-   
+    
     // New state for delete options
-   
+    
     private var dateFormatter: DateFormatter {
         let formatter = DateFormatter()
         formatter.dateStyle = .short
         formatter.timeStyle = .short
         return formatter
     }
-   
+    
     private var filteredHistory: [HistoryEntry] {
         let base = searchText.isEmpty ? appState.historyState.history : filterEntries(appState.historyState.history, with: searchText)
         #if os(macOS)
@@ -46,27 +47,27 @@ struct HistoryView: View {
         return base
         #endif
     }
-   
+    
     private var fileCount: Int {
         let items = entriesToDelete.flatMap { $0.allItems }
         print("fileCount: items = \(items.map { "\($0.id): \($0.imagePath ?? "nil")" })")
         return items.filter { $0.imagePath != nil }.count
     }
-   
+    
     private var existingFileCount: Int {
         let items = entriesToDelete.flatMap { $0.allItems }
         return items.filter { $0.fileExists(appState: appState) }.count
     }
-   
+    
     private var hasExistingFiles: Bool {
         existingFileCount > 0
     }
-   
+    
     private var deleteTitle: String {
         let itemCount = entriesToDelete.flatMap { $0.allItems }.count
         return itemCount == 1 ? "Delete Item" : "Delete \(itemCount) Items"
     }
-   
+    
     private var deleteMessage: String {
         var msg = "Are you sure you want to delete from history?"
         if fileCount > 0 {
@@ -77,7 +78,7 @@ struct HistoryView: View {
         }
         return msg
     }
-   
+    
     var body: some View {
         content
             #if os(iOS)
@@ -144,7 +145,7 @@ struct HistoryView: View {
             overlayContent
         }
     }
-   
+    
     private var overlayContent: some View {
         Group {
             #if os(iOS)
@@ -180,7 +181,7 @@ struct HistoryView: View {
             #endif
         }
     }
-   
+    
     private func hideToastAfterDelay() {
             DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
                 withAnimation(.easeOut(duration: 0.3)) {
@@ -394,7 +395,7 @@ struct HistoryView: View {
             }
             #endif
         }
-   
+    
     private var commonActions: some View {
             Group {
                 Button(action: {
@@ -520,7 +521,7 @@ struct HistoryView: View {
                 .help("Search history by prompt text or date")
                 .accessibilityLabel("Search prompts or dates")
         }
-   
+    
     private var historyList: some View {
             ScrollView {
                 LazyVStack(alignment: .leading) {
@@ -728,7 +729,7 @@ struct HistoryView: View {
             $isEditing
             #endif
         }
-   
+    
     // Helper to find the parent folder ID of an item
     private func findParentFolderId(for itemId: UUID, in entries: [HistoryEntry]) -> UUID? {
         for entry in entries {
@@ -743,7 +744,24 @@ struct HistoryView: View {
         }
         return nil // Item is in root if no parent folder is found
     }
-   
+    
+    private func parentFolders(for ids: Set<UUID>) -> Set<UUID?> {
+        var parents = Set<UUID?>()
+        for id in ids {
+            parents.insert(findParentFolderId(for: id, in: appState.historyState.history))
+        }
+        return parents
+    }
+    
+    private func getMoveDestinations(for ids: Set<UUID>) -> (showHome: Bool, folders: [HistoryState.FolderOption]) {
+        let parents = parentFolders(for: ids)
+        let hasCommonParent = parents.count == 1
+        let commonParentId = hasCommonParent ? parents.first! : nil
+        let showHome = !hasCommonParent || commonParentId != nil
+        let folders = (hasCommonParent && commonParentId != nil) ? appState.historyState.allFolders().filter { $0.id != commonParentId! } : appState.historyState.allFolders()
+        return (showHome, folders)
+    }
+    
     @ViewBuilder
     private func entryRow(for entry: HistoryEntry) -> some View {
         switch entry {
@@ -806,7 +824,7 @@ struct HistoryView: View {
             #endif
         }
     }
-   
+    
     private func itemRow(for item: HistoryItem) -> some View {
         let exists = item.fileExists(appState: appState)
         var creator: String? = nil
@@ -906,27 +924,24 @@ struct HistoryView: View {
                     .accessibilityLabel("Delete item")
                     #if os(macOS)
                     Menu("Move to...") {
-                        // Compute parent folder ID once
-                        let parentFolderId = findParentFolderId(for: item.id, in: appState.historyState.history)
-                        // Only show "Root" if the item is not in the root
-                        if parentFolderId != nil {
-                            Button("Root") {
+                        let (showHome, folders) = getMoveDestinations(for: Set([item.id]))
+                        if showHome {
+                            Button("Home") {
                                 let success = appState.historyState.moveToFolder(entriesWithIds: [item.id], toFolderId: nil, undoManager: undoManager)
                                 if success {
                                     selectedIDs.removeAll()
-                                    toastMessage = "Moved to root"
+                                    toastMessage = "Moved to home"
                                     showToast = true
                                     hideToastAfterDelay()
                                 } else {
-                                    toastMessage = "Failed to move to root"
+                                    toastMessage = "Failed to move to home"
                                     showToast = true
                                     hideToastAfterDelay()
                                 }
                             }
-                            .accessibilityLabel("Move item to root")
+                            .accessibilityLabel("Move item to home")
                         }
-                        // Filter out the current parent folder
-                        ForEach(appState.historyState.allFolders().filter { $0.id != parentFolderId }) { folderOption in
+                        ForEach(folders) { folderOption in
                             Button(folderOption.name) {
                                 let success = appState.historyState.moveToFolder(entriesWithIds: [item.id], toFolderId: folderOption.id, undoManager: undoManager)
                                 if success {
@@ -943,7 +958,7 @@ struct HistoryView: View {
                             .accessibilityLabel("Move item to folder \(folderOption.name)")
                         }
                     }
-                    .disabled(appState.historyState.allFolders().filter { $0.id != findParentFolderId(for: item.id, in: appState.historyState.history) }.isEmpty && findParentFolderId(for: item.id, in: appState.historyState.history) == nil)
+                    .disabled(appState.historyState.allFolders().isEmpty && findParentFolderId(for: item.id, in: appState.historyState.history) == nil)
                     .onAppear {
                         print("Context menu for item \(item.id): Move to... menu rendered with \(appState.historyState.allFolders().count) folders")
                     }
@@ -969,26 +984,31 @@ struct HistoryView: View {
                     #endif
                     #if os(macOS)
                     Menu("Move to...") {
-                        Button("Root") {
-                            let success = appState.historyState.moveToFolder(entriesWithIds: Array(selectedIDs), toFolderId: nil, undoManager: undoManager)
-                            if success {
-                                selectedIDs.removeAll()
-                                toastMessage = selectedIDs.count > 1 ? "Moved \(selectedIDs.count) items to root" : "Moved to root"
-                                showToast = true
-                                hideToastAfterDelay()
-                            } else {
-                                toastMessage = "Failed to move to root"
-                                showToast = true
-                                hideToastAfterDelay()
+                        let (showHome, folders) = getMoveDestinations(for: selectedIDs)
+                        if showHome {
+                            Button("Home") {
+                                let count = selectedIDs.count
+                                let success = appState.historyState.moveToFolder(entriesWithIds: Array(selectedIDs), toFolderId: nil, undoManager: undoManager)
+                                if success {
+                                    selectedIDs.removeAll()
+                                    toastMessage = count > 1 ? "Moved \(count) items to home" : "Moved to home"
+                                    showToast = true
+                                    hideToastAfterDelay()
+                                } else {
+                                    toastMessage = "Failed to move to home"
+                                    showToast = true
+                                    hideToastAfterDelay()
+                                }
                             }
+                            .accessibilityLabel("Move selected items to home")
                         }
-                        .accessibilityLabel("Move selected items to root")
-                        ForEach(appState.historyState.allFolders()) { folderOption in
+                        ForEach(folders) { folderOption in
                             Button(folderOption.name) {
+                                let count = selectedIDs.count
                                 let success = appState.historyState.moveToFolder(entriesWithIds: Array(selectedIDs), toFolderId: folderOption.id, undoManager: undoManager)
                                 if success {
                                     selectedIDs.removeAll()
-                                    toastMessage = selectedIDs.count > 1 ? "Moved \(selectedIDs.count) items to \(folderOption.name)" : "Moved to \(folderOption.name)"
+                                    toastMessage = count > 1 ? "Moved \(count) items to \(folderOption.name)" : "Moved to \(folderOption.name)"
                                     showToast = true
                                     hideToastAfterDelay()
                                 } else {
@@ -1014,7 +1034,7 @@ struct HistoryView: View {
             }
         }
     }
-   
+    
     private func copyPromptToClipboard(_ prompt: String) {
         #if os(macOS)
         NSPasteboard.general.clearContents()
@@ -1023,7 +1043,7 @@ struct HistoryView: View {
         UIPasteboard.general.string = prompt
         #endif
     }
-   
+    
     private func loadHistoryImage(for item: HistoryItem) -> PlatformImage? {
         guard let path = item.imagePath else { return nil }
         let fileURL = URL(fileURLWithPath: path)
@@ -1038,11 +1058,11 @@ struct HistoryView: View {
             return PlatformImage(contentsOfFile: fileURL.path)
         }
     }
-   
+    
     private func fileExists(for item: HistoryItem) -> Bool {
         item.fileExists(appState: appState)
     }
-   
+    
     private func addToInputImages(item: HistoryItem) {
         guard let img = loadHistoryImage(for: item), let path = item.imagePath else { return }
         let url = URL(fileURLWithPath: path)
@@ -1069,7 +1089,7 @@ struct HistoryView: View {
         }
         appState.ui.imageSlots.append(newSlot)
     }
-   
+    
     private func filterEntries(_ entries: [HistoryEntry], with search: String) -> [HistoryEntry] {
         entries.compactMap { entry in
             switch entry {
@@ -1092,7 +1112,7 @@ struct HistoryView: View {
             }
         }
     }
-   
+    
     private func sortedEntries(_ entries: [HistoryEntry]) -> [HistoryEntry] {
         var folders: [Folder] = []
         var items: [HistoryItem] = []
@@ -1117,18 +1137,18 @@ struct DeleteConfirmationView: View {
     let hasDeletableFiles: Bool
     let deleteAction: (Bool) -> Void
     let cancelAction: () -> Void
-    
+   
     @State private var deleteFiles: Bool = false
     @Environment(\.dismiss) private var dismiss
-    
+   
     var body: some View {
         VStack(spacing: 20) {
             Text(title)
                 .font(.headline)
-            
+           
             VStack(alignment: .leading, spacing: 8) {
                 Text(message)
-                
+               
                 if hasDeletableFiles {
                     Toggle("Also permanently delete the file(s)", isOn: $deleteFiles)
                     Text("File deletion cannot be undone.")
@@ -1136,13 +1156,13 @@ struct DeleteConfirmationView: View {
                         .foregroundStyle(.secondary)
                 }
             }
-            
+           
             HStack {
                 Button("Cancel", role: .cancel) {
                     cancelAction()
                     dismiss()
                 }
-                
+               
                 Button("Delete", role: deleteFiles ? .destructive : nil) {
                     deleteAction(deleteFiles)
                     dismiss()
