@@ -1,9 +1,8 @@
-//HistoryItemFullView.swift
 import SwiftUI
 #if os(macOS)
 import AppKit
 #endif
- 
+
 struct FullHistoryItemView: View {
     let initialId: UUID
     @EnvironmentObject var appState: AppState
@@ -241,16 +240,18 @@ struct FullHistoryItemView: View {
                             .id(item.id)
                     }
                 }
+                .scrollTargetLayout()
             }
             .scrollTargetBehavior(.paging)
-            .scrollTargetLayout()
             .scrollPosition(id: $selectedId)
             .onAppear {
-                proxy.scrollTo(selectedId, anchor: .leading)
+                DispatchQueue.main.async {
+                    proxy.scrollTo(selectedId, anchor: .center)
+                }
             }
             .onChange(of: selectedId) { newId in
                 withAnimation {
-                    proxy.scrollTo(newId, anchor: .leading)
+                    proxy.scrollTo(newId, anchor: .center)
                 }
             }
             #if os(macOS)
@@ -634,3 +635,4 @@ struct FullHistoryItemView: View {
         return items
     }
 }
+
