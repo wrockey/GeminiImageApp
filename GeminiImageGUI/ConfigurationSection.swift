@@ -249,7 +249,7 @@ struct ConfigurationSection: View {
     
     @ViewBuilder
     private var geminiApiKeyRow: some View {
-        HStack(spacing: 0) {
+        HStack(spacing: isCompact ? 0 : 8) {
             Text("API Key:")
                 .font(labelFont)
                 .foregroundColor(.secondary)
@@ -276,7 +276,7 @@ struct ConfigurationSection: View {
             .cornerRadius(8)
             .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.4), lineWidth: 1))
             .autocorrectionDisabled()
-            .frame(width: isCompact ? 100 : 220)
+            .frame(width: isCompact ? 100 : (isMacOS ? 300 : 220))
             .minimumScaleFactor(0.8)
             .accessibilityLabel("API key input")
             
@@ -325,7 +325,7 @@ struct ConfigurationSection: View {
     
     @ViewBuilder
     private var grokApiKeyRow: some View {
-        HStack(spacing: 0) {
+        HStack(spacing: isCompact ? 0 : 8) {
             Text("Grok API Key:")
                 .font(labelFont)
                 .foregroundColor(.secondary)
@@ -352,7 +352,7 @@ struct ConfigurationSection: View {
             .cornerRadius(8)
             .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.4), lineWidth: 1))
             .autocorrectionDisabled()
-            .frame(width: isCompact ? 100 : 220)
+            .frame(width: isCompact ? 100 : (isMacOS ? 300 : 220))
             .minimumScaleFactor(0.8)
             .accessibilityLabel("Grok API key input")
             
@@ -1270,6 +1270,14 @@ struct ConfigurationSection: View {
                 }
             }
         }
+    }
+    
+    private var isMacOS: Bool {
+        #if os(macOS)
+        return true
+        #else
+        return false
+        #endif
     }
 }
 
