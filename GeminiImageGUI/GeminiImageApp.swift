@@ -1061,23 +1061,23 @@ struct HistoryItem: Identifiable, Codable, Equatable {
     
     func fileExists(appState: AppState) -> Bool {
         guard let path = imagePath else {
-            print("fileExists: imagePath is nil")
+//            print("fileExists: imagePath is nil")
             return false
         }
         let url = URL(fileURLWithPath: path)
         var exists = false
         if let dir = appState.settings.outputDirectory {
-            print("fileExists: Using security-scoped access for \(url.path)")
+//            print("fileExists: Using security-scoped access for \(url.path)")
             if dir.startAccessingSecurityScopedResource() {
                 exists = FileManager.default.fileExists(atPath: url.path)
                 dir.stopAccessingSecurityScopedResource()
-                print("fileExists: File at \(url.path) exists: \(exists)")
+//                print("fileExists: File at \(url.path) exists: \(exists)")
             } else {
-                print("fileExists: Failed to start security-scoped access")
+//                print("fileExists: Failed to start security-scoped access")
             }
         } else {
             exists = FileManager.default.fileExists(atPath: url.path)
-            print("fileExists: File at \(url.path) exists: \(exists) (no security scope)")
+//            print("fileExists: File at \(url.path) exists: \(exists) (no security scope)")
         }
         return exists
     }

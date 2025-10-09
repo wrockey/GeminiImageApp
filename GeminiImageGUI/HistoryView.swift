@@ -12,7 +12,6 @@ struct HistoryView: View {
     @State private var searchText: String = ""
     @Binding var columnVisibility: NavigationSplitViewVisibility
     @State private var fullHistoryItemId: UUID? = nil
-    @State private var showAddedMessage: Bool = false
     @State private var toastMessage: String? = nil
     @State private var showToast: Bool = false
     #if os(iOS)
@@ -85,6 +84,9 @@ struct HistoryView: View {
             .alert("Clear History", isPresented: $showClearHistoryConfirmation) {
                 Button("Clear", role: .destructive) {
                     appState.historyState.clearHistory(undoManager: undoManager)
+                    toastMessage = "History cleared"
+                    showToast = true
+                    hideToastAfterDelay()
                 }
                 Button("Cancel", role: .cancel) {}
             } message: {
@@ -95,6 +97,9 @@ struct HistoryView: View {
             .alert("Clear History", isPresented: $showClearHistoryConfirmation) {
                 Button("Clear", role: .destructive) {
                     appState.historyState.clearHistory(undoManager: undoManager)
+                    toastMessage = "History cleared"
+                    showToast = true
+                    hideToastAfterDelay()
                 }
                 Button("Cancel", role: .cancel) {}
             } message: {
@@ -118,6 +123,11 @@ struct HistoryView: View {
                     hasDeletableFiles: hasExistingFiles,
                     deleteAction: { deleteFiles in
                         appState.historyState.deleteEntries(entriesToDelete, deleteFiles: deleteFiles, undoManager: undoManager)
+                        let deletedCount = entriesToDelete.flatMap { $0.allItems }.count
+                        toastMessage = deletedCount == 1 ? "Item deleted" : "\(deletedCount) items deleted"
+                        showToast = true
+                        hideToastAfterDelay()
+                        selectedIDs.removeAll()
                     },
                     cancelAction: {}
                 )
@@ -138,20 +148,7 @@ struct HistoryView: View {
     private var overlayContent: some View {
         Group {
             #if os(iOS)
-            if showAddedMessage {
-                Text("Image added to input images")
-                    .font(.headline)
-                    .padding()
-                    .background(Color.black.opacity(0.7))
-                    .foregroundColor(.white)
-                    .cornerRadius(10)
-                    .transition(.opacity)
-                    .frame(maxHeight: .infinity, alignment: .top)
-                    .padding(.top, 50)
-                    .onAppear {
-                        hideToastAfterDelay()
-                    }
-            } else if showToast, let message = toastMessage {
+            if showToast, let message = toastMessage {
                 Text(message)
                     .font(.headline)
                     .padding()
@@ -188,7 +185,6 @@ struct HistoryView: View {
             DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
                 withAnimation(.easeOut(duration: 0.3)) {
                     showToast = false
-                    showAddedMessage = false
                 }
             }
         }
@@ -227,7 +223,11 @@ struct HistoryView: View {
                 Spacer()
                
                 Button(action: {
+                    let actionName = undoManager?.undoActionName ?? ""
                     undoManager?.undo()
+                    toastMessage = actionName.isEmpty ? "Action undone" : "Undid \(actionName)"
+                    showToast = true
+                    hideToastAfterDelay()
                 }) {
                     Image(systemName: "arrow.uturn.left")
                         .symbolRenderingMode(.hierarchical)
@@ -238,7 +238,11 @@ struct HistoryView: View {
                 .accessibilityLabel("Undo")
                
                 Button(action: {
+                    let actionName = undoManager?.redoActionName ?? ""
                     undoManager?.redo()
+                    toastMessage = actionName.isEmpty ? "Action redone" : "Redid \(actionName)"
+                    showToast = true
+                    hideToastAfterDelay()
                 }) {
                     Image(systemName: "arrow.uturn.right")
                         .symbolRenderingMode(.hierarchical)
@@ -273,7 +277,11 @@ struct HistoryView: View {
                 Spacer()
                
                 Button(action: {
+                    let actionName = undoManager?.undoActionName ?? ""
                     undoManager?.undo()
+                    toastMessage = actionName.isEmpty ? "Action undone" : "Undid \(actionName)"
+                    showToast = true
+                    hideToastAfterDelay()
                 }) {
                     Image(systemName: "arrow.uturn.left")
                         .font(.system(size: 24))
@@ -285,7 +293,11 @@ struct HistoryView: View {
                 .accessibilityLabel("Undo")
                
                 Button(action: {
+                    let actionName = undoManager?.redoActionName ?? ""
                     undoManager?.redo()
+                    toastMessage = actionName.isEmpty ? "Action redone" : "Redid \(actionName)"
+                    showToast = true
+                    hideToastAfterDelay()
                 }) {
                     Image(systemName: "arrow.uturn.right")
                         .font(.system(size: 24))
@@ -387,6 +399,9 @@ struct HistoryView: View {
             Group {
                 Button(action: {
                     appState.historyState.addFolder(undoManager: undoManager)
+                    toastMessage = "Folder added"
+                    showToast = true
+                    hideToastAfterDelay()
                 }) {
                     Image(systemName: "folder.badge.plus")
                         .symbolRenderingMode(.hierarchical)
@@ -527,17 +542,21 @@ struct HistoryView: View {
                                     searchText: $searchText,
                                     activeEntry: $activeEntry,
                                     entryRowProvider: { AnyView(self.entryRow(for: $0)) },
-                                    copyPromptProvider: self.copyPromptToClipboard,
+                                    copyPromptProvider: { prompt in
+                                        self.copyPromptToClipboard(prompt)
+                                        self.toastMessage = "Prompt copied to clipboard"
+                                        self.showToast = true
+                                        self.hideToastAfterDelay()
+                                    },
                                     folderId: nil,
                                     isEditing: isEditingBinding,
                                     toastMessage: $toastMessage,
                                     showToast: $showToast,
                                     addToInputProvider: { item in
                                         self.addToInputImages(item: item)
-                                        #if os(iOS)
-                                        self.showAddedMessage = true
+                                        self.toastMessage = "Image added to input"
+                                        self.showToast = true
                                         self.hideToastAfterDelay()
-                                        #endif
                                     },
                                     undoManager: undoManager
                                 )
@@ -563,17 +582,21 @@ struct HistoryView: View {
                                         searchText: $searchText,
                                         activeEntry: $activeEntry,
                                         entryRowProvider: { AnyView(self.entryRow(for: $0)) },
-                                        copyPromptProvider: self.copyPromptToClipboard,
+                                        copyPromptProvider: { prompt in
+                                            self.copyPromptToClipboard(prompt)
+                                            self.toastMessage = "Prompt copied to clipboard"
+                                            self.showToast = true
+                                            self.hideToastAfterDelay()
+                                        },
                                         folderId: nil,
                                         isEditing: isEditingBinding,
                                         toastMessage: $toastMessage,
                                         showToast: $showToast,
                                         addToInputProvider: { item in
                                             self.addToInputImages(item: item)
-                                            #if os(iOS)
-                                            self.showAddedMessage = true
+                                            self.toastMessage = "Image added to input"
+                                            self.showToast = true
                                             self.hideToastAfterDelay()
-                                            #endif
                                         },
                                         undoManager: undoManager
                                     )
@@ -593,17 +616,21 @@ struct HistoryView: View {
                                     searchText: $searchText,
                                     activeEntry: $activeEntry,
                                     entryRowProvider: { AnyView(self.entryRow(for: $0)) },
-                                    copyPromptProvider: self.copyPromptToClipboard,
+                                    copyPromptProvider: { prompt in
+                                        self.copyPromptToClipboard(prompt)
+                                        self.toastMessage = "Prompt copied to clipboard"
+                                        self.showToast = true
+                                        self.hideToastAfterDelay()
+                                    },
                                     folderId: nil,
                                     isEditing: isEditingBinding,
                                     toastMessage: $toastMessage,
                                     showToast: $showToast,
                                     addToInputProvider: { item in
                                         self.addToInputImages(item: item)
-                                        #if os(iOS)
-                                        self.showAddedMessage = true
+                                        self.toastMessage = "Image added to input"
+                                        self.showToast = true
                                         self.hideToastAfterDelay()
-                                        #endif
                                     },
                                     undoManager: undoManager
                                 )
@@ -859,14 +886,16 @@ struct HistoryView: View {
                 if !isEditingBinding.wrappedValue {
                     Button("Add to Input") {
                         addToInputImages(item: item)
-                        #if os(iOS)
-                        showAddedMessage = true
+                        toastMessage = "Image added to input"
+                        showToast = true
                         hideToastAfterDelay()
-                        #endif
                     }
                     .accessibilityLabel("Add item to input")
                     Button("Copy Prompt") {
                         copyPromptToClipboard(item.prompt)
+                        toastMessage = "Prompt copied to clipboard"
+                        showToast = true
+                        hideToastAfterDelay()
                     }
                     .accessibilityLabel("Copy prompt")
                     Button("Delete", role: .destructive) {
