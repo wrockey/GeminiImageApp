@@ -481,7 +481,7 @@ struct ConfigurationSection: View {
     @ViewBuilder
     private var aimlApiKeyRow: some View {
         VStack(alignment: .leading, spacing: isCompact ? 2 : 4) {
-            HStack(spacing: 0) {
+            HStack(spacing: isCompact ? 0 : 8) {
                 Text("AI/ML API Key:")
                     .font(labelFont)
                     .foregroundColor(.secondary)
@@ -548,18 +548,33 @@ struct ConfigurationSection: View {
                 .disabled(appState.settings.aimlapiKey.isEmpty || isTestingApi)
                 .help("Test the entered AI/ML API key")
                 .accessibilityLabel("Test AI/ML API key")
-            }
-            HStack(spacing: 0) {
-                Button(action: {
-                    fetchAvailableModels()
-                }) {
-                    Text(isFetchingModels ? "Fetching..." : "Fetch")
-                        .font(.system(size: isCompact ? 10 : 14))
+                
+                if !isCompact {
+                    Button(action: {
+                        fetchAvailableModels()
+                    }) {
+                        Text(isFetchingModels ? "Fetching..." : "Fetch")
+                            .font(.system(size: isCompact ? 10 : 14))
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(appState.settings.aimlapiKey.isEmpty || isFetchingModels)
+                    .help("Fetch available image models from AI/ML API")
+                    .accessibilityLabel("Fetch models")
                 }
-                .buttonStyle(.bordered)
-                .disabled(appState.settings.aimlapiKey.isEmpty || isFetchingModels)
-                .help("Fetch available image models from AI/ML API")
-                .accessibilityLabel("Fetch models")
+            }
+            if isCompact {
+                HStack(spacing: 0) {
+                    Button(action: {
+                        fetchAvailableModels()
+                    }) {
+                        Text(isFetchingModels ? "Fetching..." : "Fetch")
+                            .font(.system(size: isCompact ? 10 : 14))
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(appState.settings.aimlapiKey.isEmpty || isFetchingModels)
+                    .help("Fetch available image models from AI/ML API")
+                    .accessibilityLabel("Fetch models")
+                }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
