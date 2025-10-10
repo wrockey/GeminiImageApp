@@ -10,9 +10,11 @@ struct ModelParameters: Codable {
     var enableSafetyChecker: Bool? = true
     var watermark: Bool? = false
     var enhancePrompt: Bool? = true
-    var duration: Int? = 5 // Default for video models (5 seconds)
-    var aspectRatio: String? = "16:9" // Default for video models
-    var cameraControl: String? // Optional JSON-like string for camera params (e.g., {"pan": "left"})
+    var duration: Int? = 5
+    var aspectRatio: String? = "16:9"
+    var cameraControl: String? // JSON-like string for camera params (e.g., {"pan": "left"})
+    var frameRate: Int? = 30 // Default 30fps for video models
+    var stylePreset: String? // Optional style preset (e.g., "anime", "realistic")
 
     enum CodingKeys: String, CodingKey {
         case strength
@@ -27,5 +29,7 @@ struct ModelParameters: Codable {
         case duration
         case aspectRatio = "aspect_ratio"
         case cameraControl = "camera_control"
+        case frameRate = "frame_rate"
+        case stylePreset = "style_preset"
     }
 }

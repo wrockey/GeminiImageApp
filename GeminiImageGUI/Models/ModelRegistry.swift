@@ -1,4 +1,3 @@
-// ModelRegistry.swift
 import Foundation
 
 struct AIMLModel {
@@ -12,8 +11,8 @@ struct AIMLModel {
     let acceptsMultiImages: Bool
     let acceptsBase64: Bool
     let acceptsPublicURL: Bool
-    let maxWidth: Int?  // Nil if no limit or enum-only
-    let maxHeight: Int?  // Nil if no limit or enum-only
+    let maxWidth: Int?
+    let maxHeight: Int?
     var isVideo: Bool
 }
 
@@ -29,14 +28,16 @@ enum AIMLParam: String, CaseIterable, Hashable {
     case enhancePrompt
     case duration
     case aspectRatio
-    case cameraControl  // New: For video camera params (pan/tilt/etc.)
-    // Add more as needed
+    case cameraControl
+    case frameRate // New: Frame rate for video models
+    case stylePreset // New: Style preset for video models
 }
 
 struct ModelRegistry {
     static func modelFor(id: String) -> AIMLModel? {
         let lowerID = id.lowercased()
         switch lowerID {
+        // Image models (unchanged for brevity)
         case "alibaba/qwen-image-edit":
             return AIMLModel(
                 id: id,
@@ -325,385 +326,399 @@ struct ModelRegistry {
                 maxHeight: nil,
                 isVideo: false
             )
-            // Video Models (new/updated)
-                    case "minimax/video-01":
-                        return AIMLModel(
-                            id: id,
-                            isI2I: true,  // Supports first-frame image
-                            maxInputImages: 1,
-                            supportedParams: [.negativePrompt, .guidanceScale, .duration, .aspectRatio],
-                            supportsCustomResolution: false,
-                            defaultImageSize: "16:9",
-                            imageInputParam: "first_frame_image",
-                            acceptsMultiImages: false,
-                            acceptsBase64: true,
-                            acceptsPublicURL: true,
-                            maxWidth: nil,
-                            maxHeight: nil,
-                            isVideo: true
-                        )
-                    case "minimax/hailuo-02":
-                        return AIMLModel(
-                            id: id,
-                            isI2I: true,  // Supports image as first frame
-                            maxInputImages: 1,
-                            supportedParams: [.negativePrompt, .guidanceScale, .duration, .aspectRatio, .enhancePrompt],
-                            supportsCustomResolution: false,
-                            defaultImageSize: "16:9",
-                            imageInputParam: "first_frame_image",
-                            acceptsMultiImages: false,
-                            acceptsBase64: true,
-                            acceptsPublicURL: true,
-                            maxWidth: nil,
-                            maxHeight: nil,
-                            isVideo: true
-                        )
-                    case "klingai/v1-standard/text-to-video":
-                        return AIMLModel(
-                            id: id,
-                            isI2I: false,
-                            maxInputImages: 0,
-                            supportedParams: [.negativePrompt, .guidanceScale, .duration, .aspectRatio, .cameraControl],
-                            supportsCustomResolution: false,
-                            defaultImageSize: "16:9",
-                            imageInputParam: "",
-                            acceptsMultiImages: false,
-                            acceptsBase64: false,
-                            acceptsPublicURL: false,
-                            maxWidth: nil,
-                            maxHeight: nil,
-                            isVideo: true
-                        )
-                    case "klingai/v1-pro/text-to-video":
-                        return AIMLModel(
-                            id: id,
-                            isI2I: false,
-                            maxInputImages: 0,
-                            supportedParams: [.negativePrompt, .guidanceScale, .duration, .aspectRatio, .cameraControl],
-                            supportsCustomResolution: false,
-                            defaultImageSize: "16:9",
-                            imageInputParam: "",
-                            acceptsMultiImages: false,
-                            acceptsBase64: false,
-                            acceptsPublicURL: false,
-                            maxWidth: nil,
-                            maxHeight: nil,
-                            isVideo: true
-                        )
-                    case "klingai/v1-standard/image-to-video":
-                        return AIMLModel(
-                            id: id,
-                            isI2I: true,
-                            maxInputImages: 1,
-                            supportedParams: [.negativePrompt, .guidanceScale, .duration, .aspectRatio, .cameraControl],
-                            supportsCustomResolution: false,
-                            defaultImageSize: "16:9",
-                            imageInputParam: "image_url",
-                            acceptsMultiImages: false,
-                            acceptsBase64: false,
-                            acceptsPublicURL: true,
-                            maxWidth: nil,
-                            maxHeight: nil,
-                            isVideo: true
-                        )
-                    case "klingai/v1-pro/image-to-video":
-                        return AIMLModel(
-                            id: id,
-                            isI2I: true,
-                            maxInputImages: 2,  // Supports multi-image in some cases
-                            supportedParams: [.negativePrompt, .guidanceScale, .duration, .aspectRatio, .cameraControl],
-                            supportsCustomResolution: false,
-                            defaultImageSize: "16:9",
-                            imageInputParam: "image_url",
-                            acceptsMultiImages: true,
-                            acceptsBase64: false,
-                            acceptsPublicURL: true,
-                            maxWidth: nil,
-                            maxHeight: nil,
-                            isVideo: true
-                        )
-                    case "klingai/v1.6-standard/image-to-video":
-                        return AIMLModel(
-                            id: id,
-                            isI2I: true,
-                            maxInputImages: 1,
-                            supportedParams: [.negativePrompt, .guidanceScale, .duration, .aspectRatio, .cameraControl],
-                            supportsCustomResolution: false,
-                            defaultImageSize: "16:9",
-                            imageInputParam: "image_url",
-                            acceptsMultiImages: false,
-                            acceptsBase64: false,
-                            acceptsPublicURL: true,
-                            maxWidth: nil,
-                            maxHeight: nil,
-                            isVideo: true
-                        )
-                    case "klingai/v1.6-pro/image-to-video":
-                        return AIMLModel(
-                            id: id,
-                            isI2I: true,
-                            maxInputImages: 1,
-                            supportedParams: [.negativePrompt, .guidanceScale, .duration, .aspectRatio, .cameraControl],
-                            supportsCustomResolution: false,
-                            defaultImageSize: "16:9",
-                            imageInputParam: "image_url",
-                            acceptsMultiImages: false,
-                            acceptsBase64: false,
-                            acceptsPublicURL: true,
-                            maxWidth: nil,
-                            maxHeight: nil,
-                            isVideo: true
-                        )
-                    case "bytedance/seedance-1-0-lite-t2v":
-                        return AIMLModel(
-                            id: id,
-                            isI2I: false,
-                            maxInputImages: 0,
-                            supportedParams: [.negativePrompt, .guidanceScale, .duration, .aspectRatio],
-                            supportsCustomResolution: false,
-                            defaultImageSize: "16:9",
-                            imageInputParam: "",
-                            acceptsMultiImages: false,
-                            acceptsBase64: false,
-                            acceptsPublicURL: false,
-                            maxWidth: nil,
-                            maxHeight: nil,
-                            isVideo: true
-                        )
-                    case "bytedance/seedance-1-0-lite-i2v":
-                        return AIMLModel(
-                            id: id,
-                            isI2I: true,
-                            maxInputImages: 1,
-                            supportedParams: [.negativePrompt, .guidanceScale, .duration, .aspectRatio],
-                            supportsCustomResolution: false,
-                            defaultImageSize: "16:9",
-                            imageInputParam: "image_url",
-                            acceptsMultiImages: false,
-                            acceptsBase64: false,
-                            acceptsPublicURL: true,
-                            maxWidth: nil,
-                            maxHeight: nil,
-                            isVideo: true
-                        )
-                    case "bytedance/seedance-1-0-pro-t2v":
-                        return AIMLModel(
-                            id: id,
-                            isI2I: false,
-                            maxInputImages: 0,
-                            supportedParams: [.negativePrompt, .guidanceScale, .duration, .aspectRatio],
-                            supportsCustomResolution: false,
-                            defaultImageSize: "16:9",
-                            imageInputParam: "",
-                            acceptsMultiImages: false,
-                            acceptsBase64: false,
-                            acceptsPublicURL: false,
-                            maxWidth: nil,
-                            maxHeight: nil,
-                            isVideo: true
-                        )
-                    case "bytedance/seedance-1-0-pro-i2v":
-                        return AIMLModel(
-                            id: id,
-                            isI2I: true,
-                            maxInputImages: 1,
-                            supportedParams: [.negativePrompt, .guidanceScale, .duration, .aspectRatio],
-                            supportsCustomResolution: false,
-                            defaultImageSize: "16:9",
-                            imageInputParam: "image_url",
-                            acceptsMultiImages: false,
-                            acceptsBase64: false,
-                            acceptsPublicURL: true,
-                            maxWidth: nil,
-                            maxHeight: nil,
-                            isVideo: true
-                        )
-                    case "bytedance/omnihuman":
-                        return AIMLModel(
-                            id: id,
-                            isI2I: true,
-                            maxInputImages: 2,  // Multi-image for avatars
-                            supportedParams: [.negativePrompt, .guidanceScale, .duration, .aspectRatio],
-                            supportsCustomResolution: false,
-                            defaultImageSize: "16:9",
-                            imageInputParam: "image_url",
-                            acceptsMultiImages: true,
-                            acceptsBase64: false,
-                            acceptsPublicURL: true,
-                            maxWidth: nil,
-                            maxHeight: nil,
-                            isVideo: true
-                        )
-                    case "google/veo2/image-to-video":
-                        return AIMLModel(
-                            id: id,
-                            isI2I: true,
-                            maxInputImages: 1,
-                            supportedParams: [.negativePrompt, .guidanceScale, .duration, .aspectRatio, .cameraControl],
-                            supportsCustomResolution: false,
-                            defaultImageSize: "16:9",
-                            imageInputParam: "image_url",
-                            acceptsMultiImages: false,
-                            acceptsBase64: false,
-                            acceptsPublicURL: true,
-                            maxWidth: nil,
-                            maxHeight: nil,
-                            isVideo: true
-                        )
-                    case "google/veo-3.0-i2v":
-                        return AIMLModel(
-                            id: id,
-                            isI2I: true,
-                            maxInputImages: 1,
-                            supportedParams: [.negativePrompt, .guidanceScale, .duration, .aspectRatio, .cameraControl],
-                            supportsCustomResolution: false,
-                            defaultImageSize: "16:9",
-                            imageInputParam: "image_url",
-                            acceptsMultiImages: false,
-                            acceptsBase64: false,
-                            acceptsPublicURL: true,
-                            maxWidth: nil,
-                            maxHeight: nil,
-                            isVideo: true
-                        )
-                    case "openai/sora-2-text-to-video":
-                        return AIMLModel(
-                            id: id,
-                            isI2I: false,
-                            maxInputImages: 0,
-                            supportedParams: [.negativePrompt, .guidanceScale, .duration, .aspectRatio],
-                            supportsCustomResolution: false,
-                            defaultImageSize: "16:9",
-                            imageInputParam: "",
-                            acceptsMultiImages: false,
-                            acceptsBase64: false,
-                            acceptsPublicURL: false,
-                            maxWidth: nil,
-                            maxHeight: nil,
-                            isVideo: true
-                        )
-                    case "openai/sora-2-i2v":
-                        return AIMLModel(
-                            id: id,
-                            isI2I: true,
-                            maxInputImages: 1,
-                            supportedParams: [.negativePrompt, .guidanceScale, .duration, .aspectRatio],
-                            supportsCustomResolution: false,
-                            defaultImageSize: "16:9",
-                            imageInputParam: "image_url",
-                            acceptsMultiImages: false,
-                            acceptsBase64: false,
-                            acceptsPublicURL: true,
-                            maxWidth: nil,
-                            maxHeight: nil,
-                            isVideo: true
-                        )
-                    case "runway/gen3a_turbo":
-                        return AIMLModel(
-                            id: id,
-                            isI2I: true,
-                            maxInputImages: 1,
-                            supportedParams: [.negativePrompt, .guidanceScale, .duration, .aspectRatio],
-                            supportsCustomResolution: false,
-                            defaultImageSize: "16:9",
-                            imageInputParam: "image_url",
-                            acceptsMultiImages: false,
-                            acceptsBase64: false,
-                            acceptsPublicURL: true,
-                            maxWidth: nil,
-                            maxHeight: nil,
-                            isVideo: true
-                        )
-                    case "pixverse/v5/image-to-video":
-                        return AIMLModel(
-                            id: id,
-                            isI2I: true,
-                            maxInputImages: 1,
-                            supportedParams: [.negativePrompt, .guidanceScale, .duration, .aspectRatio],
-                            supportsCustomResolution: false,
-                            defaultImageSize: "16:9",
-                            imageInputParam: "image_url",
-                            acceptsMultiImages: false,
-                            acceptsBase64: false,
-                            acceptsPublicURL: true,
-                            maxWidth: nil,
-                            maxHeight: nil,
-                            isVideo: true
-                        )
-                    case "alibaba/wan-2.1-plus":
-                        return AIMLModel(
-                            id: id,
-                            isI2I: false,
-                            maxInputImages: 0,
-                            supportedParams: [.negativePrompt, .guidanceScale, .duration, .aspectRatio],
-                            supportsCustomResolution: false,
-                            defaultImageSize: "16:9",
-                            imageInputParam: "",
-                            acceptsMultiImages: false,
-                            acceptsBase64: false,
-                            acceptsPublicURL: false,
-                            maxWidth: nil,
-                            maxHeight: nil,
-                            isVideo: true
-                        )
-                    // Add similar cases for other Alibaba Wan variants (wan-2.1-turbo, wan-2.2-plus, wan-2.5-preview, wan-2.5-preview-i2v)...
-                    // For wan-2.5-preview-i2v: set isI2I: true, etc.
-                    
-                    // Existing Kling v2.1 (deprecated; kept for backward compat, but use v1.6 above)
-                    case "klingai/v2.1-master-text-to-video":
-                        return AIMLModel(
-                            id: id,
-                            isI2I: false,
-                            maxInputImages: 0,
-                            supportedParams: [.negativePrompt, .guidanceScale, .duration, .aspectRatio],
-                            supportsCustomResolution: false,
-                            defaultImageSize: "16:9",
-                            imageInputParam: "",
-                            acceptsMultiImages: false,
-                            acceptsBase64: false,
-                            acceptsPublicURL: false,
-                            maxWidth: nil,
-                            maxHeight: nil,
-                            isVideo: true
-                        )
-                    case "klingai/v2.1-standard/image-to-video":
-                        return AIMLModel(
-                            id: id,
-                            isI2I: true,
-                            maxInputImages: 1,
-                            supportedParams: [.negativePrompt, .guidanceScale, .duration, .aspectRatio],
-                            supportsCustomResolution: false,
-                            defaultImageSize: "16:9",
-                            imageInputParam: "image_url",
-                            acceptsMultiImages: false,
-                            acceptsBase64: false,
-                            acceptsPublicURL: true,
-                            maxWidth: nil,
-                            maxHeight: nil,
-                            isVideo: true
-                        )
-
-
-
-        default:
-            return AIMLModel(
-                id: id,
-                isI2I: lowerID.contains("edit") || lowerID.contains("image-to-image"),
-                maxInputImages: 1,
-                supportedParams: [.numInferenceSteps, .guidanceScale, .negativePrompt, .seed, .numImages, .enableSafetyChecker],
-                supportsCustomResolution: true,
-                defaultImageSize: "1024x1024",
-                imageInputParam: "image_urls",
-                acceptsMultiImages: false,
-                acceptsBase64: true,
-                acceptsPublicURL: true,
-                maxWidth: nil,
-                maxHeight: nil,
-                isVideo: false
-            )
+            // Video Models
+            case "minimax/video-01":
+                return AIMLModel(
+                    id: id,
+                    isI2I: true,
+                    maxInputImages: 1,
+                    supportedParams: [.negativePrompt, .guidanceScale, .duration, .aspectRatio],
+                    supportsCustomResolution: false,
+                    defaultImageSize: "16:9",
+                    imageInputParam: "first_frame_image",
+                    acceptsMultiImages: false,
+                    acceptsBase64: true,
+                    acceptsPublicURL: true,
+                    maxWidth: nil,
+                    maxHeight: nil,
+                    isVideo: true
+                )
+            case "minimax/hailuo-02":
+                return AIMLModel(
+                    id: id,
+                    isI2I: true,
+                    maxInputImages: 1,
+                    supportedParams: [.negativePrompt, .guidanceScale, .duration, .aspectRatio, .enhancePrompt],
+                    supportsCustomResolution: false,
+                    defaultImageSize: "16:9",
+                    imageInputParam: "first_frame_image",
+                    acceptsMultiImages: false,
+                    acceptsBase64: true,
+                    acceptsPublicURL: true,
+                    maxWidth: nil,
+                    maxHeight: nil,
+                    isVideo: true
+                )
+            case "klingai/v1-standard/text-to-video":
+                return AIMLModel(
+                    id: id,
+                    isI2I: false,
+                    maxInputImages: 0,
+                    supportedParams: [.negativePrompt, .guidanceScale, .duration, .aspectRatio, .cameraControl, .frameRate],
+                    supportsCustomResolution: false,
+                    defaultImageSize: "16:9",
+                    imageInputParam: "",
+                    acceptsMultiImages: false,
+                    acceptsBase64: false,
+                    acceptsPublicURL: false,
+                    maxWidth: nil,
+                    maxHeight: nil,
+                    isVideo: true
+                )
+            case "klingai/v1-pro/text-to-video":
+                return AIMLModel(
+                    id: id,
+                    isI2I: false,
+                    maxInputImages: 0,
+                    supportedParams: [.negativePrompt, .guidanceScale, .duration, .aspectRatio, .cameraControl, .frameRate],
+                    supportsCustomResolution: false,
+                    defaultImageSize: "16:9",
+                    imageInputParam: "",
+                    acceptsMultiImages: false,
+                    acceptsBase64: false,
+                    acceptsPublicURL: false,
+                    maxWidth: nil,
+                    maxHeight: nil,
+                    isVideo: true
+                )
+            case "klingai/v1-standard/image-to-video":
+                return AIMLModel(
+                    id: id,
+                    isI2I: true,
+                    maxInputImages: 1,
+                    supportedParams: [.negativePrompt, .guidanceScale, .duration, .aspectRatio, .cameraControl, .frameRate],
+                    supportsCustomResolution: false,
+                    defaultImageSize: "16:9",
+                    imageInputParam: "image_url",
+                    acceptsMultiImages: false,
+                    acceptsBase64: false,
+                    acceptsPublicURL: true,
+                    maxWidth: nil,
+                    maxHeight: nil,
+                    isVideo: true
+                )
+            case "klingai/v1-pro/image-to-video":
+                return AIMLModel(
+                    id: id,
+                    isI2I: true,
+                    maxInputImages: 2,
+                    supportedParams: [.negativePrompt, .guidanceScale, .duration, .aspectRatio, .cameraControl, .frameRate],
+                    supportsCustomResolution: false,
+                    defaultImageSize: "16:9",
+                    imageInputParam: "image_url",
+                    acceptsMultiImages: true,
+                    acceptsBase64: false,
+                    acceptsPublicURL: true,
+                    maxWidth: nil,
+                    maxHeight: nil,
+                    isVideo: true
+                )
+            case "klingai/v1.6-standard/image-to-video":
+                return AIMLModel(
+                    id: id,
+                    isI2I: true,
+                    maxInputImages: 1,
+                    supportedParams: [.negativePrompt, .guidanceScale, .duration, .aspectRatio, .cameraControl, .frameRate],
+                    supportsCustomResolution: false,
+                    defaultImageSize: "16:9",
+                    imageInputParam: "image_url",
+                    acceptsMultiImages: false,
+                    acceptsBase64: false,
+                    acceptsPublicURL: true,
+                    maxWidth: nil,
+                    maxHeight: nil,
+                    isVideo: true
+                )
+            case "klingai/v1.6-pro/image-to-video":
+                return AIMLModel(
+                    id: id,
+                    isI2I: true,
+                    maxInputImages: 1,
+                    supportedParams: [.negativePrompt, .guidanceScale, .duration, .aspectRatio, .cameraControl, .frameRate],
+                    supportsCustomResolution: false,
+                    defaultImageSize: "16:9",
+                    imageInputParam: "image_url",
+                    acceptsMultiImages: false,
+                    acceptsBase64: false,
+                    acceptsPublicURL: true,
+                    maxWidth: nil,
+                    maxHeight: nil,
+                    isVideo: true
+                )
+            case "bytedance/seedance-1-0-lite-t2v":
+                return AIMLModel(
+                    id: id,
+                    isI2I: false,
+                    maxInputImages: 0,
+                    supportedParams: [.negativePrompt, .guidanceScale, .duration, .aspectRatio],
+                    supportsCustomResolution: false,
+                    defaultImageSize: "16:9",
+                    imageInputParam: "",
+                    acceptsMultiImages: false,
+                    acceptsBase64: false,
+                    acceptsPublicURL: false,
+                    maxWidth: nil,
+                    maxHeight: nil,
+                    isVideo: true
+                )
+            case "bytedance/seedance-1-0-lite-i2v":
+                return AIMLModel(
+                    id: id,
+                    isI2I: true,
+                    maxInputImages: 1,
+                    supportedParams: [.negativePrompt, .guidanceScale, .duration, .aspectRatio],
+                    supportsCustomResolution: false,
+                    defaultImageSize: "16:9",
+                    imageInputParam: "image_url",
+                    acceptsMultiImages: false,
+                    acceptsBase64: false,
+                    acceptsPublicURL: true,
+                    maxWidth: nil,
+                    maxHeight: nil,
+                    isVideo: true
+                )
+            case "bytedance/seedance-1-0-pro-t2v":
+                return AIMLModel(
+                    id: id,
+                    isI2I: false,
+                    maxInputImages: 0,
+                    supportedParams: [.negativePrompt, .guidanceScale, .duration, .aspectRatio],
+                    supportsCustomResolution: false,
+                    defaultImageSize: "16:9",
+                    imageInputParam: "",
+                    acceptsMultiImages: false,
+                    acceptsBase64: false,
+                    acceptsPublicURL: false,
+                    maxWidth: nil,
+                    maxHeight: nil,
+                    isVideo: true
+                )
+            case "bytedance/seedance-1-0-pro-i2v":
+                return AIMLModel(
+                    id: id,
+                    isI2I: true,
+                    maxInputImages: 1,
+                    supportedParams: [.negativePrompt, .guidanceScale, .duration, .aspectRatio],
+                    supportsCustomResolution: false,
+                    defaultImageSize: "16:9",
+                    imageInputParam: "image_url",
+                    acceptsMultiImages: false,
+                    acceptsBase64: false,
+                    acceptsPublicURL: true,
+                    maxWidth: nil,
+                    maxHeight: nil,
+                    isVideo: true
+                )
+            case "bytedance/omnihuman":
+                return AIMLModel(
+                    id: id,
+                    isI2I: true,
+                    maxInputImages: 2,
+                    supportedParams: [.negativePrompt, .guidanceScale, .duration, .aspectRatio],
+                    supportsCustomResolution: false,
+                    defaultImageSize: "16:9",
+                    imageInputParam: "image_url",
+                    acceptsMultiImages: true,
+                    acceptsBase64: false,
+                    acceptsPublicURL: true,
+                    maxWidth: nil,
+                    maxHeight: nil,
+                    isVideo: true
+                )
+            case "google/veo2/image-to-video":
+                return AIMLModel(
+                    id: id,
+                    isI2I: true,
+                    maxInputImages: 1,
+                    supportedParams: [.negativePrompt, .guidanceScale, .duration, .aspectRatio, .cameraControl, .frameRate],
+                    supportsCustomResolution: false,
+                    defaultImageSize: "16:9",
+                    imageInputParam: "image_url",
+                    acceptsMultiImages: false,
+                    acceptsBase64: false,
+                    acceptsPublicURL: true,
+                    maxWidth: nil,
+                    maxHeight: nil,
+                    isVideo: true
+                )
+            case "google/veo-3.0-i2v":
+                return AIMLModel(
+                    id: id,
+                    isI2I: true,
+                    maxInputImages: 1,
+                    supportedParams: [.negativePrompt, .guidanceScale, .duration, .aspectRatio, .cameraControl, .frameRate],
+                    supportsCustomResolution: false,
+                    defaultImageSize: "16:9",
+                    imageInputParam: "image_url",
+                    acceptsMultiImages: false,
+                    acceptsBase64: false,
+                    acceptsPublicURL: true,
+                    maxWidth: nil,
+                    maxHeight: nil,
+                    isVideo: true
+                )
+            case "openai/sora-2-text-to-video":
+                return AIMLModel(
+                    id: id,
+                    isI2I: false,
+                    maxInputImages: 0,
+                    supportedParams: [.negativePrompt, .guidanceScale, .duration, .aspectRatio],
+                    supportsCustomResolution: false,
+                    defaultImageSize: "16:9",
+                    imageInputParam: "",
+                    acceptsMultiImages: false,
+                    acceptsBase64: false,
+                    acceptsPublicURL: false,
+                    maxWidth: nil,
+                    maxHeight: nil,
+                    isVideo: true
+                )
+            case "openai/sora-2-i2v":
+                return AIMLModel(
+                    id: id,
+                    isI2I: true,
+                    maxInputImages: 1,
+                    supportedParams: [.negativePrompt, .guidanceScale, .duration, .aspectRatio],
+                    supportsCustomResolution: false,
+                    defaultImageSize: "16:9",
+                    imageInputParam: "image_url",
+                    acceptsMultiImages: false,
+                    acceptsBase64: false,
+                    acceptsPublicURL: true,
+                    maxWidth: nil,
+                    maxHeight: nil,
+                    isVideo: true
+                )
+            case "runway/gen3a_turbo":
+                return AIMLModel(
+                    id: id,
+                    isI2I: true,
+                    maxInputImages: 1,
+                    supportedParams: [.negativePrompt, .guidanceScale, .duration, .aspectRatio],
+                    supportsCustomResolution: false,
+                    defaultImageSize: "16:9",
+                    imageInputParam: "image_url",
+                    acceptsMultiImages: false,
+                    acceptsBase64: false,
+                    acceptsPublicURL: true,
+                    maxWidth: nil,
+                    maxHeight: nil,
+                    isVideo: true
+                )
+            case "pixverse/v5/image-to-video":
+                return AIMLModel(
+                    id: id,
+                    isI2I: true,
+                    maxInputImages: 1,
+                    supportedParams: [.negativePrompt, .guidanceScale, .duration, .aspectRatio, .stylePreset],
+                    supportsCustomResolution: false,
+                    defaultImageSize: "16:9",
+                    imageInputParam: "image_url",
+                    acceptsMultiImages: false,
+                    acceptsBase64: false,
+                    acceptsPublicURL: true,
+                    maxWidth: nil,
+                    maxHeight: nil,
+                    isVideo: true
+                )
+            case "alibaba/wan-2.1-plus":
+                return AIMLModel(
+                    id: id,
+                    isI2I: false,
+                    maxInputImages: 0,
+                    supportedParams: [.negativePrompt, .guidanceScale, .duration, .aspectRatio],
+                    supportsCustomResolution: false,
+                    defaultImageSize: "16:9",
+                    imageInputParam: "",
+                    acceptsMultiImages: false,
+                    acceptsBase64: false,
+                    acceptsPublicURL: false,
+                    maxWidth: nil,
+                    maxHeight: nil,
+                    isVideo: true
+                )
+            // ... (add other Alibaba Wan variants similarly)
+            
+            // Deprecated Kling v2.1
+            case "klingai/v2.1-master-text-to-video":
+                return AIMLModel(
+                    id: id,
+                    isI2I: false,
+                    maxInputImages: 0,
+                    supportedParams: [.negativePrompt, .guidanceScale, .duration, .aspectRatio, .cameraControl, .frameRate],
+                    supportsCustomResolution: false,
+                    defaultImageSize: "16:9",
+                    imageInputParam: "",
+                    acceptsMultiImages: false,
+                    acceptsBase64: false,
+                    acceptsPublicURL: false,
+                    maxWidth: nil,
+                    maxHeight: nil,
+                    isVideo: true
+                )
+            case "klingai/v2.1-standard/image-to-video":
+                return AIMLModel(
+                    id: id,
+                    isI2I: true,
+                    maxInputImages: 1,
+                    supportedParams: [.negativePrompt, .guidanceScale, .duration, .aspectRatio, .cameraControl, .frameRate],
+                    supportsCustomResolution: false,
+                    defaultImageSize: "16:9",
+                    imageInputParam: "image_url",
+                    acceptsMultiImages: false,
+                    acceptsBase64: false,
+                    acceptsPublicURL: true,
+                    maxWidth: nil,
+                    maxHeight: nil,
+                    isVideo: true
+                )
+            
+            default:
+                let isVideoModel = lowerID.contains("video") || lowerID.contains("sora") || lowerID.contains("veo") || lowerID.contains("kling") || lowerID.contains("hailuo") || lowerID.contains("seedance") || lowerID.contains("gen3") || lowerID.contains("pixverse") || lowerID.contains("wan")
+                if isVideoModel {
+                    let isI2V = lowerID.contains("i2v") || lowerID.contains("image-to-video")
+                    return AIMLModel(
+                        id: id,
+                        isI2I: isI2V,
+                        maxInputImages: isI2V ? 1 : 0,
+                        supportedParams: [.negativePrompt, .guidanceScale, .duration, .aspectRatio, .cameraControl, .frameRate],
+                        supportsCustomResolution: false,
+                        defaultImageSize: "16:9",
+                        imageInputParam: isI2V ? "image_url" : "",
+                        acceptsMultiImages: false,
+                        acceptsBase64: false,
+                        acceptsPublicURL: isI2V,
+                        maxWidth: nil,
+                        maxHeight: nil,
+                        isVideo: true
+                    )
+                } else {
+                    return AIMLModel(
+                        id: id,
+                        isI2I: lowerID.contains("edit") || lowerID.contains("image-to-image"),
+                        maxInputImages: 1,
+                        supportedParams: [.numInferenceSteps, .guidanceScale, .negativePrompt, .seed, .numImages, .enableSafetyChecker],
+                        supportsCustomResolution: true,
+                        defaultImageSize: "1024x1024",
+                        imageInputParam: "image_urls",
+                        acceptsMultiImages: false,
+                        acceptsBase64: true,
+                        acceptsPublicURL: true,
+                        maxWidth: nil,
+                        maxHeight: nil,
+                        isVideo: false
+                    )
+                }
+            }
         }
     }
-}
-
-
-

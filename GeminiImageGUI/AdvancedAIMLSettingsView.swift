@@ -38,7 +38,7 @@ struct AdvancedAIMLSettingsView: View {
             }
         }
         .frame(minWidth: 450, maxWidth: 450, minHeight: 600, idealHeight: 700)
-        .fixedSize() // Prevents any resizing
+        .fixedSize()
         #endif
     }
     
@@ -254,14 +254,45 @@ struct AdvancedAIMLSettingsView: View {
                     .padding(.vertical, 8)
                 }
                 
+                if model.supportedParams.contains(.frameRate) {
+                    Picker("Frame Rate", selection: Binding(
+                        get: { params.frameRate ?? 30 },
+                        set: { params.frameRate = $0 }
+                    )) {
+                        Text("24 fps").tag(24)
+                        Text("30 fps").tag(30)
+                        Text("60 fps").tag(60)
+                    }
+                    .pickerStyle(.menu)
+                    .help("Select the frame rate for the video (frames per second)")
+                    .accessibilityLabel("Frame Rate picker")
+                    .padding(.vertical, 8)
+                }
+                
+                if model.supportedParams.contains(.stylePreset) {
+                    Picker("Style Preset", selection: Binding(
+                        get: { params.stylePreset ?? "realistic" },
+                        set: { params.stylePreset = $0 }
+                    )) {
+                        Text("Realistic").tag("realistic")
+                        Text("Anime").tag("anime")
+                        Text("Cinematic").tag("cinematic")
+                        Text("3D Animation").tag("3d_animation")
+                    }
+                    .pickerStyle(.menu)
+                    .help("Select the stylistic preset for the video")
+                    .accessibilityLabel("Style Preset picker")
+                    .padding(.vertical, 8)
+                }
+                
                 if model.supportedParams.contains(.cameraControl) {
                     TextEditor(text: Binding(
-                        get: { params.cameraControl ?? "" },
-                        set: { params.cameraControl = $0 }
+                        get: { params.cameraControl ?? "{\"pan\": \"none\", \"tilt\": \"none\", \"zoom\": \"none\"}" },
+                        set: { params.cameraControl = $0.isEmpty ? nil : $0 }
                     ))
                     .frame(height: 100)
                     .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.3), lineWidth: 1))
-                    .help("JSON-like camera controls (e.g., {\"pan\": \"left\", \"tilt\": \"up\"})")
+                    .help("JSON-like camera controls (e.g., {\"pan\": \"left\", \"tilt\": \"up\", \"zoom\": \"in\"})")
                     .accessibilityLabel("Camera Control editor")
                     .padding(.vertical, 8)
                 }
