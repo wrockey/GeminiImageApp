@@ -578,15 +578,19 @@ extension ContentView {
         if UserDefaults.standard.bool(forKey: key) {
             return true
         }
-        
+
         return await withCheckedContinuation { continuation in
             self.onPrivacyComplete = { consented, dontShow in
-                if dontShow {
-                    UserDefaults.standard.set(true, forKey: key)
-                }
-                continuation.resume(returning: consented)
-                self.privacyServiceToShow = nil  // Dismiss the sheet
-                self.onPrivacyComplete = nil  // Clear to prevent reuse
+                if let complete = self.onPrivacyComplete {
+                    self.onPrivacyComplete = nil  // Clear first
+                    if dontShow {
+                        UserDefaults.standard.set(true, forKey: key)
+                    }
+                    continuation.resume(returning: consented)
+                    DispatchQueue.main.async {
+                        self.privacyServiceToShow = nil  // Ensure dismiss on main thread
+                    }
+                }  // No else: if already nil, ignore to prevent crash
             }
             self.privacyServiceToShow = service
         }

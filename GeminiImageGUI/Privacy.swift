@@ -1,5 +1,8 @@
-// Privacy.swift (full corrected)
+// Privacy.swift (simplified without #available to avoid version errors; use introspection for all iOS)
 import SwiftUI
+#if os(iOS)
+import UIKit
+#endif
 
 enum PrivacyService: String, Identifiable {
     case gemini = "Gemini"
@@ -7,7 +10,7 @@ enum PrivacyService: String, Identifiable {
     case aimlapi = "AI/ML API"
     case imgbb = "ImgBB"
 
-    var id: Self { self }  // Conform to Identifiable
+    var id: Self { self }
 
     var policyURL: String {
         switch self {
@@ -30,69 +33,141 @@ enum PrivacyService: String, Identifiable {
 
 struct PrivacyNoticeSheet: View {
     let service: PrivacyService
-    let onDismiss: (Bool, Bool) -> Void  // (consented, dontShowAgain)
+    let onDismiss: (Bool, Bool) -> Void
 
     @State private var dontShowAgain = false
 
     var body: some View {
-        VStack(spacing: 24) {
-            Image(systemName: "info.circle.fill")
-                .font(.system(size: 32))
-                .foregroundColor(.blue)
-                .symbolRenderingMode(.hierarchical)
-
-            Text("\(service.rawValue) Privacy Notice")
-                .font(.title2.bold())
-                .foregroundColor(.primary)
-
-            Text(service.message)
-                .font(.body)
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal)
-
-            if let url = URL(string: service.policyURL) {
-                Link("View Privacy Policy", destination: url)
-                    .buttonStyle(.borderedProminent)
-                    .tint(.blue)
-                    .controlSize(.regular)
-                    .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 1)
+        ZStack {
+            #if os(iOS)
+            UIKitIntrospectionView { hostingController in
+                hostingController.view.backgroundColor = .clear
+                if let presentationController = hostingController.presentationController {
+                    presentationController.containerView?.backgroundColor = .clear
+                }
+                if let sheetView = hostingController.view.superview {
+                    sheetView.backgroundColor = .clear
+                }
             }
+            .frame(width: 0, height: 0)
+            #endif
+            
+            VStack(spacing: 24) {
+                Image(systemName: "info.circle.fill")
+                    .font(.system(size: 32))
+                    .foregroundColor(.blue)
+                    .symbolRenderingMode(.hierarchical)
 
-            Toggle(isOn: $dontShowAgain) {
-                Text("Don't show again")
+                Text("\(service.rawValue) Privacy Notice")
+                    .font(.title2.bold())
+                    .foregroundColor(.primary)
+
+                Text(service.message)
+                    .font(.body)
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal)
+
+                if let url = URL(string: service.policyURL) {
+                    Link("View Privacy Policy", destination: url)
+                        .buttonStyle(.borderedProminent)
+                        .tint(.blue)
+                        .controlSize(.regular)
+                        .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 1)
+                }
+
+                Checkbox(isChecked: $dontShowAgain, label: "Don't show again")
+
+                HStack(spacing: 12) {
+                    Button("Cancel") {
+                        onDismiss(false, dontShowAgain)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.regular)
+                    .foregroundColor(.secondary)
+                    .shadow(color: .black.opacity(0.05), radius: 1, x: 0, y: 0.5)
+
+                    Button("Continue") {
+                        onDismiss(true, dontShowAgain)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.regular)
+                    .tint(.blue)
+                    .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 1)
+                }
+            }
+            .padding(24)
+            #if os(macOS)
+            .background(Color(NSColor.windowBackgroundColor).opacity(0.95))
+            #elseif os(iOS)
+            .background(Color(UIColor.systemBackground).opacity(0.95))
+            #endif
+            .cornerRadius(16)
+            .shadow(color: .black.opacity(0.15), radius: 10, x: 0, y: 5)
+            .frame(minWidth: 400, maxWidth: 450, minHeight: 250)  // If extra arg error, remove minHeight or check SwiftUI version; it's valid in SwiftUI 5+
+            .overlay(
+                RoundedRectangle(cornerRadius: 16)
+                    .stroke(Color.gray.opacity(0.2), lineWidth: 1)
+            )
+        }
+        #if os(iOS)
+        .presentationDetents([.height(320)])
+        .presentationBackground(.clear)
+        #endif
+    }
+}
+
+struct Checkbox: View {
+    @Binding var isChecked: Bool
+    let label: String
+
+    var body: some View {
+        Button(action: {
+            isChecked.toggle()
+        }) {
+            HStack {
+                Image(systemName: isChecked ? "checkmark.square.fill" : "square")
+                    .foregroundColor(isChecked ? .blue : .gray)
+                    .font(.system(size: 20))
+                Text(label)
                     .font(.subheadline.italic())
                     .foregroundColor(.secondary)
             }
-            .toggleStyle(.checkbox)
-            .padding(.horizontal)
-
-            HStack(spacing: 12) {
-                Button("Cancel") {
-                    onDismiss(false, dontShowAgain)
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.regular)
-                .foregroundColor(.secondary)
-                .shadow(color: .black.opacity(0.05), radius: 1, x: 0, y: 0.5)
-
-                Button("Continue") {
-                    onDismiss(true, dontShowAgain)
-                }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.regular)
-                .tint(.blue)
-                .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 1)
-            }
         }
-        .padding(24)
-        .background(Color(.windowBackgroundColor).opacity(0.95))
-        .cornerRadius(16)
-        .shadow(color: .black.opacity(0.15), radius: 10, x: 0, y: 5)
-        .frame(minWidth: 400, maxWidth: 450, minHeight: 250)
-        .overlay(
-            RoundedRectangle(cornerRadius: 16)
-                .stroke(Color.gray.opacity(0.2), lineWidth: 1)
-        )
+        .buttonStyle(.plain)
+        .padding(.horizontal)
     }
 }
+
+// Update UIKitIntrospectionView to target more views
+#if os(iOS)
+class IntrospectionViewController: UIViewController {
+    var onResolve: ((UIViewController) -> Void)?
+    
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        if let onResolve = onResolve {
+            var targetVC = self.parent
+            while let vc = targetVC, !(vc is UIHostingController<PrivacyNoticeSheet>) {
+                targetVC = vc.parent
+            }
+            if let sheetVC = targetVC as? UIHostingController<PrivacyNoticeSheet> {
+                sheetVC.view.backgroundColor = .clear
+            }
+            onResolve(targetVC ?? self)
+        }
+    }
+}
+
+struct UIKitIntrospectionView: UIViewControllerRepresentable {
+    let onResolve: (UIViewController) -> Void
+    
+    func makeUIViewController(context: Context) -> IntrospectionViewController {
+        let controller = IntrospectionViewController()
+        controller.onResolve = onResolve
+        return controller
+    }
+    
+    func updateUIViewController(_ uiViewController: IntrospectionViewController, context: Context) {}
+}
+#endif
