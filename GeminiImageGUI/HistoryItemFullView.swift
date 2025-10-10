@@ -8,6 +8,7 @@ struct FullHistoryItemView: View {
     @EnvironmentObject var appState: AppState
     @Environment(\.dismiss) private var dismiss
     @Environment(\.undoManager) private var undoManager
+    @Environment(\.colorScheme) private var colorScheme
     @State private var selectedId: UUID? = nil
     @State private var showDeleteAlert: Bool = false
     @State private var previousSelectedId: UUID? = nil
@@ -246,15 +247,15 @@ struct FullHistoryItemView: View {
             .scrollPosition(id: $selectedId)
             .onAppear {
                 DispatchQueue.main.async {
-                    proxy.scrollTo(selectedId, anchor: .center)
+                    proxy.scrollTo(selectedId)  // Remove anchor: .center (or try .leading)
                 }
             }
             .onChange(of: selectedId) { newId in
                 withAnimation {
-                    proxy.scrollTo(newId, anchor: .center)
+                    proxy.scrollTo(newId)  // Remove anchor: .center (or try .leading)
                 }
             }
-            #if os(macOS)
+    #if os(macOS)
             .focusable()
             .onKeyPress { press in
                 if press.phase == .down {
@@ -272,7 +273,7 @@ struct FullHistoryItemView: View {
                 }
                 return .ignored
             }
-            #endif
+    #endif
         }
     }
    
@@ -341,12 +342,12 @@ struct FullHistoryItemView: View {
         var creator: String? = nil
         if let mode = item.mode {
             creator = mode == .gemini ? "Gemini" : mode == .grok ? item.modelUsed ?? appState.settings.selectedGrokModel : mode == .aimlapi ? item.modelUsed ?? appState.settings.selectedAIMLModel : item.workflowName ?? "ComfyUI"
-   
+            
             if let idx = item.indexInBatch, let tot = item.totalInBatch {
                 creator! += " #\(idx + 1) of \(tot)"
             }
         }
-   
+        
         return VStack(spacing: 4) {
             VStack(alignment: .center, spacing: 2) {
                 HStack(alignment: .center) {
@@ -354,7 +355,7 @@ struct FullHistoryItemView: View {
                         .font(.system(size: 12))
                         .multilineTextAlignment(.leading)
                         .lineLimit(nil)
-                        .foregroundColor(.black)
+                        .foregroundColor(.primary)
                         .help("The prompt used for this image")
                         .accessibilityLabel("Prompt: \(item.prompt)")
                     Button(action: {
@@ -376,16 +377,16 @@ struct FullHistoryItemView: View {
                 }
                 Text("Date: \(dateFormatter.string(from: item.date))")
                     .font(.system(size: 10))
-                    .foregroundColor(.gray)
+                    .foregroundColor(.secondary)
                     .help("Date the image was generated")
                 if let creator = creator {
                     Text("Created with: \(creator)")
                         .font(.system(size: 10))
-                        .foregroundColor(.gray)
+                        .foregroundColor(.secondary)
                         .help("Generation mode or workflow used")
                 }
             }
-   
+            
             HStack {
                 Button(action: {
                     if let idx = currentIndex {
@@ -396,15 +397,15 @@ struct FullHistoryItemView: View {
                     Image(systemName: "arrow.left.circle.fill")
                         .font(.system(size: 24))
                         .symbolRenderingMode(.hierarchical)
-                        .foregroundColor(.black)
+                        .foregroundColor(.primary)
                 }
                 .disabled(currentIndex == 0)
                 .buttonStyle(.plain)
                 .help("Previous image in history")
                 .accessibilityLabel("Previous image")
-               
+                
                 Spacer()
-               
+                
                 Button(action: {
                     showDeleteAlert = true
                 }) {
@@ -416,33 +417,35 @@ struct FullHistoryItemView: View {
                 .buttonStyle(.plain)
                 .help("Delete this history item")
                 .accessibilityLabel("Delete item")
-               
+                
                 Button(action: {
                     undoManager?.undo()
                 }) {
                     Image(systemName: "arrow.uturn.left")
                         .font(.system(size: 24))
                         .symbolRenderingMode(.hierarchical)
+                        .foregroundColor(.primary)
                 }
                 .buttonStyle(.plain)
                 .disabled(!(undoManager?.canUndo ?? false))
                 .help("Undo last action")
                 .accessibilityLabel("Undo")
-               
+                
                 Button(action: {
                     undoManager?.redo()
                 }) {
                     Image(systemName: "arrow.uturn.right")
                         .font(.system(size: 24))
                         .symbolRenderingMode(.hierarchical)
+                        .foregroundColor(.primary)
                 }
                 .buttonStyle(.plain)
                 .disabled(!(undoManager?.canRedo ?? false))
                 .help("Redo last action")
                 .accessibilityLabel("Redo")
-               
+                
                 Spacer()
-               
+                
                 Button(action: {
                     addToInputImages(item: item)
                     showAddedMessage = true
@@ -460,9 +463,9 @@ struct FullHistoryItemView: View {
                 .buttonStyle(.plain)
                 .help("Add to input images")
                 .accessibilityLabel("Add to input slot")
-               
+                
                 Spacer()
-               
+                
                 Button(action: {
                     if let idx = currentIndex {
                         let newIdx = min(history.count - 1, idx + 1)
@@ -472,7 +475,7 @@ struct FullHistoryItemView: View {
                     Image(systemName: "arrow.right.circle.fill")
                         .font(.system(size: 24))
                         .symbolRenderingMode(.hierarchical)
-                        .foregroundColor(.black)
+                        .foregroundColor(.primary)
                 }
                 .disabled(currentIndex == history.count - 1)
                 .buttonStyle(.plain)
@@ -481,7 +484,7 @@ struct FullHistoryItemView: View {
             }
         }
         .padding(8)
-        .background(Color.white)
+        .background(colorScheme == .dark ? Color.black : Color.white)
         .frame(maxWidth: .infinity)
     }
    
