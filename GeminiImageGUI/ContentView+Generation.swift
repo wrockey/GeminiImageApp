@@ -371,9 +371,21 @@ extension ContentView {
                     throw GenerationError.invalidURL
                 }
                 
+                // Build prompt, appending camera controls for prompt-based models (e.g., Sora, MiniMax)
+                var prompt = appState.prompt
+                let info = CameraControlInfo.infoForModel(id: model.id)
+                let isPromptBasedCameraControl = info.format.contains("prompt-based") && model.supportedParams.contains(.cameraControl)
+                if isPromptBasedCameraControl, let camera = appState.settings.aimlAdvancedParams.cameraControl, !camera.isEmpty {
+                    // Append camera controls to prompt for models like Sora, MiniMax
+                    if let cameraDict = try? JSONSerialization.jsonObject(with: camera.data(using: .utf8)!) as? [String: String] {
+                        let cameraDesc = cameraDict.map { "\($0.key) \($0.value)" }.joined(separator: ", ")
+                        prompt += ", camera: \(cameraDesc)"
+                    }
+                }
+                
                 var bodyDict: [String: Any] = [
                     "model": modelName,
-                    "prompt": appState.prompt,
+                    "prompt": prompt,
                     "sync_mode": true,
                     "enable_safety_checker": appState.settings.aimlAdvancedParams.enableSafetyChecker ?? true
                 ]
@@ -391,8 +403,22 @@ extension ContentView {
                 if let aspect = appState.settings.aimlAdvancedParams.aspectRatio, model.supportedParams.contains(.aspectRatio) {
                     bodyDict["aspect_ratio"] = aspect
                 }
+                if let frameRate = appState.settings.aimlAdvancedParams.frameRate, model.supportedParams.contains(.frameRate) {
+                    bodyDict["frame_rate"] = frameRate
+                }
+                if let stylePreset = appState.settings.aimlAdvancedParams.stylePreset, model.supportedParams.contains(.stylePreset) {
+                    bodyDict["style_preset"] = stylePreset
+                }
+                if let enhance = appState.settings.aimlAdvancedParams.enhancePrompt, model.supportedParams.contains(.enhancePrompt) {
+                    bodyDict["enhance_prompt"] = enhance
+                }
                 if let camera = appState.settings.aimlAdvancedParams.cameraControl, model.supportedParams.contains(.cameraControl), !camera.isEmpty {
-                    bodyDict["camera_control"] = camera
+                    // Validate JSON
+                    if let data = camera.data(using: .utf8), (try? JSONSerialization.jsonObject(with: data)) != nil {
+                        bodyDict["camera_control"] = camera
+                    } else {
+                        throw GenerationError.apiError("Invalid camera_control JSON format")
+                    }
                 }
                 
                 // For image-to-video
@@ -598,8 +624,7 @@ extension ContentView {
                 let useImgBB = appState.preferImgBBForImages && model.acceptsPublicURL
                 
                 for slot in appState.ui.imageSlots {
-                    guard let image = slot.image, let processed = processImageForUpload(image: image, originalData: slot.originalData, format: "jpeg", isBase64: appState.settings.imageSubmissionMethod == .base64, convertToJPG: appState.settings.base64ConvertToJPG, scale50Percent: appState.settings.base64Scale50Percent)
-                    else {
+                    guard let image = slot.image, let processed = processImageForUpload(image: image, originalData: slot.originalData, format: "jpeg", isBase64: appState.settings.imageSubmissionMethod == .base64, convertToJPG: appState.settings.base64ConvertToJPG, scale50Percent: appState.settings.base64Scale50Percent) else {
                         continue
                     }
                     if useImgBB {

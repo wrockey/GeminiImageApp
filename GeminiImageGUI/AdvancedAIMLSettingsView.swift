@@ -5,6 +5,17 @@ struct AdvancedAIMLSettingsView: View {
     @Binding var params: ModelParameters
     @Environment(\.dismiss) var dismiss
     
+    // State for camera controls
+    @State private var selectedControls: Set<String> = []
+    @State private var panDirection: String = "none"
+    @State private var tiltDirection: String = "none"
+    @State private var zoomDirection: String = "none"
+    @State private var rollDirection: String = "none"
+    @State private var dollyDirection: String = "none"
+    @State private var trackDirection: String = "none"
+    @State private var otherControl: String = ""
+    @State private var showCameraHelp: Bool = false
+    
     var body: some View {
         #if os(iOS)
         NavigationStack {
@@ -19,6 +30,36 @@ struct AdvancedAIMLSettingsView: View {
                     Button("Done") { dismiss() }
                         .tint(.blue)
                 }
+            }
+            .sheet(isPresented: $showCameraHelp) {
+                CameraControlHelpView(modelId: model.id)
+            }
+            .onAppear {
+                parseCameraControl()
+            }
+            .onChange(of: selectedControls) { _ in
+                updateCameraControlJSON()
+            }
+            .onChange(of: panDirection) { _ in
+                updateCameraControlJSON()
+            }
+            .onChange(of: tiltDirection) { _ in
+                updateCameraControlJSON()
+            }
+            .onChange(of: zoomDirection) { _ in
+                updateCameraControlJSON()
+            }
+            .onChange(of: rollDirection) { _ in
+                updateCameraControlJSON()
+            }
+            .onChange(of: dollyDirection) { _ in
+                updateCameraControlJSON()
+            }
+            .onChange(of: trackDirection) { _ in
+                updateCameraControlJSON()
+            }
+            .onChange(of: otherControl) { _ in
+                updateCameraControlJSON()
             }
         }
         #elseif os(macOS)
@@ -35,6 +76,36 @@ struct AdvancedAIMLSettingsView: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { dismiss() }
                 }
+            }
+            .sheet(isPresented: $showCameraHelp) {
+                CameraControlHelpView(modelId: model.id)
+            }
+            .onAppear {
+                parseCameraControl()
+            }
+            .onChange(of: selectedControls) { _ in
+                updateCameraControlJSON()
+            }
+            .onChange(of: panDirection) { _ in
+                updateCameraControlJSON()
+            }
+            .onChange(of: tiltDirection) { _ in
+                updateCameraControlJSON()
+            }
+            .onChange(of: zoomDirection) { _ in
+                updateCameraControlJSON()
+            }
+            .onChange(of: rollDirection) { _ in
+                updateCameraControlJSON()
+            }
+            .onChange(of: dollyDirection) { _ in
+                updateCameraControlJSON()
+            }
+            .onChange(of: trackDirection) { _ in
+                updateCameraControlJSON()
+            }
+            .onChange(of: otherControl) { _ in
+                updateCameraControlJSON()
             }
         }
         .frame(minWidth: 450, maxWidth: 450, minHeight: 600, idealHeight: 700)
@@ -286,15 +357,134 @@ struct AdvancedAIMLSettingsView: View {
                 }
                 
                 if model.supportedParams.contains(.cameraControl) {
-                    TextEditor(text: Binding(
-                        get: { params.cameraControl ?? "{\"pan\": \"none\", \"tilt\": \"none\", \"zoom\": \"none\"}" },
-                        set: { params.cameraControl = $0.isEmpty ? nil : $0 }
-                    ))
-                    .frame(height: 100)
-                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.3), lineWidth: 1))
-                    .help("JSON-like camera controls (e.g., {\"pan\": \"left\", \"tilt\": \"up\", \"zoom\": \"in\"})")
-                    .accessibilityLabel("Camera Control editor")
-                    .padding(.vertical, 8)
+                    Section {
+                        Toggle("Pan", isOn: Binding(
+                            get: { selectedControls.contains("pan") },
+                            set: { if $0 { selectedControls.insert("pan") } else { selectedControls.remove("pan") } }
+                        ))
+                        .help("Enable pan (horizontal movement)")
+                        .padding(.vertical, 4)
+                        if selectedControls.contains("pan") {
+                            Picker("Direction", selection: $panDirection) {
+                                Text("None").tag("none")
+                                Text("Left").tag("left")
+                                Text("Right").tag("right")
+                            }
+                            .pickerStyle(.segmented)
+                            .help("Select pan direction")
+                            .padding(.leading, 20)
+                        }
+                        
+                        Toggle("Tilt", isOn: Binding(
+                            get: { selectedControls.contains("tilt") },
+                            set: { if $0 { selectedControls.insert("tilt") } else { selectedControls.remove("tilt") } }
+                        ))
+                        .help("Enable tilt (vertical movement)")
+                        .padding(.vertical, 4)
+                        if selectedControls.contains("tilt") {
+                            Picker("Direction", selection: $tiltDirection) {
+                                Text("None").tag("none")
+                                Text("Up").tag("up")
+                                Text("Down").tag("down")
+                            }
+                            .pickerStyle(.segmented)
+                            .help("Select tilt direction")
+                            .padding(.leading, 20)
+                        }
+                        
+                        Toggle("Zoom", isOn: Binding(
+                            get: { selectedControls.contains("zoom") },
+                            set: { if $0 { selectedControls.insert("zoom") } else { selectedControls.remove("zoom") } }
+                        ))
+                        .help("Enable zoom (in/out movement)")
+                        .padding(.vertical, 4)
+                        if selectedControls.contains("zoom") {
+                            Picker("Direction", selection: $zoomDirection) {
+                                Text("None").tag("none")
+                                Text("In").tag("in")
+                                Text("Out").tag("out")
+                            }
+                            .pickerStyle(.segmented)
+                            .help("Select zoom direction")
+                            .padding(.leading, 20)
+                        }
+                        
+                        Toggle("Roll", isOn: Binding(
+                            get: { selectedControls.contains("roll") },
+                            set: { if $0 { selectedControls.insert("roll") } else { selectedControls.remove("roll") } }
+                        ))
+                        .help("Enable roll (rotation around z-axis)")
+                        .padding(.vertical, 4)
+                        if selectedControls.contains("roll") {
+                            Picker("Direction", selection: $rollDirection) {
+                                Text("None").tag("none")
+                                Text("Left").tag("left")
+                                Text("Right").tag("right")
+                            }
+                            .pickerStyle(.segmented)
+                            .help("Select roll direction")
+                            .padding(.leading, 20)
+                        }
+                        
+                        Toggle("Dolly", isOn: Binding(
+                            get: { selectedControls.contains("dolly") },
+                            set: { if $0 { selectedControls.insert("dolly") } else { selectedControls.remove("dolly") } }
+                        ))
+                        .help("Enable dolly (forward/back movement)")
+                        .padding(.vertical, 4)
+                        if selectedControls.contains("dolly") {
+                            Picker("Direction", selection: $dollyDirection) {
+                                Text("None").tag("none")
+                                Text("Forward").tag("forward")
+                                Text("Back").tag("back")
+                            }
+                            .pickerStyle(.segmented)
+                            .help("Select dolly direction")
+                            .padding(.leading, 20)
+                        }
+                        
+                        Toggle("Track", isOn: Binding(
+                            get: { selectedControls.contains("track") },
+                            set: { if $0 { selectedControls.insert("track") } else { selectedControls.remove("track") } }
+                        ))
+                        .help("Enable track (side-to-side movement)")
+                        .padding(.vertical, 4)
+                        if selectedControls.contains("track") {
+                            Picker("Direction", selection: $trackDirection) {
+                                Text("None").tag("none")
+                                Text("Left").tag("left")
+                                Text("Right").tag("right")
+                            }
+                            .pickerStyle(.segmented)
+                            .help("Select track direction")
+                            .padding(.leading, 20)
+                        }
+                        
+                        TextField("Other (custom JSON, e.g., {\"fly_over\": \"forward\"})", text: $otherControl)
+                            .textFieldStyle(.roundedBorder)
+                            .help("Enter additional custom camera controls as JSON")
+                            .accessibilityLabel("Other camera control input")
+                            .padding(.vertical, 8)
+                    } header: {
+                        HStack {
+                            Text("Camera Controls")
+                                .font(.subheadline)
+                                .bold()
+                            Spacer()
+                            Button(action: {
+                                showCameraHelp = true
+                            }) {
+                                Image(systemName: "questionmark.circle")
+                                    .font(.system(size: 14))
+                                    .foregroundColor(.blue)
+                            }
+                            .buttonStyle(.plain)
+                            .help("Show camera control help")
+                            .accessibilityLabel("Camera control help")
+                        }
+                        .padding(.bottom, 4)
+                    }
+                    .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
                 }
             } header: {
                 Text("Video Parameters")
@@ -303,5 +493,134 @@ struct AdvancedAIMLSettingsView: View {
             }
             .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
         }
+    }
+    
+    // Parse existing cameraControl JSON into state
+    private func parseCameraControl() {
+        guard let jsonString = params.cameraControl, let data = jsonString.data(using: .utf8) else { return }
+        do {
+            if let dict = try JSONSerialization.jsonObject(with: data) as? [String: String] {
+                for (key, value) in dict {
+                    switch key.lowercased() {
+                    case "pan":
+                        selectedControls.insert("pan")
+                        panDirection = value
+                    case "tilt":
+                        selectedControls.insert("tilt")
+                        tiltDirection = value
+                    case "zoom":
+                        selectedControls.insert("zoom")
+                        zoomDirection = value
+                    case "roll":
+                        selectedControls.insert("roll")
+                        rollDirection = value
+                    case "dolly":
+                        selectedControls.insert("dolly")
+                        dollyDirection = value
+                    case "track":
+                        selectedControls.insert("track")
+                        trackDirection = value
+                    default:
+                        otherControl = "\"\(key)\": \"\(value)\""
+                    }
+                }
+            }
+        } catch {
+            otherControl = jsonString // Fallback to Other if not valid JSON
+        }
+    }
+    
+    // Update params.cameraControl with JSON from selections
+    private func updateCameraControlJSON() {
+        var jsonDict: [String: String] = [:]
+        
+        if selectedControls.contains("pan") && panDirection != "none" {
+            jsonDict["pan"] = panDirection
+        }
+        if selectedControls.contains("tilt") && tiltDirection != "none" {
+            jsonDict["tilt"] = tiltDirection
+        }
+        if selectedControls.contains("zoom") && zoomDirection != "none" {
+            jsonDict["zoom"] = zoomDirection
+        }
+        if selectedControls.contains("roll") && rollDirection != "none" {
+            jsonDict["roll"] = rollDirection
+        }
+        if selectedControls.contains("dolly") && dollyDirection != "none" {
+            jsonDict["dolly"] = dollyDirection
+        }
+        if selectedControls.contains("track") && trackDirection != "none" {
+            jsonDict["track"] = trackDirection
+        }
+        
+        if !otherControl.isEmpty {
+            if let otherData = otherControl.data(using: .utf8), let otherDict = try? JSONSerialization.jsonObject(with: otherData) as? [String: String] {
+                jsonDict.merge(otherDict) { (_, new) in new }
+            }
+        }
+        
+        if jsonDict.isEmpty {
+            params.cameraControl = nil
+        } else {
+            if let jsonData = try? JSONSerialization.data(withJSONObject: jsonDict, options: [.prettyPrinted]), let jsonString = String(data: jsonData, encoding: .utf8) {
+                params.cameraControl = jsonString
+            }
+        }
+    }
+}
+
+struct CameraControlHelpView: View {
+    let modelId: String
+    @Environment(\.dismiss) var dismiss
+    
+    var body: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 12) {
+                let info = CameraControlInfo.infoForModel(id: modelId)
+                
+                Text("Camera Control Help")
+                    .font(.title2)
+                    .bold()
+                    .padding(.bottom, 4)
+                
+                Text(info.description)
+                    .font(.body)
+                    .foregroundColor(.primary)
+                
+                Text("Supported Controls:")
+                    .font(.headline)
+                    .padding(.top, 8)
+                
+                ForEach(info.supportedControls, id: \.self) { control in
+                    Text("• \(control)")
+                        .font(.body)
+                        .foregroundColor(.secondary)
+                }
+                
+                Text("Format:")
+                    .font(.headline)
+                    .padding(.top, 8)
+                
+                Text(info.format)
+                    .font(.body)
+                    .foregroundColor(.primary)
+                
+                Spacer()
+            }
+            .padding()
+            #if os (macOS)
+            .navigationTitle("Camera Control Help")
+            #endif
+            #if os (iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                        .tint(.blue)
+                }
+            }
+        }
+        .frame(minWidth: 300, idealWidth: 400, maxWidth: 400, minHeight: 300, idealHeight: 400, maxHeight: 500)
     }
 }
