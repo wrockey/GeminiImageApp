@@ -217,6 +217,8 @@ struct ContentView: View {
     @State var pendingAction: (() -> Void)? = nil
     @State var generationTask: Task<Void, Error>? = nil
     @State var promptTextView: (any PlatformTextView)? = nil
+    @State var privacyServiceToShow: PrivacyService? = nil
+    @State var onPrivacyComplete: ((Bool, Bool) -> Void)? = nil
     @State private var showGeneralOptions = false
     @State private var detailedError: DetailedError? = nil
  
@@ -367,6 +369,11 @@ struct ContentView: View {
             .successAlert(showSuccessAlert: $showSuccessAlert, successMessage: successMessage)
             .onboardingSheet(showOnboarding: $showOnboarding)
             .helpSheet(showHelp: $showHelp, mode: appState.settings.mode)
+            .sheet(item: $privacyServiceToShow) { service in
+                PrivacyNoticeSheet(service: service) { consented, dontShow in
+                    self.onPrivacyComplete?(consented, dontShow)
+                }
+            }
             .selectFolderAlert(isPresented: $showSelectFolderAlert) {
                 print("Showing output folder picker from alert")
                 PlatformFilePicker.presentOpenPanel(allowedTypes: [.folder], allowsMultiple: false, canChooseDirectories: true) { result in
@@ -414,6 +421,11 @@ struct ContentView: View {
             .successAlert(showSuccessAlert: $showSuccessAlert, successMessage: successMessage)
             .onboardingSheet(showOnboarding: $showOnboarding)
             .helpSheet(showHelp: $showHelp, mode: appState.settings.mode)
+            .sheet(item: $privacyServiceToShow) { service in
+                PrivacyNoticeSheet(service: service) { consented, dontShow in
+                    self.onPrivacyComplete?(consented, dontShow)
+                }
+            }
             .selectFolderAlert(isPresented: $showSelectFolderAlert) {
                 print("Showing output folder picker from alert")
                 PlatformFilePicker.presentOpenPanel(allowedTypes: [.folder], allowsMultiple: false, canChooseDirectories: true) { result in

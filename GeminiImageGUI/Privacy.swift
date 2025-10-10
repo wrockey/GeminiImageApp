@@ -1,175 +1,98 @@
-//  Privacy.swift
-#if os(iOS)
-import UIKit
-#endif
-#if os(macOS)
-import AppKit
-#endif
+// Privacy.swift (full corrected)
+import SwiftUI
 
-extension ContentView {
-    
-    // New: Show consent alert for AI/ML API
-    @MainActor
-    func showAIMLConsentAlert() async -> Bool {
-        await withCheckedContinuation { continuation in
-#if os(iOS)
-            let alert = UIAlertController(
-                title: "Data Sharing Notice",
-                message: "Prompts and images will be sent to aimlapi.com for generation. View AI/ML API's privacy policy?",
-                preferredStyle: .alert
-            )
-            
-            alert.addAction(UIAlertAction(title: "View Privacy Policy", style: .default) { _ in
-                if let url = URL(string: "https://aimlapi.com/privacy-policy") {
-                    UIApplication.shared.open(url)
-                }
-                continuation.resume(returning: false)
-            })
-            
-            alert.addAction(UIAlertAction(title: "Continue", style: .default) { _ in
-                continuation.resume(returning: true)
-            })
-            
-            alert.addAction(UIAlertAction(title: "Cancel", style: .cancel) { _ in
-                continuation.resume(returning: false)
-            })
-            
-            // Present from top VC
-            var topVC = UIApplication.shared.windows.first(where: { $0.isKeyWindow })?.rootViewController
-            while let presentedVC = topVC?.presentedViewController {
-                topVC = presentedVC
-            }
-            topVC?.present(alert, animated: true)
-#elseif os(macOS)
-            let alert = NSAlert()
-            alert.messageText = "Data Sharing Notice"
-            alert.informativeText = "Prompts and images will be sent to aimlapi.com for generation. View AI/ML API's privacy policy?"
-            alert.addButton(withTitle: "View Privacy Policy")
-            alert.addButton(withTitle: "Continue")
-            alert.addButton(withTitle: "Cancel")
-            
-            let response = alert.runModal()
-            switch response {
-            case .alertFirstButtonReturn: // View Privacy Policy
-                if let url = URL(string: "https://aimlapi.com/privacy-policy") {
-                    NSWorkspace.shared.open(url)
-                }
-                continuation.resume(returning: false)
-            case .alertSecondButtonReturn: // Continue
-                continuation.resume(returning: true)
-            default: // Cancel
-                continuation.resume(returning: false)
-            }
-#endif
+enum PrivacyService: String, Identifiable {
+    case gemini = "Gemini"
+    case grok = "Grok"
+    case aimlapi = "AI/ML API"
+    case imgbb = "ImgBB"
+
+    var id: Self { self }  // Conform to Identifiable
+
+    var policyURL: String {
+        switch self {
+        case .gemini: return "https://policies.google.com/privacy"
+        case .grok: return "https://x.ai/privacy-policy"
+        case .aimlapi: return "https://aimlapi.com/privacy-policy"
+        case .imgbb: return "https://imgbb.com/privacy"
         }
     }
-    // New: Show consent alert for Grok
-    @MainActor
-    func showGrokConsentAlert() async -> Bool {
-        await withCheckedContinuation { continuation in
-#if os(iOS)
-            let alert = UIAlertController(
-                title: "Data Sharing Notice",
-                message: "Prompts and images will be sent to xAI for generation. View xAI's privacy policy?",
-                preferredStyle: .alert
-            )
-            
-            alert.addAction(UIAlertAction(title: "View Privacy Policy", style: .default) { _ in
-                if let url = URL(string: "https://x.ai/privacy-policy") {
-                    UIApplication.shared.open(url)
-                }
-                continuation.resume(returning: false)
-            })
-            
-            alert.addAction(UIAlertAction(title: "Continue", style: .default) { _ in
-                continuation.resume(returning: true)
-            })
-            
-            alert.addAction(UIAlertAction(title: "Cancel", style: .cancel) { _ in
-                continuation.resume(returning: false)
-            })
-            
-            // Present from top VC
-            var topVC = UIApplication.shared.windows.first(where: { $0.isKeyWindow })?.rootViewController
-            while let presentedVC = topVC?.presentedViewController {
-                topVC = presentedVC
-            }
-            topVC?.present(alert, animated: true)
-#elseif os(macOS)
-            let alert = NSAlert()
-            alert.messageText = "Data Sharing Notice"
-            alert.informativeText = "Prompts and images will be sent to xAI for generation. View xAI's privacy policy?"
-            alert.addButton(withTitle: "View Privacy Policy")
-            alert.addButton(withTitle: "Continue")
-            alert.addButton(withTitle: "Cancel")
-            
-            let response = alert.runModal()
-            switch response {
-            case .alertFirstButtonReturn: // View Privacy Policy
-                if let url = URL(string: "https://x.ai/privacy-policy") {
-                    NSWorkspace.shared.open(url)
-                }
-                continuation.resume(returning: false)
-            case .alertSecondButtonReturn: // Continue
-                continuation.resume(returning: true)
-            default: // Cancel
-                continuation.resume(returning: false)
-            }
-#endif
+
+    var message: String {
+        switch self {
+        case .gemini, .grok, .aimlapi:
+            return "Your prompts and any input images will be sent to \(rawValue) for image generation. Data may be stored or used to improve services. Review the privacy policy for details."
+        case .imgbb:
+            return "Input images will be uploaded to ImgBB to generate public URLs for the AI model. These URLs are temporary but public during processing."
         }
     }
-    @MainActor
-    func showGeminiConsentAlert() async -> Bool {
-        await withCheckedContinuation { continuation in
-#if os(iOS)
-            let alert = UIAlertController(
-                title: "Data Sharing Notice",
-                message: "Prompts and images will be sent to Google for generation. View Google's privacy policy?",
-                preferredStyle: .alert
-            )
-            
-            alert.addAction(UIAlertAction(title: "View Privacy Policy", style: .default) { _ in
-                if let url = URL(string: "https://policies.google.com/privacy") {
-                    UIApplication.shared.open(url)
-                }
-                continuation.resume(returning: false) // Don't proceed automatically after viewing
-            })
-            
-            alert.addAction(UIAlertAction(title: "Continue", style: .default) { _ in
-                continuation.resume(returning: true)
-            })
-            
-            alert.addAction(UIAlertAction(title: "Cancel", style: .cancel) { _ in
-                continuation.resume(returning: false)
-            })
-            
-            // Present from top VC
-            var topVC = UIApplication.shared.windows.first(where: { $0.isKeyWindow })?.rootViewController
-            while let presentedVC = topVC?.presentedViewController {
-                topVC = presentedVC
+}
+
+struct PrivacyNoticeSheet: View {
+    let service: PrivacyService
+    let onDismiss: (Bool, Bool) -> Void  // (consented, dontShowAgain)
+
+    @State private var dontShowAgain = false
+
+    var body: some View {
+        VStack(spacing: 24) {
+            Image(systemName: "info.circle.fill")
+                .font(.system(size: 32))
+                .foregroundColor(.blue)
+                .symbolRenderingMode(.hierarchical)
+
+            Text("\(service.rawValue) Privacy Notice")
+                .font(.title2.bold())
+                .foregroundColor(.primary)
+
+            Text(service.message)
+                .font(.body)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal)
+
+            if let url = URL(string: service.policyURL) {
+                Link("View Privacy Policy", destination: url)
+                    .buttonStyle(.borderedProminent)
+                    .tint(.blue)
+                    .controlSize(.regular)
+                    .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 1)
             }
-            topVC?.present(alert, animated: true)
-#elseif os(macOS)
-            let alert = NSAlert()
-            alert.messageText = "Data Sharing Notice"
-            alert.informativeText = "Prompts and images will be sent to Google for generation. View Google's privacy policy?"
-            alert.addButton(withTitle: "View Privacy Policy")
-            alert.addButton(withTitle: "Continue")
-            alert.addButton(withTitle: "Cancel")
-            
-            let response = alert.runModal()
-            switch response {
-            case .alertFirstButtonReturn: // View Privacy Policy
-                if let url = URL(string: "https://policies.google.com/privacy") {
-                    NSWorkspace.shared.open(url)
-                }
-                continuation.resume(returning: false)
-            case .alertSecondButtonReturn: // Continue
-                continuation.resume(returning: true)
-            default: // Cancel
-                continuation.resume(returning: false)
+
+            Toggle(isOn: $dontShowAgain) {
+                Text("Don't show again")
+                    .font(.subheadline.italic())
+                    .foregroundColor(.secondary)
             }
-#endif
+            .toggleStyle(.checkbox)
+            .padding(.horizontal)
+
+            HStack(spacing: 12) {
+                Button("Cancel") {
+                    onDismiss(false, dontShowAgain)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.regular)
+                .foregroundColor(.secondary)
+                .shadow(color: .black.opacity(0.05), radius: 1, x: 0, y: 0.5)
+
+                Button("Continue") {
+                    onDismiss(true, dontShowAgain)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.regular)
+                .tint(.blue)
+                .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 1)
+            }
         }
+        .padding(24)
+        .background(Color(.windowBackgroundColor).opacity(0.95))
+        .cornerRadius(16)
+        .shadow(color: .black.opacity(0.15), radius: 10, x: 0, y: 5)
+        .frame(minWidth: 400, maxWidth: 450, minHeight: 250)
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(Color.gray.opacity(0.2), lineWidth: 1)
+        )
     }
 }

@@ -233,9 +233,22 @@ struct HelpView: View {
                     case .comfyUI:
                         comfyUIHelpContent
                     case .grok:
-                        grokHelpContent  // Added: Help for Grok mode
+                        grokHelpContent
                     case .aimlapi:
-                        aimlHelpContent  // New: Help for AI/ML API mode
+                        aimlHelpContent
+                    }
+                    
+                    Text("Privacy Notices")
+                        .font(.title2)
+                        .padding(.top)
+
+                    Text("Review privacy details for services used in the app:")
+
+                    ForEach([PrivacyService.gemini, .grok, .aimlapi, .imgbb], id: \.self) { service in
+                        if let url = URL(string: service.policyURL) {
+                            Link(service.rawValue + " Privacy Policy", destination: url)
+                                .padding(.vertical, 5)
+                        }
                     }
                 }
                 .padding()
@@ -264,9 +277,22 @@ struct HelpView: View {
                     case .comfyUI:
                         comfyUIHelpContent
                     case .grok:
-                        grokHelpContent  // Added: Help for Grok mode
+                        grokHelpContent
                     case .aimlapi:
-                        aimlHelpContent  // New: Help for AI/ML API mode
+                        aimlHelpContent
+                    }
+                    
+                    Text("Privacy Notices")
+                        .font(.title2)
+                        .padding(.top)
+
+                    Text("Review privacy details for services used in the app:")
+
+                    ForEach([PrivacyService.gemini, .grok, .aimlapi, .imgbb], id: \.self) { service in
+                        if let url = URL(string: service.policyURL) {
+                            Link(service.rawValue + " Privacy Policy", destination: url)
+                                .padding(.vertical, 5)
+                        }
                     }
                 }
                 .padding()
