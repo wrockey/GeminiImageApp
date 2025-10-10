@@ -669,7 +669,6 @@ struct ConfigurationSection: View {
             }
         }
     }
-
     
     @ViewBuilder
     private var aimlImageSizeRow: some View {
@@ -723,8 +722,8 @@ struct ConfigurationSection: View {
                 let parts = newValue.split(separator: "x")
                 let trimmedParts = parts.map { $0.trimmingCharacters(in: .whitespaces) }
                 if trimmedParts.count == 2,
-                   let width = Int(trimmedParts[0]),
-                   let height = Int(trimmedParts[1]) {
+                    let width = Int(trimmedParts[0]),
+                    let height = Int(trimmedParts[1]) {
                     appState.settings.selectedImageWidth = width
                     appState.settings.selectedImageHeight = height
                 }
@@ -763,8 +762,8 @@ struct ConfigurationSection: View {
         return allResolutions.filter { res in
             let parts = res.value.split(separator: "x")
             if parts.count == 2,
-               let w = Int(parts[0]),
-               let h = Int(parts[1]) {
+                let w = Int(parts[0]),
+                let h = Int(parts[1]) {
                 return w <= maxW && h <= maxH
             }
             return false
@@ -1251,22 +1250,31 @@ struct ConfigurationSection: View {
                 let (data, _) = try await URLSession.shared.data(for: request)
                 let response = try JSONDecoder().decode(AIMLModelsResponse.self, from: data)
                 
-                let imageModels = response.data.filter { entry in
+                let filteredModels = response.data.filter { entry in
                     let lowerID = entry.id.lowercased()
-                    return !lowerID.contains("video") && (
-                        lowerID.contains("image") || lowerID.contains("t2i") || lowerID.contains("i2i") ||
-                        lowerID.contains("diffusion") || lowerID.contains("seedream") || lowerID.contains("flux") ||
-                        lowerID.contains("edit") || lowerID.contains("generation") || lowerID.contains("dall")
-                    )
+                    if appState.settings.isVideoMode {
+                        // Filter for video models
+                        if let model = ModelRegistry.modelFor(id: entry.id), model.isVideo {
+                            return true
+                        }
+                        return lowerID.contains("video")
+                    } else {
+                        // Filter for image models (original logic)
+                        return !lowerID.contains("video") && (
+                            lowerID.contains("image") || lowerID.contains("t2i") || lowerID.contains("i2i") ||
+                            lowerID.contains("diffusion") || lowerID.contains("seedream") || lowerID.contains("flux") ||
+                            lowerID.contains("edit") || lowerID.contains("generation") || lowerID.contains("dall")
+                        )
+                    }
                 }.map { $0.id }.sorted()
                 
                 await MainActor.run {
-                    availableModels = imageModels
-                    if !imageModels.isEmpty && appState.settings.selectedAIMLModel.isEmpty {
-                        appState.settings.selectedAIMLModel = imageModels.first!
+                    availableModels = filteredModels
+                    if !filteredModels.isEmpty && (appState.settings.selectedAIMLModel.isEmpty || !filteredModels.contains(appState.settings.selectedAIMLModel)) {
+                        appState.settings.selectedAIMLModel = filteredModels.first!
                     }
-                    if imageModels.isEmpty {
-                        errorItem = AlertError(message: "No image models found", fullMessage: nil)
+                    if filteredModels.isEmpty {
+                        errorItem = AlertError(message: appState.settings.isVideoMode ? "No video models found" : "No image models found", fullMessage: nil)
                     }
                 }
             } catch {

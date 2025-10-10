@@ -7,7 +7,6 @@ struct AdvancedAIMLSettingsView: View {
     
     var body: some View {
         #if os(iOS)
-#if os(iOS)
         NavigationStack {
             Form {
                 parameterSections
@@ -22,7 +21,6 @@ struct AdvancedAIMLSettingsView: View {
                 }
             }
         }
-#endif
         #elseif os(macOS)
         VStack {
             ScrollView {
@@ -128,7 +126,7 @@ struct AdvancedAIMLSettingsView: View {
                 ))
                 .frame(height: 100)
                 .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.3), lineWidth: 1))
-                .help("Describe elements to avoid in the generated image (e.g., 'blurry, dark, crowded')")
+                .help("Describe elements to avoid in the generated content (e.g., 'blurry, dark, crowded')")
                 .accessibilityLabel("Negative Prompt editor")
                 .padding(.vertical, 8)
             } header: {
@@ -197,7 +195,7 @@ struct AdvancedAIMLSettingsView: View {
                     get: { params.watermark ?? false },
                     set: { params.watermark = $0 }
                 ))
-                .help("Add a watermark to generated images")
+                .help("Add a watermark to generated content")
                 .accessibilityLabel("Watermark toggle")
                 .padding(.vertical, 8)
             } header: {
@@ -219,6 +217,56 @@ struct AdvancedAIMLSettingsView: View {
                 .padding(.vertical, 8)
             } header: {
                 Text("Prompt Enhancement")
+                    .font(.headline)
+                    .padding(.bottom, 4)
+            }
+            .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+        }
+        
+        if model.isVideo {
+            Section {
+                if model.supportedParams.contains(.duration) {
+                    Stepper(value: Binding(
+                        get: { params.duration ?? 5 },
+                        set: { params.duration = $0 }
+                    ), in: 1...20, step: 1) {
+                        Text("\(params.duration ?? 5) seconds")
+                            .help("Duration of the generated video (1-20 seconds)")
+                            .accessibilityLabel("Duration stepper")
+                            .accessibilityValue("\(params.duration ?? 5) seconds")
+                    }
+                    .padding(.vertical, 8)
+                }
+                
+                if model.supportedParams.contains(.aspectRatio) {
+                    Picker("Aspect Ratio", selection: Binding(
+                        get: { params.aspectRatio ?? "16:9" },
+                        set: { params.aspectRatio = $0 }
+                    )) {
+                        Text("16:9").tag("16:9")
+                        Text("9:16").tag("9:16")
+                        Text("4:3").tag("4:3")
+                        Text("1:1").tag("1:1")
+                    }
+                    .pickerStyle(.menu)
+                    .help("Select the aspect ratio for the video")
+                    .accessibilityLabel("Aspect Ratio picker")
+                    .padding(.vertical, 8)
+                }
+                
+                if model.supportedParams.contains(.cameraControl) {
+                    TextEditor(text: Binding(
+                        get: { params.cameraControl ?? "" },
+                        set: { params.cameraControl = $0 }
+                    ))
+                    .frame(height: 100)
+                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.3), lineWidth: 1))
+                    .help("JSON-like camera controls (e.g., {\"pan\": \"left\", \"tilt\": \"up\"})")
+                    .accessibilityLabel("Camera Control editor")
+                    .padding(.vertical, 8)
+                }
+            } header: {
+                Text("Video Parameters")
                     .font(.headline)
                     .padding(.bottom, 4)
             }
