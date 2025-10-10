@@ -10,4 +10,6 @@ struct ModelParameters: Codable {
     var enableSafetyChecker: Bool? = true
     var watermark: Bool? = false
     var enhancePrompt: Bool? = true  // New: Default true per docs
+    var duration: Int? = 5
+    var aspectRatio: String? = "16:9"
 }

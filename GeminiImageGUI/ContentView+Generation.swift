@@ -1,4 +1,3 @@
-//ContentView+Generation.swift
 import SwiftUI
 #if os(iOS)
 import UIKit
@@ -6,39 +5,55 @@ import UIKit
 #if os(macOS)
 import AppKit
 #endif
-import ImageIO // Still needed if other parts use it, but can remove if not
- 
+import AVFoundation
+
 struct ErrorDict: Codable {  // New: For Grok/aimlapi error parsing
     let message: String?
     let type: String?  // Optional, if API provides (e.g., "policy_violation")
     let code: Int?     // Optional error code
 }
- 
+
 struct GrokImageResponse: Codable {
     let created: Int?
     let data: [GrokImageData]
     let error: ErrorDict?  // Updated: Now Codable struct
 }
- 
+
 struct GrokImageData: Codable {
     let b64_json: String?
     let url: String?
     let revised_prompt: String?
 }
- 
+
 struct ImgBBResponse: Codable {
     let data: ImgBBData?
     let success: Bool
     let status: Int
 }
- 
+
 struct ImgBBData: Codable {
     let id: String
     let title: String?
     let url: String?  // Public URL to use
     // Other fields if needed
 }
- 
+
+struct AIMLVideoGenerationResponse: Codable {
+    let generation_id: String?
+    let error: ErrorDict?  // Reuse ErrorDict
+}
+
+struct AIMLVideoPollResponse: Codable {
+    let id: String
+    let status: String
+    let video: AIMLVideoURL?
+    let error: ErrorDict?
+}
+
+struct AIMLVideoURL: Codable {
+    let url: String
+}
+
 extension ContentView {
     func submitPrompt() {
         if outputPath.isEmpty {
@@ -349,202 +364,409 @@ extension ContentView {
                 throw GenerationError.apiError("Text-to-image model selected with input images; select an i2i model.")
             }
             
-            guard let url = URL(string: "https://api.aimlapi.com/v1/images/generations") else {
-                throw GenerationError.invalidURL
-            }
-            
-            var bodyDict: [String: Any] = [
-                "model": appState.settings.selectedAIMLModel,
-                "prompt": appState.prompt,
-                "num_images": appState.settings.aimlAdvancedParams.numImages ?? 1,
-                "sync_mode": true,
-                "enable_safety_checker": appState.settings.aimlAdvancedParams.enableSafetyChecker ?? true
-            ]
-            
-            // Inject advanced params if supported
-            if let strength = appState.settings.aimlAdvancedParams.strength, model.supportedParams.contains(.strength) {
-                bodyDict["strength"] = strength
-            }
-            if let steps = appState.settings.aimlAdvancedParams.numInferenceSteps, model.supportedParams.contains(.numInferenceSteps) {
-                bodyDict["num_inference_steps"] = steps
-            }
-            if let guidance = appState.settings.aimlAdvancedParams.guidanceScale, model.supportedParams.contains(.guidanceScale) {
-                bodyDict["guidance_scale"] = guidance
-            }
-            if let negative = appState.settings.aimlAdvancedParams.negativePrompt, model.supportedParams.contains(.negativePrompt) {
-                bodyDict["negative_prompt"] = negative
-            }
-            if let seed = appState.settings.aimlAdvancedParams.seed, model.supportedParams.contains(.seed) {
-                bodyDict["seed"] = seed
-            }
-            // Model-specific, e.g., watermark
-            if let watermark = appState.settings.aimlAdvancedParams.watermark, model.supportedParams.contains(.watermark) {
-                bodyDict["watermark"] = watermark
-            }
-            if let enhance = appState.settings.aimlAdvancedParams.enhancePrompt, model.supportedParams.contains(.enhancePrompt) {
-                bodyDict["enhance_prompt"] = enhance
-            }
-            
-            // Image handling with ImgBB preference
-            var imageInputs: [String] = []
-            let useImgBB = appState.preferImgBBForImages && model.acceptsPublicURL
-            
-            for slot in appState.ui.imageSlots {
-                guard let image = slot.image, let processed = processImageForUpload(image: image, originalData: slot.originalData, format: "jpeg", isBase64: appState.settings.imageSubmissionMethod == .base64, convertToJPG: appState.settings.base64ConvertToJPG, scale50Percent: appState.settings.base64Scale50Percent)
-                else {
-                    continue
+            if appState.settings.isVideoMode {
+                // Video generation logic
+                let parts = appState.settings.selectedAIMLModel.split(separator: "/")
+                guard parts.count >= 2 else {
+                    throw GenerationError.apiError("Invalid model format for video generation.")
                 }
-                if useImgBB {
-                    guard !appState.settings.imgbbApiKey.isEmpty else {
-                        throw GenerationError.apiError("ImgBB API key required for public image upload.")
-                    }
-                    if !(await showPrivacyNotice(for: .imgbb)) {
-                        throw GenerationError.apiError("User declined ImgBB privacy notice.")
-                    }
-                    
-                    guard let uploadURL = URL(string: "https://api.imgbb.com/1/upload?key=\(appState.settings.imgbbApiKey)&expiration=600") else {
-                        throw GenerationError.invalidURL
-                    }
-                    
-                    var uploadRequest = URLRequest(url: uploadURL)
-                    uploadRequest.httpMethod = "POST"
-                    
-                    let boundary = "Boundary-\(UUID().uuidString)"
-                    uploadRequest.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
-                    
-                    var body = Data()
-                    body.append("--\(boundary)\r\n".data(using: .utf8)!)
-                    body.append("Content-Disposition: form-data; name=\"image\"\r\n\r\n".data(using: .utf8)!)
-                    body.append(processed.data.base64EncodedString().data(using: .utf8)!)
-                    body.append("\r\n--\(boundary)--\r\n".data(using: .utf8)!)
-                    
-                    uploadRequest.httpBody = body
-                    
-                    let (uploadData, _) = try await URLSession.shared.data(for: uploadRequest)
-                    let uploadResponse = try JSONDecoder().decode(ImgBBResponse.self, from: uploadData)
-                    
-                    guard let imagePublicUrl = uploadResponse.data?.url else {
-                        throw GenerationError.apiError("Failed to upload image to public host.")
-                    }
-                    imageInputs.append(imagePublicUrl)
-                } else if model.acceptsBase64 {
-                    let base64 = processed.data.base64EncodedString()
-                    imageInputs.append("data:\(processed.mimeType);base64,\(base64)")
-                } else {
-                    throw GenerationError.apiError("Model does not support image format.")
+                let provider = String(parts[0])
+                let modelName = parts[1...].joined(separator: "/")
+                
+                let urlString = "https://api.aimlapi.com/v2/generate/video/\(provider)/generation"
+                guard let url = URL(string: urlString) else {
+                    throw GenerationError.invalidURL
                 }
-            }
-            
-            if model.isI2I && !imageInputs.isEmpty {
-                if model.acceptsMultiImages {
-                    bodyDict[model.imageInputParam] = imageInputs
-                } else {
-                    bodyDict[model.imageInputParam] = imageInputs.first!
-                }
-            }
-            
-            // Resolution/size
-            if model.supportsCustomResolution {
-                bodyDict["image_size"] = [
-                    "width": appState.settings.selectedImageWidth,
-                    "height": appState.settings.selectedImageHeight
+                
+                var bodyDict: [String: Any] = [
+                    "model": modelName,
+                    "prompt": appState.prompt,
+                    "sync_mode": true,
+                    "enable_safety_checker": appState.settings.aimlAdvancedParams.enableSafetyChecker ?? true
                 ]
-            } else {
-                bodyDict["image_size"] = appState.settings.selectedImageSize
-            }
-            
-            do {
-                let jsonData = try JSONSerialization.data(withJSONObject: bodyDict, options: .prettyPrinted)
-                if let jsonString = String(data: jsonData, encoding: .utf8) {
-                    print("bodyDict as JSON: \(jsonString)")
+                
+                // Add advanced params for video
+                if let negative = appState.settings.aimlAdvancedParams.negativePrompt, model.supportedParams.contains(.negativePrompt) {
+                    bodyDict["negative_prompt"] = negative
                 }
-            } catch {
-                print("Failed to serialize bodyDict: \(error)")
-            }
-            
-            var request = URLRequest(url: url)
-            request.httpMethod = "POST"
-            request.addValue("application/json", forHTTPHeaderField: "Content-Type")
-            request.addValue("Bearer \(appState.settings.aimlapiKey)", forHTTPHeaderField: "Authorization")
-            
-            do {
-                request.httpBody = try JSONSerialization.data(withJSONObject: bodyDict)
-            } catch {
-                throw GenerationError.encodingFailed(error.localizedDescription)
-            }
-            
-            try Task.checkCancellation()
-            let (data, response) = try await URLSession.shared.data(for: request)
-            guard let httpResponse = response as? HTTPURLResponse,
-                  (200...299).contains(httpResponse.statusCode) else {
-                let bodyString = String(data: data, encoding: .utf8) ?? "No body"
-                let status = (response as? HTTPURLResponse)?.statusCode ?? -1
-                throw GenerationError.apiError("Status \(status): \(bodyString)")
-            }
-            print(String(data: data, encoding: .utf8) ?? "No data")
-            let responseDecoded = try JSONDecoder().decode(GrokImageResponse.self, from: data)
-            
-            if let error = responseDecoded.error {
-                var message = error.message ?? "Unknown error"
-                if message.lowercased().contains("safety") || message.lowercased().contains("violation") || message.lowercased().contains("content policy") {
-                    message += " (Likely safety/content violation)"
+                if let guidance = appState.settings.aimlAdvancedParams.guidanceScale, model.supportedParams.contains(.guidanceScale) {
+                    bodyDict["cfg_scale"] = guidance
                 }
-                await MainActor.run {
-                    appState.ui.outputTexts = ["API Error: \(message)"]
-                    appState.ui.outputImages = []
-                    appState.ui.outputPaths = []
+                if let duration = appState.settings.aimlAdvancedParams.duration, model.supportedParams.contains(.duration) {
+                    bodyDict["duration"] = duration
                 }
-                throw GenerationError.apiError(message)
-            }
-            
-            var images: [PlatformImage?] = []
-            var texts: [String] = []
-            var paths: [String?] = []
-            
-            let total = responseDecoded.data.count
-            for (i, item) in responseDecoded.data.enumerated() {
-                var textOutput = ""
-                if let revised = item.revised_prompt {
-                    textOutput += "Revised prompt: \(revised)\n"
+                if let aspect = appState.settings.aimlAdvancedParams.aspectRatio, model.supportedParams.contains(.aspectRatio) {
+                    bodyDict["aspect_ratio"] = aspect
                 }
                 
-                var imgData: Data?
-                if let b64 = item.b64_json {
-                    imgData = Data(base64Encoded: b64)
-                } else if let imageUrl = item.url, let url = URL(string: imageUrl) {
-                    let (data, _) = try await URLSession.shared.data(from: url)
-                    imgData = data
-                }
+                // For image-to-video
+                var imageInputs: [String] = []
+                let useImgBB = appState.preferImgBBForImages && model.acceptsPublicURL
                 
-                if let data = imgData {
-                    let image = PlatformImage(platformData: data)
-                    let path = saveGeneratedImage(data: data, prompt: appState.prompt, mode: .aimlapi, modelUsed: appState.settings.selectedAIMLModel, batchIndex: i, totalInBatch: total)
-                    if let saved = path {
-                        textOutput += "Image saved to \(saved)\n"
+                for slot in appState.ui.imageSlots {
+                    guard let image = slot.image, let processed = processImageForUpload(image: image, originalData: slot.originalData, format: "jpeg", isBase64: appState.settings.imageSubmissionMethod == .base64, convertToJPG: appState.settings.base64ConvertToJPG, scale50Percent: appState.settings.base64Scale50Percent) else {
+                        continue
                     }
-                    images.append(image)
-                    texts.append(textOutput)
-                    paths.append(path)
-                } else {
-                    images.append(nil)
-                    paths.append(nil)
-                    texts.append(textOutput.isEmpty ? "No output for item \(i+1)" : textOutput)
+                    if useImgBB {
+                        guard !appState.settings.imgbbApiKey.isEmpty else {
+                            throw GenerationError.apiError("ImgBB API key required for public image upload.")
+                        }
+                        if !(await showPrivacyNotice(for: .imgbb)) {
+                            throw GenerationError.apiError("User declined ImgBB privacy notice.")
+                        }
+                        
+                        guard let uploadURL = URL(string: "https://api.imgbb.com/1/upload?key=\(appState.settings.imgbbApiKey)&expiration=600") else {
+                            throw GenerationError.invalidURL
+                        }
+                        
+                        var uploadRequest = URLRequest(url: uploadURL)
+                        uploadRequest.httpMethod = "POST"
+                        
+                        let boundary = "Boundary-\(UUID().uuidString)"
+                        uploadRequest.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+                        
+                        var body = Data()
+                        body.append("--\(boundary)\r\n".data(using: .utf8)!)
+                        body.append("Content-Disposition: form-data; name=\"image\"\r\n\r\n".data(using: .utf8)!)
+                        body.append(processed.data.base64EncodedString().data(using: .utf8)!)
+                        body.append("\r\n--\(boundary)--\r\n".data(using: .utf8)!)
+                        
+                        uploadRequest.httpBody = body
+                        
+                        let (uploadData, _) = try await URLSession.shared.data(for: uploadRequest)
+                        let uploadResponse = try JSONDecoder().decode(ImgBBResponse.self, from: uploadData)
+                        
+                        guard let imagePublicUrl = uploadResponse.data?.url else {
+                            throw GenerationError.apiError("Failed to upload image to public host.")
+                        }
+                        imageInputs.append(imagePublicUrl)
+                    } else if model.acceptsBase64 {
+                        let base64 = processed.data.base64EncodedString()
+                        imageInputs.append("data:\(processed.mimeType);base64,\(base64)")
+                    } else {
+                        throw GenerationError.apiError("Model does not support image format.")
+                    }
                 }
-            }
-            
-            await MainActor.run {
-                appState.ui.outputImages = images
-                appState.ui.outputTexts = texts
-                appState.ui.outputPaths = paths
-                appState.ui.currentOutputIndex = 0
-            }
-            
-            let batchId = images.count > 1 ? UUID() : nil
-            for i in 0..<total {
-                let newItem = HistoryItem(prompt: appState.prompt, responseText: texts[i], imagePath: paths[i], date: Date(), mode: appState.settings.mode, workflowName: nil, modelUsed: appState.settings.selectedAIMLModel, batchId: batchId, indexInBatch: i, totalInBatch: total)
+                
+                if model.isI2I && !imageInputs.isEmpty {
+                    if model.acceptsMultiImages {
+                        bodyDict[model.imageInputParam] = imageInputs
+                    } else {
+                        bodyDict[model.imageInputParam] = imageInputs.first!
+                    }
+                }
+                
+                // For resolution/aspect in video
+                if let aspect = appState.settings.aimlAdvancedParams.aspectRatio {
+                    bodyDict["aspect_ratio"] = aspect
+                }
+                
+                do {
+                    let jsonData = try JSONSerialization.data(withJSONObject: bodyDict, options: .prettyPrinted)
+                    if let jsonString = String(data: jsonData, encoding: .utf8) {
+                        print("bodyDict as JSON: \(jsonString)")
+                    }
+                } catch {
+                    print("Failed to serialize bodyDict: \(error)")
+                }
+                
+                var request = URLRequest(url: url)
+                request.httpMethod = "POST"
+                request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+                request.addValue("Bearer \(appState.settings.aimlapiKey)", forHTTPHeaderField: "Authorization")
+                
+                do {
+                    request.httpBody = try JSONSerialization.data(withJSONObject: bodyDict)
+                } catch {
+                    throw GenerationError.encodingFailed(error.localizedDescription)
+                }
+                
+                try Task.checkCancellation()
+                let (data, response) = try await URLSession.shared.data(for: request)
+                guard let httpResponse = response as? HTTPURLResponse,
+                      (200...299).contains(httpResponse.statusCode) else {
+                    let bodyString = String(data: data, encoding: .utf8) ?? "No body"
+                    let status = (response as? HTTPURLResponse)?.statusCode ?? -1
+                    throw GenerationError.apiError("Status \(status): \(bodyString)")
+                }
+                print(String(data: data, encoding: .utf8) ?? "No data")
+                
+                let responseDecoded = try JSONDecoder().decode(AIMLVideoGenerationResponse.self, from: data)
+                
+                if let error = responseDecoded.error {
+                    var message = error.message ?? "Unknown error"
+                    if message.lowercased().contains("safety") || message.lowercased().contains("violation") || message.lowercased().contains("content policy") {
+                        message += " (Likely safety/content violation)"
+                    }
+                    await MainActor.run {
+                        appState.ui.outputTexts = ["API Error: \(message)"]
+                        appState.ui.outputImages = []
+                        appState.ui.outputPaths = []
+                    }
+                    throw GenerationError.apiError(message)
+                }
+                
+                guard let genId = responseDecoded.generation_id else {
+                    throw GenerationError.apiError("No generation ID returned")
+                }
+                
+                // Poll
+                let pollUrlString = "https://api.aimlapi.com/v2/generate/video/\(provider)/generation?generation_id=\(genId)"
+                guard let pollUrl = URL(string: pollUrlString) else {
+                    throw GenerationError.invalidURL
+                }
+                
+                var status = ""
+                var videoUrlStr: String?
+                let startTime = Date()
+                while status != "completed" && Date().timeIntervalSince(startTime) < 1200 {  // Max 20 min
+                    try Task.checkCancellation()
+                    try await Task.sleep(nanoseconds: 10_000_000_000)  // 10s
+                    
+                    var pollRequest = URLRequest(url: pollUrl)
+                    pollRequest.httpMethod = "GET"
+                    pollRequest.addValue("Bearer \(appState.settings.aimlapiKey)", forHTTPHeaderField: "Authorization")
+                    
+                    let (pollData, pollResponse) = try await URLSession.shared.data(for: pollRequest)
+                    guard let httpPollResponse = pollResponse as? HTTPURLResponse,
+                          (200...299).contains(httpPollResponse.statusCode) else {
+                        let bodyString = String(data: pollData, encoding: .utf8) ?? "No body"
+                        let status = (pollResponse as? HTTPURLResponse)?.statusCode ?? -1
+                        throw GenerationError.apiError("Poll status \(status): \(bodyString)")
+                    }
+                    
+                    let pollDecoded = try JSONDecoder().decode(AIMLVideoPollResponse.self, from: pollData)
+                    
+                    if let error = pollDecoded.error {
+                        throw GenerationError.apiError(error.message ?? "Poll error")
+                    }
+                    
+                    status = pollDecoded.status
+                    if status == "completed" {
+                        videoUrlStr = pollDecoded.video?.url
+                    } else if status == "failed" {
+                        throw GenerationError.apiError("Video generation failed")
+                    }
+                }
+                
+                guard let videoUrlStr = videoUrlStr, let videoUrl = URL(string: videoUrlStr) else {
+                    throw GenerationError.apiError("No video URL returned or timeout")
+                }
+                
+                let (videoData, _) = try await URLSession.shared.data(from: videoUrl)
+                
+                let path = saveGeneratedMedia(data: videoData, prompt: appState.prompt, mode: .aimlapi, modelUsed: appState.settings.selectedAIMLModel, isVideo: true)
+                
+                await MainActor.run {
+                    appState.ui.outputImages = [nil]
+                    appState.ui.outputTexts = ["Video saved to \(path ?? "unknown")"]
+                    appState.ui.outputPaths = [path]
+                    appState.ui.currentOutputIndex = 0
+                }
+                
+                let newItem = HistoryItem(prompt: appState.prompt, responseText: "Video generated", imagePath: path, date: Date(), mode: appState.settings.mode, workflowName: nil, modelUsed: appState.settings.selectedAIMLModel, batchId: nil, indexInBatch: nil, totalInBatch: nil)
                 appState.historyState.history.append(.item(newItem))
+                appState.historyState.saveHistory()
+                
+            } else {
+                // Existing image generation code
+                guard let url = URL(string: "https://api.aimlapi.com/v1/images/generations") else {
+                    throw GenerationError.invalidURL
+                }
+                
+                var bodyDict: [String: Any] = [
+                    "model": appState.settings.selectedAIMLModel,
+                    "prompt": appState.prompt,
+                    "num_images": appState.settings.aimlAdvancedParams.numImages ?? 1,
+                    "sync_mode": true,
+                    "enable_safety_checker": appState.settings.aimlAdvancedParams.enableSafetyChecker ?? true
+                ]
+                
+                // Inject advanced params if supported
+                if let strength = appState.settings.aimlAdvancedParams.strength, model.supportedParams.contains(.strength) {
+                    bodyDict["strength"] = strength
+                }
+                if let steps = appState.settings.aimlAdvancedParams.numInferenceSteps, model.supportedParams.contains(.numInferenceSteps) {
+                    bodyDict["num_inference_steps"] = steps
+                }
+                if let guidance = appState.settings.aimlAdvancedParams.guidanceScale, model.supportedParams.contains(.guidanceScale) {
+                    bodyDict["guidance_scale"] = guidance
+                }
+                if let negative = appState.settings.aimlAdvancedParams.negativePrompt, model.supportedParams.contains(.negativePrompt) {
+                    bodyDict["negative_prompt"] = negative
+                }
+                if let seed = appState.settings.aimlAdvancedParams.seed, model.supportedParams.contains(.seed) {
+                    bodyDict["seed"] = seed
+                }
+                // Model-specific, e.g., watermark
+                if let watermark = appState.settings.aimlAdvancedParams.watermark, model.supportedParams.contains(.watermark) {
+                    bodyDict["watermark"] = watermark
+                }
+                if let enhance = appState.settings.aimlAdvancedParams.enhancePrompt, model.supportedParams.contains(.enhancePrompt) {
+                    bodyDict["enhance_prompt"] = enhance
+                }
+                
+                // Image handling with ImgBB preference
+                var imageInputs: [String] = []
+                let useImgBB = appState.preferImgBBForImages && model.acceptsPublicURL
+                
+                for slot in appState.ui.imageSlots {
+                    guard let image = slot.image, let processed = processImageForUpload(image: image, originalData: slot.originalData, format: "jpeg", isBase64: appState.settings.imageSubmissionMethod == .base64, convertToJPG: appState.settings.base64ConvertToJPG, scale50Percent: appState.settings.base64Scale50Percent)
+                    else {
+                        continue
+                    }
+                    if useImgBB {
+                        guard !appState.settings.imgbbApiKey.isEmpty else {
+                            throw GenerationError.apiError("ImgBB API key required for public image upload.")
+                        }
+                        if !(await showPrivacyNotice(for: .imgbb)) {
+                            throw GenerationError.apiError("User declined ImgBB privacy notice.")
+                        }
+                        
+                        guard let uploadURL = URL(string: "https://api.imgbb.com/1/upload?key=\(appState.settings.imgbbApiKey)&expiration=600") else {
+                            throw GenerationError.invalidURL
+                        }
+                        
+                        var uploadRequest = URLRequest(url: uploadURL)
+                        uploadRequest.httpMethod = "POST"
+                        
+                        let boundary = "Boundary-\(UUID().uuidString)"
+                        uploadRequest.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+                        
+                        var body = Data()
+                        body.append("--\(boundary)\r\n".data(using: .utf8)!)
+                        body.append("Content-Disposition: form-data; name=\"image\"\r\n\r\n".data(using: .utf8)!)
+                        body.append(processed.data.base64EncodedString().data(using: .utf8)!)
+                        body.append("\r\n--\(boundary)--\r\n".data(using: .utf8)!)
+                        
+                        uploadRequest.httpBody = body
+                        
+                        let (uploadData, _) = try await URLSession.shared.data(for: uploadRequest)
+                        let uploadResponse = try JSONDecoder().decode(ImgBBResponse.self, from: uploadData)
+                        
+                        guard let imagePublicUrl = uploadResponse.data?.url else {
+                            throw GenerationError.apiError("Failed to upload image to public host.")
+                        }
+                        imageInputs.append(imagePublicUrl)
+                    } else if model.acceptsBase64 {
+                        let base64 = processed.data.base64EncodedString()
+                        imageInputs.append("data:\(processed.mimeType);base64,\(base64)")
+                    } else {
+                        throw GenerationError.apiError("Model does not support image format.")
+                    }
+                }
+                
+                if model.isI2I && !imageInputs.isEmpty {
+                    if model.acceptsMultiImages {
+                        bodyDict[model.imageInputParam] = imageInputs
+                    } else {
+                        bodyDict[model.imageInputParam] = imageInputs.first!
+                    }
+                }
+                
+                // Resolution/size
+                if model.supportsCustomResolution {
+                    bodyDict["image_size"] = [
+                        "width": appState.settings.selectedImageWidth,
+                        "height": appState.settings.selectedImageHeight
+                    ]
+                } else {
+                    bodyDict["image_size"] = appState.settings.selectedImageSize
+                }
+                
+                do {
+                    let jsonData = try JSONSerialization.data(withJSONObject: bodyDict, options: .prettyPrinted)
+                    if let jsonString = String(data: jsonData, encoding: .utf8) {
+                        print("bodyDict as JSON: \(jsonString)")
+                    }
+                } catch {
+                    print("Failed to serialize bodyDict: \(error)")
+                }
+                
+                var request = URLRequest(url: url)
+                request.httpMethod = "POST"
+                request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+                request.addValue("Bearer \(appState.settings.aimlapiKey)", forHTTPHeaderField: "Authorization")
+                
+                do {
+                    request.httpBody = try JSONSerialization.data(withJSONObject: bodyDict)
+                } catch {
+                    throw GenerationError.encodingFailed(error.localizedDescription)
+                }
+                
+                try Task.checkCancellation()
+                let (data, response) = try await URLSession.shared.data(for: request)
+                guard let httpResponse = response as? HTTPURLResponse,
+                      (200...299).contains(httpResponse.statusCode) else {
+                    let bodyString = String(data: data, encoding: .utf8) ?? "No body"
+                    let status = (response as? HTTPURLResponse)?.statusCode ?? -1
+                    throw GenerationError.apiError("Status \(status): \(bodyString)")
+                }
+                print(String(data: data, encoding: .utf8) ?? "No data")
+                let responseDecoded = try JSONDecoder().decode(GrokImageResponse.self, from: data)
+                
+                if let error = responseDecoded.error {
+                    var message = error.message ?? "Unknown error"
+                    if message.lowercased().contains("safety") || message.lowercased().contains("violation") || message.lowercased().contains("content policy") {
+                        message += " (Likely safety/content violation)"
+                    }
+                    await MainActor.run {
+                        appState.ui.outputTexts = ["API Error: \(message)"]
+                        appState.ui.outputImages = []
+                        appState.ui.outputPaths = []
+                    }
+                    throw GenerationError.apiError(message)
+                }
+                
+                var images: [PlatformImage?] = []
+                var texts: [String] = []
+                var paths: [String?] = []
+                
+                let total = responseDecoded.data.count
+                for (i, item) in responseDecoded.data.enumerated() {
+                    var textOutput = ""
+                    if let revised = item.revised_prompt {
+                        textOutput += "Revised prompt: \(revised)\n"
+                    }
+                    
+                    var imgData: Data?
+                    if let b64 = item.b64_json {
+                        imgData = Data(base64Encoded: b64)
+                    } else if let imageUrl = item.url, let url = URL(string: imageUrl) {
+                        let (data, _) = try await URLSession.shared.data(from: url)
+                        imgData = data
+                    }
+                    
+                    if let data = imgData {
+                        let image = PlatformImage(platformData: data)
+                        let path = saveGeneratedMedia(data: data, prompt: appState.prompt, mode: .aimlapi, modelUsed: appState.settings.selectedAIMLModel, batchIndex: i, totalInBatch: total, isVideo: false)
+                        if let saved = path {
+                            textOutput += "Image saved to \(saved)\n"
+                        }
+                        images.append(image)
+                        texts.append(textOutput)
+                        paths.append(path)
+                    } else {
+                        images.append(nil)
+                        paths.append(nil)
+                        texts.append(textOutput.isEmpty ? "No output for item \(i+1)" : textOutput)
+                    }
+                }
+                
+                await MainActor.run {
+                    appState.ui.outputImages = images
+                    appState.ui.outputTexts = texts
+                    appState.ui.outputPaths = paths
+                    appState.ui.currentOutputIndex = 0
+                }
+                
+                let batchId = images.count > 1 ? UUID() : nil
+                for i in 0..<total {
+                    let newItem = HistoryItem(prompt: appState.prompt, responseText: texts[i], imagePath: paths[i], date: Date(), mode: appState.settings.mode, workflowName: nil, modelUsed: appState.settings.selectedAIMLModel, batchId: batchId, indexInBatch: i, totalInBatch: total)
+                    appState.historyState.history.append(.item(newItem))
+                }
+                appState.historyState.saveHistory()
             }
-            appState.historyState.saveHistory()
         }
     }
     
@@ -595,6 +817,36 @@ extension ContentView {
             self.privacyServiceToShow = service
         }
     }
+    
+    func saveGeneratedMedia(data: Data, prompt: String, mode: GenerationMode, modelUsed: String? = nil, batchIndex: Int? = nil, totalInBatch: Int? = nil, isVideo: Bool = false) -> String? {
+        guard let dir = appState.settings.outputDirectory else { return nil }
+        
+        let timestamp = Date().timeIntervalSince1970
+        let safePrompt = prompt.prefix(50).replacingOccurrences(of: "/", with: "-")
+        var fileName = "\(safePrompt)_\(timestamp)"
+        if let model = modelUsed { fileName += "_\(model.replacingOccurrences(of: "/", with: "-"))" }
+        if let idx = batchIndex, let tot = totalInBatch { fileName += "_\(idx+1)of\(tot)" }
+        fileName += isVideo ? ".mp4" : ".png"
+        
+        let fileURL = dir.appendingPathComponent(fileName)
+        
+        var coordError: NSError?
+        NSFileCoordinator().coordinate(writingItemAt: dir, options: .forReplacing, error: &coordError) { coordinatedURL in
+            if coordinatedURL.startAccessingSecurityScopedResource() {
+                defer { coordinatedURL.stopAccessingSecurityScopedResource() }
+                do {
+                    try data.write(to: fileURL)
+                } catch {
+                    print("Failed to save file: \(error)")
+                }
+            }
+        }
+        if let coordError = coordError {
+            print("Coordination error during save: \(coordError.localizedDescription)")
+            return nil
+        }
+        return fileURL.path
+    }
 }
 
 struct DetailedErrorView: View {
@@ -638,4 +890,12 @@ struct DetailedErrorView: View {
     }
 }
 
-
+extension View {
+    
+    func withSecureAccess<T>(to url: URL, body: () throws -> T) rethrows -> T {
+        let didStart = url.startAccessingSecurityScopedResource()
+        defer { if didStart { url.stopAccessingSecurityScopedResource() } }
+        return try body()
+    }
+    
+}

@@ -13,6 +13,7 @@ struct AIMLModel {
     let acceptsPublicURL: Bool
     let maxWidth: Int?  // Nil if no limit or enum-only
     let maxHeight: Int?  // Nil if no limit or enum-only
+    var isVideo: Bool
 }
 
 enum AIMLParam: String, CaseIterable, Hashable {
@@ -25,6 +26,8 @@ enum AIMLParam: String, CaseIterable, Hashable {
     case enableSafetyChecker
     case watermark
     case enhancePrompt  // New: For prompt enhancement in Google Imagen models
+    case duration
+    case aspectRatio
     // Add more as needed
 }
 
@@ -45,7 +48,8 @@ struct ModelRegistry {
                 acceptsBase64: true,
                 acceptsPublicURL: true,
                 maxWidth: nil,
-                maxHeight: nil
+                maxHeight: nil,
+                isVideo: false
             )
         case "bytedance/uso":
             return AIMLModel(
@@ -60,7 +64,8 @@ struct ModelRegistry {
                 acceptsBase64: false,
                 acceptsPublicURL: true,
                 maxWidth: 1440,
-                maxHeight: 1440
+                maxHeight: 1440,
+                isVideo: false
             )
         case "flux/srpo/image-to-image":
             return AIMLModel(
@@ -75,7 +80,8 @@ struct ModelRegistry {
                 acceptsBase64: false,
                 acceptsPublicURL: true,
                 maxWidth: 1440,
-                maxHeight: 1440
+                maxHeight: 1440,
+                isVideo: false
             )
         case "flux/kontext-pro/image-to-image":
             return AIMLModel(
@@ -90,7 +96,8 @@ struct ModelRegistry {
                 acceptsBase64: false,
                 acceptsPublicURL: true,
                 maxWidth: 1440,
-                maxHeight: 1440
+                maxHeight: 1440,
+                isVideo: false
             )
         case "openai/gpt-image-1":
             return AIMLModel(
@@ -105,7 +112,8 @@ struct ModelRegistry {
                 acceptsBase64: true,
                 acceptsPublicURL: true,
                 maxWidth: nil,
-                maxHeight: nil
+                maxHeight: nil,
+                isVideo: false
             )
         case "stability/stable-diffusion-v3-medium":
             return AIMLModel(
@@ -120,7 +128,8 @@ struct ModelRegistry {
                 acceptsBase64: true,
                 acceptsPublicURL: true,
                 maxWidth: 1536,
-                maxHeight: 1536
+                maxHeight: 1536,
+                isVideo: false
             )
         case "flux-pro":
             return AIMLModel(
@@ -135,7 +144,8 @@ struct ModelRegistry {
                 acceptsBase64: false,
                 acceptsPublicURL: true,
                 maxWidth: 1440,
-                maxHeight: 1440
+                maxHeight: 1440,
+                isVideo: false
             )
         case "dall-e-2":
             return AIMLModel(
@@ -150,7 +160,8 @@ struct ModelRegistry {
                 acceptsBase64: false,
                 acceptsPublicURL: false,
                 maxWidth: nil,
-                maxHeight: nil
+                maxHeight: nil,
+                isVideo: false
             )
         case "imagen-4.0-generate-001", "google/imagen-4.0-generate-001":
                     return AIMLModel(
@@ -165,7 +176,8 @@ struct ModelRegistry {
                         acceptsBase64: false,
                         acceptsPublicURL: false,
                         maxWidth: nil,
-                        maxHeight: nil
+                        maxHeight: nil,
+                        isVideo: false
                     )
         case "recraft-v3":
             return AIMLModel(
@@ -180,7 +192,8 @@ struct ModelRegistry {
                 acceptsBase64: false,
                 acceptsPublicURL: false,
                 maxWidth: nil,
-                maxHeight: nil
+                maxHeight: nil,
+                isVideo: false
             )
         case "flux/dev":
             return AIMLModel(
@@ -195,7 +208,8 @@ struct ModelRegistry {
                 acceptsBase64: false,
                 acceptsPublicURL: true,
                 maxWidth: 1440,
-                maxHeight: 1440
+                maxHeight: 1440,
+                isVideo: false
             )
         case "imagen-4.0-fast-generate-001":
                     return AIMLModel(
@@ -210,7 +224,8 @@ struct ModelRegistry {
                         acceptsBase64: false,
                         acceptsPublicURL: false,
                         maxWidth: nil,
-                        maxHeight: nil
+                        maxHeight: nil,
+                        isVideo: false
                     )
         case "imagen-4-ultra-generate-preview-06-06":
                     return AIMLModel(
@@ -225,7 +240,8 @@ struct ModelRegistry {
                         acceptsBase64: false,
                         acceptsPublicURL: false,
                         maxWidth: nil,
-                        maxHeight: nil
+                        maxHeight: nil,
+                        isVideo: false
                     )
         case "google/gemini-2.5-flash-image":
                     return AIMLModel(
@@ -240,7 +256,8 @@ struct ModelRegistry {
                         acceptsBase64: false,
                         acceptsPublicURL: false,
                         maxWidth: nil,
-                        maxHeight: nil
+                        maxHeight: nil,
+                        isVideo: false
                     )
                 case "google/gemini-2.5-flash-image-edit":
                     return AIMLModel(
@@ -255,7 +272,8 @@ struct ModelRegistry {
                         acceptsBase64: true,
                         acceptsPublicURL: true,
                         maxWidth: nil,
-                        maxHeight: nil
+                        maxHeight: nil,
+                        isVideo: false
                     )
         case "reve/edit-image":
             return AIMLModel(
@@ -270,7 +288,8 @@ struct ModelRegistry {
                 acceptsBase64: true,
                 acceptsPublicURL: true,
                 maxWidth: nil,
-                maxHeight: nil
+                maxHeight: nil,
+                isVideo: false
             )
         case "bytedance/seedream-v4-text-to-image":
             return AIMLModel(
@@ -285,7 +304,8 @@ struct ModelRegistry {
                 acceptsBase64: false,
                 acceptsPublicURL: false,
                 maxWidth: nil,
-                maxHeight: nil
+                maxHeight: nil,
+                isVideo: false
             )
         case "bytedance/seedream-v4-edit":
             return AIMLModel(
@@ -300,8 +320,41 @@ struct ModelRegistry {
                 acceptsBase64: true,
                 acceptsPublicURL: true,
                 maxWidth: nil,
-                maxHeight: nil
+                maxHeight: nil,
+                isVideo: false
             )
+        case "klingai/v2.1-master-text-to-video":
+                    return AIMLModel(
+                        id: id,
+                        isI2I: false,
+                        maxInputImages: 0,
+                        supportedParams: [.negativePrompt, .guidanceScale, .duration, .aspectRatio],
+                        supportsCustomResolution: false,
+                        defaultImageSize: "16:9",
+                        imageInputParam: "",
+                        acceptsMultiImages: false,
+                        acceptsBase64: false,
+                        acceptsPublicURL: false,
+                        maxWidth: nil,
+                        maxHeight: nil,
+                        isVideo: true
+                    ) // isVideo: true - assume added
+                case "klingai/v2.1-standard/image-to-video":
+                    return AIMLModel(
+                        id: id,
+                        isI2I: true,
+                        maxInputImages: 1,
+                        supportedParams: [.negativePrompt, .guidanceScale, .duration, .aspectRatio],
+                        supportsCustomResolution: false,
+                        defaultImageSize: "16:9",
+                        imageInputParam: "image_url",
+                        acceptsMultiImages: false,
+                        acceptsBase64: false,
+                        acceptsPublicURL: true,
+                        maxWidth: nil,
+                        maxHeight: nil,
+                        isVideo: true
+                    )
         // Add more as needed
         default:
             return AIMLModel(
@@ -316,7 +369,8 @@ struct ModelRegistry {
                 acceptsBase64: true,
                 acceptsPublicURL: true,
                 maxWidth: nil,
-                maxHeight: nil
+                maxHeight: nil,
+                isVideo: false
             )
         }
     }

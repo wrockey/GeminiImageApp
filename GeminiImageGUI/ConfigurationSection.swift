@@ -662,9 +662,14 @@ struct ConfigurationSection: View {
                 .minimumScaleFactor(0.8)
                 .help("Available t2i/i2i models from AI/ML API")
                 .accessibilityLabel("AI/ML model selector")
+                Toggle("Video Mode", isOn: $appState.settings.isVideoMode)
+                    .onChange(of: appState.settings.isVideoMode) { newValue in
+                        fetchAvailableModels() // Refetch/filter
+                    }
             }
         }
     }
+
     
     @ViewBuilder
     private var aimlImageSizeRow: some View {

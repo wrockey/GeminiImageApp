@@ -45,6 +45,7 @@ class SettingsState: ObservableObject {
     @Published var selectedImageWidth : Int = 2048
     @Published var aimlAdvancedParams: ModelParameters = ModelParameters()
     @Published var comfyBatchSize: Int = 1
+    @Published var isVideoMode: Bool = false
     @AppStorage("imageSubmissionMethod") var imageSubmissionMethod: ImageSubmissionMethod = .imgBB
     @AppStorage("base64ConvertToJPG") var base64ConvertToJPG: Bool = true
     @AppStorage("base64Scale50Percent") var base64Scale50Percent: Bool = false
