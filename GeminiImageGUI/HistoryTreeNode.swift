@@ -1,5 +1,5 @@
-// HistoryTreeNode.swift
 import SwiftUI
+import AVKit
 import UniformTypeIdentifiers
 #if os(macOS)
 import AppKit
@@ -7,7 +7,6 @@ import AppKit
 import UIKit
 #endif
 
-// Move TreeNodeView outside
 struct TreeNodeView: View {
     let entry: HistoryEntry
     @State private var isExpanded: Bool = true
@@ -368,7 +367,7 @@ struct TreeNodeView: View {
                 Text("Enter a new name for the folder.")
             }
         } else {
-            entryRowProvider(entry) // Rely on itemRow(for:) for context menu
+            entryRowProvider(entry)
         }
     }
     
@@ -381,7 +380,6 @@ struct TreeNodeView: View {
     }
 }
 
-// Move LazyThumbnailView outside
 struct LazyThumbnailView: View {
     let item: HistoryItem
     @State private var thumbnail: PlatformImage? = nil
@@ -399,12 +397,15 @@ struct LazyThumbnailView: View {
             if let img = thumbnail {
                 Image(platformImage: img)
                     .resizable()
-                    .scaledToFit()
+                    .scaledToFill()
                     .frame(width: 50, height: 50)
-                    .cornerRadius(12)
-                    .shadow(color: .black.opacity(0.2), radius: 4, x: 0, y: 2)
-                    .help("Thumbnail of generated image")
-                    .accessibilityLabel("Thumbnail of image generated on \(dateFormatter.string(from: item.date))")
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                    )
+                    .help(item.imagePath?.hasSuffix(".mp4") ?? false ? "Video thumbnail" : "Image thumbnail")
+                    .accessibilityLabel(item.imagePath?.hasSuffix(".mp4") ?? false ? "Video thumbnail generated on \(dateFormatter.string(from: item.date))" : "Image thumbnail generated on \(dateFormatter.string(from: item.date))")
                     .onDrag {
                         guard let data = img.pngData() else {
                             return NSItemProvider()
@@ -417,10 +418,11 @@ struct LazyThumbnailView: View {
                         return provider
                     }
             } else {
-                Image(systemName: "photo")
+                Image(systemName: item.imagePath?.hasSuffix(".mp4") ?? false ? "film" : "photo")
                     .font(.system(size: 50))
                     .foregroundColor(.secondary)
-                    .help("Placeholder for image thumbnail")
+                    .help(item.imagePath?.hasSuffix(".mp4") ?? false ? "Video thumbnail placeholder" : "Image thumbnail placeholder")
+                    .accessibilityLabel(item.imagePath?.hasSuffix(".mp4") ?? false ? "Video thumbnail placeholder" : "Image thumbnail placeholder")
             }
         }
         .onAppear {
@@ -431,31 +433,53 @@ struct LazyThumbnailView: View {
     }
     
     private func loadThumbnail() {
-        DispatchQueue.global(qos: .background).async {
-            let loadedImage = loadImage(for: item)
-            DispatchQueue.main.async {
+        Task {
+            let loadedImage = await loadImage(for: item)
+            await MainActor.run {
                 thumbnail = loadedImage
             }
         }
     }
     
-    private func loadImage(for item: HistoryItem) -> PlatformImage? {
+    func loadImage(for item: HistoryItem) async -> PlatformImage? {
         guard let path = item.imagePath else { return nil }
         let fileURL = URL(fileURLWithPath: path)
-        if let dir = appState.settings.outputDirectory {
-            let didStart = dir.startAccessingSecurityScopedResource()
-            let image = PlatformImage(contentsOfFile: fileURL.path)
-            if didStart {
-                dir.stopAccessingSecurityScopedResource()
+        
+        if fileURL.pathExtension.lowercased() == "mp4" {
+            // Generate thumbnail from first frame of video
+            let asset = AVAsset(url: fileURL)
+            guard try! await asset.load(.isPlayable) else { return nil }
+            let generator = AVAssetImageGenerator(asset: asset)
+            generator.appliesPreferredTrackTransform = true
+            generator.maximumSize = CGSize(width: 100, height: 100)
+            let time = CMTime(seconds: 0, preferredTimescale: 600)
+            do {
+                let cgImage = try generator.copyCGImage(at: time, actualTime: nil)
+                #if os(macOS)
+                return PlatformImage(cgImage: cgImage, size: CGSize(width: cgImage.width, height: cgImage.height))
+                #elseif os(iOS)
+                return PlatformImage(cgImage: cgImage)
+                #endif
+            } catch {
+                print("Failed to generate video thumbnail: \(error)")
+                return nil
             }
-            return image
         } else {
-            return PlatformImage(contentsOfFile: fileURL.path)
+            // Handle image files
+            if let dir = appState.settings.outputDirectory {
+                let didStart = dir.startAccessingSecurityScopedResource()
+                let image = PlatformImage(contentsOfFile: fileURL.path)
+                if didStart {
+                    dir.stopAccessingSecurityScopedResource()
+                }
+                return image
+            } else {
+                return PlatformImage(contentsOfFile: fileURL.path)
+            }
         }
     }
 }
 
-// Assume PlatformImage extension for pngData()
 #if os(macOS)
 extension NSImage {
     func pngData() -> Data? {
