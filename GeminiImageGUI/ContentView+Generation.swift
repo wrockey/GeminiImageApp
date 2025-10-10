@@ -7,16 +7,16 @@ import AppKit
 #endif
 import AVFoundation
 
-struct ErrorDict: Codable {  // New: For Grok/aimlapi error parsing
+struct ErrorDict: Codable {
     let message: String?
-    let type: String?  // Optional, if API provides (e.g., "policy_violation")
-    let code: Int?     // Optional error code
+    let type: String?
+    let code: Int?
 }
 
 struct GrokImageResponse: Codable {
     let created: Int?
     let data: [GrokImageData]
-    let error: ErrorDict?  // Updated: Now Codable struct
+    let error: ErrorDict?
 }
 
 struct GrokImageData: Codable {
@@ -34,13 +34,12 @@ struct ImgBBResponse: Codable {
 struct ImgBBData: Codable {
     let id: String
     let title: String?
-    let url: String?  // Public URL to use
-    // Other fields if needed
+    let url: String?
 }
 
 struct AIMLVideoGenerationResponse: Codable {
     let generation_id: String?
-    let error: ErrorDict?  // Reuse ErrorDict
+    let error: ErrorDict?
 }
 
 struct AIMLVideoPollResponse: Codable {
@@ -62,7 +61,6 @@ extension ContentView {
             return
         }
         
-        // Check if prompt is safe
         let (isSafe, offendingPhrases) = ContentView.isPromptSafe(appState.prompt)
         if !isSafe {
             let phrasesList = offendingPhrases.joined(separator: ", ")
@@ -70,7 +68,6 @@ extension ContentView {
             return
         }
         
-        // Validate API keys before proceeding
         switch appState.settings.mode {
         case .gemini:
             guard !appState.settings.apiKey.isEmpty else {
@@ -209,7 +206,6 @@ extension ContentView {
                 }
             }
             
-            // If no images but text, add empty image with text (optional; adjust if needed)
             if images.isEmpty && !texts.isEmpty {
                 images.append(nil)
                 paths.append(nil)
@@ -222,7 +218,6 @@ extension ContentView {
                 appState.ui.currentOutputIndex = 0
             }
             
-            // Add to history as separate items
             let batchId = images.count > 1 ? UUID() : nil
             let total = images.count
             for i in 0..<total {
@@ -235,7 +230,6 @@ extension ContentView {
             guard let workflow = appState.generation.comfyWorkflow else {
                 throw GenerationError.noWorkflow
             }
-            
             // ... (rest of .comfyUI code unchanged)
             
         case .grok:
@@ -353,7 +347,6 @@ extension ContentView {
                 throw GenerationError.apiError("Invalid model selected.")
             }
             
-            // Validate images
             if model.isI2I && appState.ui.imageSlots.isEmpty {
                 throw GenerationError.apiError("Image required for image-to-image model.")
             }
@@ -385,7 +378,7 @@ extension ContentView {
                     "enable_safety_checker": appState.settings.aimlAdvancedParams.enableSafetyChecker ?? true
                 ]
                 
-                // Add advanced params for video
+                // Add advanced video params if supported
                 if let negative = appState.settings.aimlAdvancedParams.negativePrompt, model.supportedParams.contains(.negativePrompt) {
                     bodyDict["negative_prompt"] = negative
                 }
@@ -397,6 +390,9 @@ extension ContentView {
                 }
                 if let aspect = appState.settings.aimlAdvancedParams.aspectRatio, model.supportedParams.contains(.aspectRatio) {
                     bodyDict["aspect_ratio"] = aspect
+                }
+                if let camera = appState.settings.aimlAdvancedParams.cameraControl, model.supportedParams.contains(.cameraControl), !camera.isEmpty {
+                    bodyDict["camera_control"] = camera
                 }
                 
                 // For image-to-video
@@ -456,11 +452,6 @@ extension ContentView {
                     }
                 }
                 
-                // For resolution/aspect in video
-                if let aspect = appState.settings.aimlAdvancedParams.aspectRatio {
-                    bodyDict["aspect_ratio"] = aspect
-                }
-                
                 do {
                     let jsonData = try JSONSerialization.data(withJSONObject: bodyDict, options: .prettyPrinted)
                     if let jsonString = String(data: jsonData, encoding: .utf8) {
@@ -510,7 +501,6 @@ extension ContentView {
                     throw GenerationError.apiError("No generation ID returned")
                 }
                 
-                // Poll
                 let pollUrlString = "https://api.aimlapi.com/v2/generate/video/\(provider)/generation?generation_id=\(genId)"
                 guard let pollUrl = URL(string: pollUrlString) else {
                     throw GenerationError.invalidURL
@@ -519,9 +509,9 @@ extension ContentView {
                 var status = ""
                 var videoUrlStr: String?
                 let startTime = Date()
-                while status != "completed" && Date().timeIntervalSince(startTime) < 1200 {  // Max 20 min
+                while status != "completed" && Date().timeIntervalSince(startTime) < 1200 {
                     try Task.checkCancellation()
-                    try await Task.sleep(nanoseconds: 10_000_000_000)  // 10s
+                    try await Task.sleep(nanoseconds: 10_000_000_000) // 10s
                     
                     var pollRequest = URLRequest(url: pollUrl)
                     pollRequest.httpMethod = "GET"
@@ -569,7 +559,7 @@ extension ContentView {
                 appState.historyState.saveHistory()
                 
             } else {
-                // Existing image generation code
+                // Image generation logic
                 guard let url = URL(string: "https://api.aimlapi.com/v1/images/generations") else {
                     throw GenerationError.invalidURL
                 }
@@ -582,7 +572,6 @@ extension ContentView {
                     "enable_safety_checker": appState.settings.aimlAdvancedParams.enableSafetyChecker ?? true
                 ]
                 
-                // Inject advanced params if supported
                 if let strength = appState.settings.aimlAdvancedParams.strength, model.supportedParams.contains(.strength) {
                     bodyDict["strength"] = strength
                 }
@@ -598,7 +587,6 @@ extension ContentView {
                 if let seed = appState.settings.aimlAdvancedParams.seed, model.supportedParams.contains(.seed) {
                     bodyDict["seed"] = seed
                 }
-                // Model-specific, e.g., watermark
                 if let watermark = appState.settings.aimlAdvancedParams.watermark, model.supportedParams.contains(.watermark) {
                     bodyDict["watermark"] = watermark
                 }
@@ -606,7 +594,6 @@ extension ContentView {
                     bodyDict["enhance_prompt"] = enhance
                 }
                 
-                // Image handling with ImgBB preference
                 var imageInputs: [String] = []
                 let useImgBB = appState.preferImgBBForImages && model.acceptsPublicURL
                 
@@ -664,7 +651,6 @@ extension ContentView {
                     }
                 }
                 
-                // Resolution/size
                 if model.supportsCustomResolution {
                     bodyDict["image_size"] = [
                         "width": appState.settings.selectedImageWidth,
@@ -794,25 +780,26 @@ extension ContentView {
             }
         }.resume()
     }
+    
     @MainActor
     func showPrivacyNotice(for service: PrivacyService) async -> Bool {
         let key = "dontShow\(service.rawValue.replacingOccurrences(of: "/", with: "").replacingOccurrences(of: " ", with: ""))Privacy"
         if UserDefaults.standard.bool(forKey: key) {
             return true
         }
-
+        
         return await withCheckedContinuation { continuation in
             self.onPrivacyComplete = { consented, dontShow in
                 if let complete = self.onPrivacyComplete {
-                    self.onPrivacyComplete = nil  // Clear first
+                    self.onPrivacyComplete = nil
                     if dontShow {
                         UserDefaults.standard.set(true, forKey: key)
                     }
                     continuation.resume(returning: consented)
                     DispatchQueue.main.async {
-                        self.privacyServiceToShow = nil  // Ensure dismiss on main thread
+                        self.privacyServiceToShow = nil
                     }
-                }  // No else: if already nil, ignore to prevent crash
+                }
             }
             self.privacyServiceToShow = service
         }
@@ -891,11 +878,9 @@ struct DetailedErrorView: View {
 }
 
 extension View {
-    
     func withSecureAccess<T>(to url: URL, body: () throws -> T) rethrows -> T {
         let didStart = url.startAccessingSecurityScopedResource()
         defer { if didStart { url.stopAccessingSecurityScopedResource() } }
         return try body()
     }
-    
 }
