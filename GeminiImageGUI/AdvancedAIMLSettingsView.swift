@@ -3,6 +3,7 @@ import SwiftUI
 struct AdvancedAIMLSettingsView: View {
     let model: AIMLModel
     @Binding var params: ModelParameters
+    let isVideo: Bool
     @Environment(\.dismiss) var dismiss
     
     // State for camera controls
@@ -294,7 +295,7 @@ struct AdvancedAIMLSettingsView: View {
             .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
         }
         
-        if model.isVideo {
+        if isVideo {
             Section {
                 if model.supportedParams.contains(.duration) {
                     Stepper(value: Binding(
@@ -530,9 +531,8 @@ struct AdvancedAIMLSettingsView: View {
         }
     }
     
-    // Update params.cameraControl with JSON from selections
     private func updateCameraControlJSON() {
-        var jsonDict: [String: String] = [:]
+        var jsonDict: [String: String] = [:] // Fixed: Use [:] for empty dictionary
         
         if selectedControls.contains("pan") && panDirection != "none" {
             jsonDict["pan"] = panDirection
@@ -556,6 +556,8 @@ struct AdvancedAIMLSettingsView: View {
         if !otherControl.isEmpty {
             if let otherData = otherControl.data(using: .utf8), let otherDict = try? JSONSerialization.jsonObject(with: otherData) as? [String: String] {
                 jsonDict.merge(otherDict) { (_, new) in new }
+            } else {
+                print("Invalid JSON in otherControl: \(otherControl)")
             }
         }
         
@@ -564,6 +566,9 @@ struct AdvancedAIMLSettingsView: View {
         } else {
             if let jsonData = try? JSONSerialization.data(withJSONObject: jsonDict, options: [.prettyPrinted]), let jsonString = String(data: jsonData, encoding: .utf8) {
                 params.cameraControl = jsonString
+            } else {
+                params.cameraControl = nil
+                print("Failed to serialize camera control JSON")
             }
         }
     }
@@ -608,10 +613,10 @@ struct CameraControlHelpView: View {
                 Spacer()
             }
             .padding()
-            #if os (macOS)
+            #if os(macOS)
             .navigationTitle("Camera Control Help")
             #endif
-            #if os (iOS)
+            #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif
             .toolbar {
@@ -624,3 +629,4 @@ struct CameraControlHelpView: View {
         .frame(minWidth: 300, idealWidth: 400, maxWidth: 400, minHeight: 300, idealHeight: 400, maxHeight: 500)
     }
 }
+

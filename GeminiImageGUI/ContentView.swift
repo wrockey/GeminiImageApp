@@ -321,6 +321,7 @@ struct ContentView: View {
             .toolbar {
                 toolbar
             }
+
             .fullScreenCover(item: $appState.presentedModal) { modal in
                 switch modal {
                 case .history:
@@ -334,7 +335,7 @@ struct ContentView: View {
                         .environmentObject(appState)
                 case .markupSlot(let slotId):
                     if let index = appState.ui.imageSlots.firstIndex(where: { $0.id == slotId }),
-                      let image = appState.ui.imageSlots[index].image {
+                       let image = appState.ui.imageSlots[index].image {
                         let path = appState.ui.imageSlots[index].path
                         let fileURL = URL(fileURLWithPath: path)
                         let lastComponent = fileURL.lastPathComponent
@@ -352,11 +353,30 @@ struct ContentView: View {
                         .presentationDragIndicator(.visible)
                         .environmentObject(appState)
                 case .advancedSettings:
-                    AdvancedAIMLSettingsView(model: appState.currentAIMLModel ?? AIMLModel(id: "", isI2I: false, maxInputImages: 0, supportedParams: [], supportsCustomResolution: false, defaultImageSize: "", imageInputParam: "", acceptsMultiImages: false, acceptsBase64: false, acceptsPublicURL: false, maxWidth: nil, maxHeight: nil), params: $appState.settings.aimlAdvancedParams)
-                        .presentationDetents([.large])
-                        .presentationDragIndicator(.visible)
+                    AdvancedAIMLSettingsView(
+                        model: appState.currentAIMLModel ?? AIMLModel(
+                            id: "",
+                            isI2I: false,
+                            maxInputImages: 0,
+                            supportedParams: [],
+                            supportsCustomResolution: false,
+                            defaultImageSize: "",
+                            imageInputParam: "",
+                            acceptsMultiImages: false,
+                            acceptsBase64: false,
+                            acceptsPublicURL: false,
+                            maxWidth: nil,
+                            maxHeight: nil,
+                            isVideo: false // Default for nil model
+                        ),
+                        params: $appState.settings.aimlAdvancedParams,
+                        isVideo: appState.currentAIMLModel?.isVideo ?? false
+                    )
+                    .presentationDetents([.large])
+                    .presentationDragIndicator(.visible)
                 }
             }
+
         }
     }
     #endif

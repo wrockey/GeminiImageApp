@@ -145,7 +145,11 @@ struct ConfigurationSection: View {
             }
             .sheet(isPresented: $showAdvanced) {
                 if let model = appState.currentAIMLModel {
-                    AdvancedAIMLSettingsView(model: model, params: $appState.settings.aimlAdvancedParams)
+                    AdvancedAIMLSettingsView(
+                        model: model,
+                        params: $appState.settings.aimlAdvancedParams,
+                        isVideo: model.isVideo
+                    )
                 }
             }
             .sheet(isPresented: $showHelp) {
@@ -722,8 +726,8 @@ struct ConfigurationSection: View {
                 let parts = newValue.split(separator: "x")
                 let trimmedParts = parts.map { $0.trimmingCharacters(in: .whitespaces) }
                 if trimmedParts.count == 2,
-                    let width = Int(trimmedParts[0]),
-                    let height = Int(trimmedParts[1]) {
+                   let width = Int(trimmedParts[0]),
+                   let height = Int(trimmedParts[1]) {
                     appState.settings.selectedImageWidth = width
                     appState.settings.selectedImageHeight = height
                 }
@@ -762,8 +766,8 @@ struct ConfigurationSection: View {
         return allResolutions.filter { res in
             let parts = res.value.split(separator: "x")
             if parts.count == 2,
-                let w = Int(parts[0]),
-                let h = Int(parts[1]) {
+               let w = Int(parts[0]),
+               let h = Int(parts[1]) {
                 return w <= maxW && h <= maxH
             }
             return false
@@ -1317,3 +1321,4 @@ extension View {
         .accessibilityLabel("Error Alert")
     }
 }
+
