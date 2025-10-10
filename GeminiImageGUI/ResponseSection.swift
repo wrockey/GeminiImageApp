@@ -16,6 +16,8 @@ struct ResponseSection: View {
     @State private var finalScale: CGFloat = 1.0
     @State private var showCopiedOverlay: Bool = false
     @State private var showDeleteAlert: Bool = false
+    @State private var videoAspectRatio: CGFloat = 16.0 / 9.0 // Default aspect ratio
+    @State private var isVideoPlayable: Bool = false // Track video playability
     
     var body: some View {
         VStack(spacing: 16) {
@@ -28,6 +30,18 @@ struct ResponseSection: View {
         .onChange(of: appState.ui.outputImages) { _ in
             finalScale = 1.0
             imageScale = 1.0
+        }
+        .onChange(of: appState.ui.outputPaths) { _ in
+            // Load aspect ratio for the current video when outputPaths changes
+            Task {
+                await loadVideoAspectRatio()
+            }
+        }
+        .onAppear {
+            // Initial load of aspect ratio for the current video
+            Task {
+                await loadVideoAspectRatio()
+            }
         }
         .sheet(isPresented: $showDeleteAlert) {
             DeleteConfirmationView(
@@ -91,21 +105,39 @@ struct ResponseSection: View {
         let count = appState.ui.outputImages.count
         let index = appState.ui.currentOutputIndex
         if let optionalPath = appState.ui.outputPaths[safe: index], let path = optionalPath, !path.isEmpty, path.hasSuffix(".mp4") {
-            // Video case
             let url = URL(fileURLWithPath: path)
             if FileManager.default.fileExists(atPath: url.path) {
-                VideoPlayer(player: AVPlayer(url: url))
-                    .frame(maxWidth: .infinity, maxHeight: 300)
-                    .cornerRadius(16)
-                    .shadow(color: .black.opacity(0.15), radius: 6, x: 0, y: 3)
-                    .help("Generated video. Playback controls available.")
-                    .accessibilityLabel("Generated video")
+                if isVideoPlayable {
+                    VideoPlayer(player: AVPlayer(url: url))
+                        .frame(maxWidth: .infinity, idealHeight: 300, maxHeight: 400)
+                        .aspectRatio(videoAspectRatio, contentMode: .fit)
+                        .cornerRadius(16)
+                        .shadow(color: .black.opacity(0.15), radius: 6, x: 0, y: 3)
+                        .help("Generated video. Use playback controls to play, pause, or seek.")
+                        .accessibilityLabel("Generated video with playback controls")
+                } else {
+                    Text("Video file is corrupted or unplayable.")
+                        .font(.system(.body, weight: .medium))
+                        .foregroundColor(.secondary)
+                        .help("Video file is invalid or corrupted")
+                        .accessibilityLabel("Corrupted video")
+                }
             } else {
                 Text("Video file not found.")
                     .font(.system(.body, weight: .medium))
                     .foregroundColor(.secondary)
                     .help("Video file is missing or inaccessible")
                     .accessibilityLabel("Video not found")
+            }
+            
+            // Warn if multiple videos (unexpected for AIML API)
+            if count > 1 && appState.ui.outputPaths.contains(where: { $0?.hasSuffix(".mp4") ?? false }) {
+                Text("Warning: Multiple videos detected. AIML API typically returns one video.")
+                    .font(.caption)
+                    .foregroundColor(.orange)
+                    .padding(.top, 4)
+                    .help("Unexpected multiple video outputs")
+                    .accessibilityLabel("Multiple video warning")
             }
             
             // Navigation controls for multiple outputs
@@ -349,13 +381,41 @@ struct ResponseSection: View {
         }
         return msg
     }
+    
+    private func loadVideoAspectRatio() async {
+        let index = appState.ui.currentOutputIndex
+        guard let optionalPath = appState.ui.outputPaths[safe: index], let path = optionalPath, !path.isEmpty, path.hasSuffix(".mp4") else {
+            videoAspectRatio = 16.0 / 9.0 // Default if not a video
+            isVideoPlayable = false
+            return
+        }
+        
+        let url = URL(fileURLWithPath: path)
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            videoAspectRatio = 16.0 / 9.0
+            isVideoPlayable = false
+            return
+        }
+        
+        let asset = AVAsset(url: url)
+        do {
+            let tracks = try await asset.loadTracks(withMediaType: .video)
+            let size = try await tracks.first?.load(.naturalSize) ?? CGSize(width: 16, height: 9)
+            videoAspectRatio = size.width / size.height
+            isVideoPlayable = asset.isPlayable
+        } catch {
+            videoAspectRatio = 16.0 / 9.0 // Fallback
+            isVideoPlayable = false
+        }
+    }
+    
     private func saveImageAs(image: PlatformImage) {
         #if os(macOS)
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.png]
         panel.nameFieldStringValue = "generated_image.png"
         
-        if panel.runModal() == .OK, let url = panel.url { // This is correct for NSSavePanel
+        if panel.runModal() == .OK, let url = panel.url {
             if let data = image.platformTiffRepresentation(), let bitmap = NSBitmapImageRep(data: data), let pngData = bitmap.representation(using: .png, properties: [:]) {
                 do {
                     try pngData.write(to: url)
@@ -385,13 +445,14 @@ struct ResponseSection: View {
         }
         #endif
     }
+    
     private func saveMediaAs(path: String) {
         #if os(macOS)
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.mpeg4Movie]
         panel.nameFieldStringValue = "generated_video.mp4"
         
-        if panel.runModal() == .OK, let url = panel.url { // Correct for optional URL?
+        if panel.runModal() == .OK, let url = panel.url {
             let fileManager = FileManager.default
             do {
                 try fileManager.copyItem(at: URL(fileURLWithPath: path), to: url)
@@ -458,7 +519,7 @@ struct ResponseSection: View {
                         if redoIndex < redoTarget.ui.outputImages.count, let redoOptionalPath = redoTarget.ui.outputPaths[safe: redoIndex], let redoPath = redoOptionalPath {
                             // Redo file deletion if applicable
                             if deleteFile {
-                                let fileURL = URL(fileURLWithPath: redoPath) // No `if let`
+                                let fileURL = URL(fileURLWithPath: redoPath)
                                 let fileManager = FileManager.default
                                 if let dir = redoTarget.settings.outputDirectory {
                                     do {
@@ -498,7 +559,7 @@ struct ResponseSection: View {
             
             // Delete file if chosen
             if deleteFile {
-                let fileURL = URL(fileURLWithPath: path) // No `if let`
+                let fileURL = URL(fileURLWithPath: path)
                 let fileManager = FileManager.default
                 if let dir = appState.settings.outputDirectory {
                     do {
@@ -533,4 +594,5 @@ struct ResponseSection: View {
             appState.historyState.objectWillChange.send()
             print("History after deletion: \(appState.historyState.history.map { $0.id })")
         }
-    }}
+    }
+}
