@@ -384,14 +384,14 @@ struct LazyThumbnailView: View {
     let item: HistoryItem
     @State private var thumbnail: PlatformImage? = nil
     @EnvironmentObject var appState: AppState
-    
+   
     private var dateFormatter: DateFormatter {
         let formatter = DateFormatter()
         formatter.dateStyle = .short
         formatter.timeStyle = .short
         return formatter
     }
-    
+   
     var body: some View {
         Group {
             if let img = thumbnail {
@@ -431,20 +431,20 @@ struct LazyThumbnailView: View {
             }
         }
     }
-    
+   
     private func loadThumbnail() {
         Task {
-            let loadedImage = await loadImage(for: item)
+            let loadedImage = await Self.loadImage(for: item, appState: appState)
             await MainActor.run {
                 thumbnail = loadedImage
             }
         }
     }
-    
-    func loadImage(for item: HistoryItem) async -> PlatformImage? {
+   
+    static func loadImage(for item: HistoryItem, appState: AppState) async -> PlatformImage? {
         guard let path = item.imagePath else { return nil }
         let fileURL = URL(fileURLWithPath: path)
-        
+       
         if fileURL.pathExtension.lowercased() == "mp4" {
             // Generate thumbnail from first frame of video
             let asset = AVAsset(url: fileURL)

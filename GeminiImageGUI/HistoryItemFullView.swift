@@ -1,9 +1,11 @@
+//HistoryItemFullView.swift
 import SwiftUI
 import AVKit
+import AVFoundation
 #if os(macOS)
 import AppKit
 #endif
-
+ 
 struct FullHistoryItemView: View {
     let initialId: UUID
     @EnvironmentObject var appState: AppState
@@ -20,35 +22,35 @@ struct FullHistoryItemView: View {
     @State private var recentlyDeletedId: UUID? = nil
     @State private var videoAspectRatio: CGFloat = 16.0 / 9.0 // Default for videos
     @State private var isVideoPlayable: Bool = false
-    
+   
     private var dateFormatter: DateFormatter {
         let formatter = DateFormatter()
         formatter.dateStyle = .short
         formatter.timeStyle = .short
         return formatter
     }
-    
+   
     private var history: [HistoryItem] {
         flattenHistory(appState.historyState.history)
     }
-    
+   
     private var currentItem: HistoryItem? {
         history.first { $0.id == selectedId }
     }
-    
+   
     private var currentIndex: Int? {
         history.firstIndex { $0.id == selectedId }
     }
-    
+   
     private var hasFile: Bool {
         currentItem?.imagePath != nil
     }
-    
+   
     private var fileExists: Bool {
         guard let item = currentItem else { return false }
         return item.fileExists(appState: appState)
     }
-    
+   
     private var deleteMessage: String {
         var msg = "Are you sure you want to delete this item from history?"
         if hasFile && !fileExists {
@@ -56,7 +58,7 @@ struct FullHistoryItemView: View {
         }
         return msg
     }
-    
+   
     var body: some View {
         mainContent
             .ignoresSafeArea()
@@ -87,7 +89,7 @@ struct FullHistoryItemView: View {
                 )
             }
     }
-    
+   
     private var mainContent: some View {
         GeometryReader { geometry in
             ZStack {
@@ -101,7 +103,7 @@ struct FullHistoryItemView: View {
             }
         }
     }
-    
+   
     @ViewBuilder private var bottomOverlay: some View {
         if let item = currentItem {
             bottomOverlay(for: item)
@@ -109,7 +111,7 @@ struct FullHistoryItemView: View {
             Color.clear.frame(height: 0)
         }
     }
-    
+   
     @ViewBuilder private var closeButton: some View {
         #if os(iOS)
         Button(action: { dismiss() }) {
@@ -139,7 +141,7 @@ struct FullHistoryItemView: View {
         }
         #endif
     }
-    
+   
     @ViewBuilder private var copiedMessageOverlay: some View {
         if showCopiedMessage {
             Text("Copied to Clipboard")
@@ -163,7 +165,7 @@ struct FullHistoryItemView: View {
             Color.clear.frame(height: 0)
         }
     }
-    
+   
     @ViewBuilder private var addedMessageOverlay: some View {
         if showAddedMessage {
             Text("Item added to input slot")
@@ -187,7 +189,7 @@ struct FullHistoryItemView: View {
             Color.clear.frame(height: 0)
         }
     }
-    
+   
     private func onAppear() {
         selectedId = initialId
         previousHistory = history
@@ -205,7 +207,7 @@ struct FullHistoryItemView: View {
         }
         #endif
     }
-    
+   
     private func onHistoryChange(newHistory: [HistoryItem]) {
         if let sid = selectedId, !newHistory.contains(where: { $0.id == sid }) {
             if newHistory.isEmpty {
@@ -226,7 +228,7 @@ struct FullHistoryItemView: View {
         }
         previousHistory = newHistory
     }
-    
+   
     private func onSelectedIdChange(newValue: UUID?) {
         let oldValue = previousSelectedId
         if let item = history.first(where: { $0.id == newValue }) {
@@ -236,7 +238,7 @@ struct FullHistoryItemView: View {
         }
         previousSelectedId = newValue
     }
-    
+   
     @available(iOS 17.0, macOS 14.0, *)
     private func horizontalScrollView(for geometry: GeometryProxy) -> some View {
         ScrollViewReader { proxy in
@@ -283,7 +285,7 @@ struct FullHistoryItemView: View {
             #endif
         }
     }
-    
+   
     private func fallbackHorizontalView(for geometry: GeometryProxy) -> some View {
         #if os(iOS)
         TabView(selection: $selectedId) {
@@ -306,14 +308,14 @@ struct FullHistoryItemView: View {
         }
         #endif
     }
-    
+   
     private struct HistoryImageDisplay: View {
         let item: HistoryItem
         @EnvironmentObject var appState: AppState
         @Binding var isVideoPlayable: Bool
         @Binding var videoAspectRatio: CGFloat
         @State private var thumbnail: PlatformImage? = nil
-        
+       
         var body: some View {
             Group {
                 if let path = item.imagePath, path.hasSuffix(".mp4") {
@@ -360,7 +362,7 @@ struct FullHistoryItemView: View {
                 }
             }
         }
-        
+       
         private func loadHistoryImage(for item: HistoryItem) -> PlatformImage? {
             guard let path = item.imagePath, !path.hasSuffix(".mp4") else { return nil }
             let fileURL = URL(fileURLWithPath: path)
@@ -375,17 +377,17 @@ struct FullHistoryItemView: View {
                 return PlatformImage(contentsOfFile: fileURL.path)
             }
         }
-        
+       
         private func loadThumbnail(for item: HistoryItem) async -> PlatformImage? {
             guard let path = item.imagePath, path.hasSuffix(".mp4") else { return nil }
-            return await LazyThumbnailView(item: item).loadImage(for: item)
+            return await LazyThumbnailView.loadImage(for: item, appState: appState)
         }
-        
+       
         private func fileExists(item: HistoryItem) -> Bool {
             item.fileExists(appState: appState)
         }
     }
-    
+   
     private func loadVideoMetadata() async {
         guard let item = currentItem, let path = item.imagePath, path.hasSuffix(".mp4") else {
             isVideoPlayable = false
@@ -398,29 +400,35 @@ struct FullHistoryItemView: View {
             videoAspectRatio = 16.0 / 9.0
             return
         }
-        
+       
         let asset = AVAsset(url: fileURL)
         do {
+            let isPlayable = try await asset.load(.isPlayable)
+            guard isPlayable else {
+                isVideoPlayable = false
+                videoAspectRatio = 16.0 / 9.0
+                return
+            }
             let tracks = try await asset.loadTracks(withMediaType: .video)
-            let size = try await tracks.first?.load(.naturalSize) ?? CGSize(width: 16, height: 9)
-            isVideoPlayable = asset.isPlayable
-            videoAspectRatio = size.width / size.height
+            let naturalSize = try await tracks.first?.load(.naturalSize) ?? CGSize(width: 16, height: 9)
+            isVideoPlayable = true
+            videoAspectRatio = naturalSize.width / naturalSize.height
         } catch {
             isVideoPlayable = false
             videoAspectRatio = 16.0 / 9.0
         }
     }
-    
+   
     private func bottomOverlay(for item: HistoryItem) -> some View {
         var creator: String? = nil
         if let mode = item.mode {
             creator = mode == .gemini ? "Gemini" : mode == .grok ? item.modelUsed ?? appState.settings.selectedGrokModel : mode == .aimlapi ? item.modelUsed ?? appState.settings.selectedAIMLModel : item.workflowName ?? "ComfyUI"
-            
+           
             if let idx = item.indexInBatch, let tot = item.totalInBatch {
                 creator! += " #\(idx + 1) of \(tot)"
             }
         }
-        
+       
         return VStack(spacing: 4) {
             VStack(alignment: .center, spacing: 2) {
                 HStack(alignment: .center) {
@@ -460,7 +468,7 @@ struct FullHistoryItemView: View {
                         .help("Generation mode or model used")
                 }
             }
-            
+           
             HStack(spacing: 16) {
                 // Group 1: Navigation (Previous/Next)
                 HStack(spacing: 8) {
@@ -479,7 +487,7 @@ struct FullHistoryItemView: View {
                     .buttonStyle(.plain)
                     .help("Previous item in history")
                     .accessibilityLabel("Previous item")
-                    
+                   
                     Button(action: {
                         if let idx = currentIndex {
                             let newIdx = min(history.count - 1, idx + 1)
@@ -496,7 +504,7 @@ struct FullHistoryItemView: View {
                     .help("Next item in history")
                     .accessibilityLabel("Next item")
                 }
-                
+               
                 // Group 2: Video controls or Image actions
                 if item.imagePath?.hasSuffix(".mp4") ?? false, isVideoPlayable, fileExists(item: item) {
                     HStack(spacing: 8) {
@@ -527,7 +535,7 @@ struct FullHistoryItemView: View {
                         .accessibilityLabel("Add to input slot")
                     }
                 }
-                
+               
                 // Group 3: Delete, Undo/Redo
                 HStack(spacing: 8) {
                     Button(action: {
@@ -541,7 +549,7 @@ struct FullHistoryItemView: View {
                     .buttonStyle(.plain)
                     .help("Delete this history item")
                     .accessibilityLabel("Delete item")
-                    
+                   
                     Button(action: {
                         undoManager?.undo()
                     }) {
@@ -554,7 +562,7 @@ struct FullHistoryItemView: View {
                     .disabled(!(undoManager?.canUndo ?? false))
                     .help("Undo last action")
                     .accessibilityLabel("Undo")
-                    
+                   
                     Button(action: {
                         undoManager?.redo()
                     }) {
@@ -575,12 +583,12 @@ struct FullHistoryItemView: View {
         .background(colorScheme == .dark ? Color.black : Color.white)
         .frame(maxWidth: .infinity)
     }
-    
+   
     private func deleteHistoryItem(item: HistoryItem, deleteFile: Bool) {
         let oldHistory = appState.historyState.history
         let currentHistory = flattenHistory(appState.historyState.history)
         guard let oldIdx = currentHistory.firstIndex(where: { $0.id == item.id }) else { return }
-        
+       
         if deleteFile, let path = item.imagePath {
             let fileURL = URL(fileURLWithPath: path)
             let fileManager = FileManager.default
@@ -600,12 +608,12 @@ struct FullHistoryItemView: View {
                 }
             }
         }
-        
+       
         var snapshot = appState.historyState.history
         _ = appState.historyState.findAndRemoveEntry(id: item.id, in: &snapshot)
         appState.historyState.history = snapshot
         appState.historyState.saveHistory()
-        
+       
         if let undoManager = undoManager {
             let newHistory = appState.historyState.history
             undoManager.registerUndo(withTarget: appState.historyState) { target in
@@ -621,7 +629,7 @@ struct FullHistoryItemView: View {
             }
             undoManager.setActionName("Delete Item")
         }
-        
+       
         let newHistory = flattenHistory(appState.historyState.history)
         if newHistory.isEmpty {
             selectedId = nil
@@ -631,7 +639,7 @@ struct FullHistoryItemView: View {
             selectedId = newHistory[newIdx].id
         }
     }
-    
+   
     private func loadHistoryImage(for item: HistoryItem) -> PlatformImage? {
         guard let path = item.imagePath, !path.hasSuffix(".mp4") else { return nil }
         let fileURL = URL(fileURLWithPath: path)
@@ -646,7 +654,7 @@ struct FullHistoryItemView: View {
             return PlatformImage(contentsOfFile: fileURL.path)
         }
     }
-    
+   
     private func copyPromptToClipboard(_ prompt: String) {
         #if os(macOS)
         NSPasteboard.general.clearContents()
@@ -655,34 +663,39 @@ struct FullHistoryItemView: View {
         UIPasteboard.general.string = prompt
         #endif
     }
-    
+   
     private func addToInputImages(item: HistoryItem) {
-        guard let img = loadHistoryImage(for: item), let path = item.imagePath else { return }
-        let url = URL(fileURLWithPath: path)
-        var promptNodes: [NodeInfo] = []
-        
-        if url.pathExtension.lowercased() == "png" {
-            if let dir = appState.settings.outputDirectory {
-                do {
-                    promptNodes = try withSecureAccess(to: dir) {
-                        parsePromptNodes(from: url)
+        guard let path = item.imagePath else { return }
+        let fileURL = URL(fileURLWithPath: path)
+        Task {
+            guard let img = await LazyThumbnailView.loadImage(for: item, appState: appState) else { return }
+            var promptNodes: [NodeInfo] = []
+           
+            if fileURL.pathExtension.lowercased() == "png" {
+                if let dir = appState.settings.outputDirectory {
+                    do {
+                        promptNodes = try withSecureAccess(to: dir) {
+                            parsePromptNodes(from: fileURL)
+                        }
+                    } catch {
+                        print("Failed to extract workflow from history PNG: \(error)")
                     }
-                } catch {
-                    print("Failed to extract workflow from history PNG: \(error)")
+                } else {
+                    promptNodes = parsePromptNodes(from: fileURL)
                 }
-            } else {
-                promptNodes = parsePromptNodes(from: url)
+            }
+           
+            var newSlot = ImageSlot(path: path, image: img)
+            if !promptNodes.isEmpty {
+                newSlot.promptNodes = promptNodes.sorted { $0.id < $1.id }
+                newSlot.selectedPromptIndex = 0
+            }
+            await MainActor.run {
+                appState.ui.imageSlots.append(newSlot)
             }
         }
-        
-        var newSlot = ImageSlot(path: path, image: img)
-        if !promptNodes.isEmpty {
-            newSlot.promptNodes = promptNodes.sorted { $0.id < $1.id }
-            newSlot.selectedPromptIndex = 0
-        }
-        appState.ui.imageSlots.append(newSlot)
     }
-    
+   
     private func updateWindowSize() {
         #if os(macOS)
         guard let item = currentItem,
@@ -690,11 +703,11 @@ struct FullHistoryItemView: View {
               let screen = NSScreen.main else {
             return
         }
-        
+       
         let bottomHeight: CGFloat = 100
         let minWidth: CGFloat = 400
         var desiredSize: CGSize
-        
+       
         if item.imagePath?.hasSuffix(".mp4") ?? false, isVideoPlayable {
             desiredSize = CGSize(width: max(videoAspectRatio * 400, minWidth), height: 400 + bottomHeight)
         } else if let platformImage = loadHistoryImage(for: item) {
@@ -703,23 +716,23 @@ struct FullHistoryItemView: View {
         } else {
             desiredSize = CGSize(width: minWidth, height: 400 + bottomHeight)
         }
-        
+       
         let screenSize = screen.visibleFrame.size
         let marginHorizontal: CGFloat = 40
         let marginVertical: CGFloat = 100
-        
+       
         let maxSize = CGSize(width: screenSize.width - marginHorizontal,
                              height: screenSize.height - marginVertical)
-        
+       
         let scale = min(1.0, min(maxSize.width / desiredSize.width, maxSize.height / desiredSize.height))
-        
+       
         let windowSize = CGSize(width: desiredSize.width * scale, height: desiredSize.height * scale)
-        
+       
         window.setContentSize(windowSize)
         window.center()
         #endif
     }
-    
+   
     private func flattenHistory(_ entries: [HistoryEntry]) -> [HistoryItem] {
         var items: [HistoryItem] = []
         for entry in entries {
@@ -732,7 +745,7 @@ struct FullHistoryItemView: View {
         }
         return items
     }
-    
+   
     private func fileExists(item: HistoryItem) -> Bool {
         item.fileExists(appState: appState)
     }

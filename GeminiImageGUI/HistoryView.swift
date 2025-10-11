@@ -1065,7 +1065,7 @@ struct HistoryView: View {
         guard let path = item.imagePath else { return }
         let fileURL = URL(fileURLWithPath: path)
         Task {
-            guard let img = await LazyThumbnailView(item: item).loadImage(for: item) else { return }
+            guard let img = await LazyThumbnailView.loadImage(for: item, appState: appState) else { return }
             var promptNodes: [NodeInfo] = []
             
             if fileURL.pathExtension.lowercased() == "png" {
