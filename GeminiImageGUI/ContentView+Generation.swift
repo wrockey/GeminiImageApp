@@ -1,3 +1,4 @@
+//ContentView+Generation.swift
 import SwiftUI
 #if os(iOS)
 import UIKit
